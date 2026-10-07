@@ -304,7 +304,7 @@ function addrSheet(){
       if(j.logradouro) L("#street").value=j.logradouro;
       const z=ZONES.find(z=>norm(z.neighborhood)===norm(j.bairro))||ZONES.find(z=>norm(j.bairro)&&(norm(z.neighborhood).includes(norm(j.bairro))||norm(j.bairro).includes(norm(z.neighborhood))));
       if(z){L("#zone").value=z.id;msg.textContent=`${j.bairro} · ${j.localidade}. Agora é só o número e a referência.`}
-      else msg.textContent=`${j.bairro||"Bairro"} · ${j.localidade}. Escolha o bairro na lista. Se não estiver lá, ainda não entregamos nessa região.`;
+      else msg.textContent=!ZONES.length?"A loja ainda não cadastrou os bairros de entrega. Escolha Retirar no estabelecimento ou fale com a loja.":`Seu CEP é do bairro ${j.bairro||"?"} (${j.localidade}), que ainda não está na nossa área de entrega. Se você estiver perto de algum bairro da lista, escolha ele.`;
       L("#num").focus();
     }catch{msg.textContent="Não deu pra buscar o CEP agora. Preencha o endereço abaixo."}
   }
