@@ -267,15 +267,23 @@ function phonePop(){
     ck.tel=t;ck.nm=n;if(!ck.mode)ck.mode=S.accepts_delivery?"entrega":"retirada";store.set("ck",ck);step1()};
 }
 const stepsHTML=s=>`<div class="steps">${["Entrega","Pagamento","Confirmação"].map((l,i)=>`<div class="${i<s?"on":""}"><i></i>${l}</div>`).join("")}</div>`;
-const zoneOf=()=>ck.addr?ZONES.find(z=>z.id===ck.addr.zone):null;
-const fee=()=>ck.mode==="entrega"&&zoneOf()&&!(coupon&&coupon.kind==="free_delivery")?+zoneOf().fee:0;
+const KM=()=>S.delivery_mode==="km";
+const zoneOf=()=>ck.addr&&!KM()?ZONES.find(z=>z.id===ck.addr.zone):null;
+function distKm(la,ln){if(S.store_lat==null||la==null)return null;const R=6371,r=x=>x*Math.PI/180,dLa=r(la-S.store_lat),dLn=r(ln-S.store_lng);
+  const h=Math.sin(dLa/2)**2+Math.cos(r(S.store_lat))*Math.cos(r(la))*Math.sin(dLn/2)**2;return Math.round(2*R*Math.asin(Math.sqrt(h))*10)/10}
+const kmFee=d=>(+S.km_base_fee||0)+Math.max(0,Math.ceil(d-(+S.km_base_km||0)))*(+S.km_price||0);
+const addrOk=()=>{const a=ck.addr;if(!a)return false;if(KM())return a.lat!=null&&a.dist!=null&&!(+S.km_max>0&&a.dist>+S.km_max);return !!zoneOf()};
+const nbName=a=>KM()?(a&&a.bairro)||"":((ZONES.find(z=>z.id===(a&&a.zone))||{}).neighborhood||"");
+const rawFee=()=>!addrOk()?0:KM()?kmFee(ck.addr.dist):+zoneOf().fee;
+const fee=()=>ck.mode==="entrega"&&addrOk()&&!(coupon&&coupon.kind==="free_delivery")?rawFee():0;
+const etaTxt=()=>{const z=zoneOf(),m=(z&&z.eta_minutes)||S.delivery_time_min;return `${m}-${z&&z.eta_minutes?m+10:S.delivery_time_max} min`};
 const total=()=>sub()+fee()-discount();
 const trocoTxt=()=>ck.troco?`Troco para ${brl(ck.troco)} · levar ${brl(ck.troco-total())} de troco`:"Não precisa de troco";
-const sumHTML=()=>`<div class="sum"><div><span>Subtotal</span><span>${brl(sub())}</span></div><div><span>Taxa de entrega</span><span>${ck.mode==="retirada"?"Grátis":zoneOf()?(fee()?brl(fee()):"Grátis"):"A definir"}</span></div>${discount()?`<div><span>Cupom ${esc(coupon.code)}</span><span>- ${brl(discount())}</span></div>`:""}<div class="tot"><span>Total</span><span>${brl(total())}</span></div></div>`;
+const sumHTML=()=>`<div class="sum"><div><span>Subtotal</span><span>${brl(sub())}</span></div><div><span>Taxa de entrega</span><span>${ck.mode==="retirada"?"Grátis":addrOk()?(fee()?brl(fee()):"Grátis"):"A definir"}</span></div>${discount()?`<div><span>Cupom ${esc(coupon.code)}</span><span>- ${brl(discount())}</span></div>`:""}<div class="tot"><span>Total</span><span>${brl(total())}</span></div></div>`;
 function step1(){
-  const a=ck.addr&&zoneOf()?ck.addr:null, z=zoneOf();
+  const a=addrOk()?ck.addr:null;
   sheet("Checkout",`${stepsHTML(1)}
-    ${S.accepts_delivery?`<button class="opt" id="m1" aria-pressed="${ck.mode==="entrega"}"><span>🛵</span><span class="t">Receber no seu endereço${a?`<small>${esc(a.street)}, ${esc(a.num)} · ${esc(z.neighborhood)}</small><small>Taxa ${+z.fee?brl(z.fee):"grátis"} · ${z.eta_minutes||S.delivery_time_min}-${(z.eta_minutes||S.delivery_time_min)+10} min</small>`:"<small>Clique aqui e informe o endereço</small>"}</span><span class="radio"></span></button>
+    ${S.accepts_delivery?`<button class="opt" id="m1" aria-pressed="${ck.mode==="entrega"}"><span>🛵</span><span class="t">Receber no seu endereço${a?`<small>${esc(a.street)}, ${esc(a.num)} · ${esc(nbName(a))}</small><small>${KM()?String(a.dist).replace(".",",")+" km · ":""}Taxa ${rawFee()?brl(rawFee()):"grátis"} · ${etaTxt()}</small>`:"<small>Clique aqui e informe o endereço</small>"}</span><span class="radio"></span></button>
     ${a&&ck.mode==="entrega"?`<button class="link" id="ea" style="text-align:right;padding:6px 0">Editar endereço</button>`:""}`:""}
     ${S.accepts_pickup?`<button class="opt" id="m2" aria-pressed="${ck.mode==="retirada"}"><span>🏪</span><span class="t">Retirar no estabelecimento<small>${S.address?esc(S.address)+" · ":""}pronto em ${S.prep_time_min||10} min</small></span><span class="radio"></span></button>`:""}
     <p class="err" id="e" hidden></p>`,`<button class="btn" id="go"><span>CONTINUAR</span><span>›</span></button>`);
@@ -286,11 +294,14 @@ function step1(){
   L("#go").onclick=()=>{if(ck.mode==="entrega"&&!a){L("#e").hidden=false;L("#e").textContent="Informe o endereço de entrega.";return}store.set("ck",ck);step2()};
 }
 function addrSheet(){
-  const a=ck.addr||{cep:"",street:"",num:"",zone:null,comp:"",ref:""};
+  const a=ck.addr||{cep:"",street:"",num:"",zone:null,bairro:"",city:"",comp:"",ref:""};
+  let gps=null;
   sheet("Endereço de entrega",`<div class="grid2"><label class="field"><span>CEP</span><input id="cep" class="in" inputmode="numeric" placeholder="00000-000" value="${esc(a.cep)}"></label><label class="field"><span>&nbsp;</span><button class="btn c o cepbtn" id="bc">Buscar</button></label></div>
     <p class="sub" id="cepmsg" style="color:var(--muted);font-size:12px;margin:6px 0 0">Não sabe o CEP? Preencha abaixo e escolha o bairro.</p>
     <div class="grid2"><label class="field"><span>Rua*</span><input id="street" class="in" value="${esc(a.street)}" autocomplete="address-line1"></label><label class="field"><span>Nº*</span><input id="num" class="in" value="${esc(a.num)}" inputmode="numeric"></label></div>
-    <label class="field"><span>Bairro*</span><select id="zone" class="in"><option value="">Escolha seu bairro</option>${ZONES.map(z=>`<option value="${z.id}" ${z.id===a.zone?"selected":""}>${esc(z.neighborhood)} · ${+z.fee?"taxa "+brl(z.fee):"grátis"}</option>`).join("")}</select></label>
+    ${KM()?`<label class="field"><span>Bairro*</span><input id="bairro" class="in" value="${esc(a.bairro||"")}"></label>
+      <button class="btn c o" id="gps" type="button" style="margin-top:10px">📍 Usar minha localização (mais preciso)</button><p class="sub" id="gpsmsg" style="color:var(--muted);font-size:12px;margin:6px 0 0">Ajuda a calcular a taxa certinha. Use se estiver no endereço da entrega.</p>`
+    :`<label class="field"><span>Bairro*</span><select id="zone" class="in"><option value="">Escolha seu bairro</option>${ZONES.map(z=>`<option value="${z.id}" ${z.id===a.zone?"selected":""}>${esc(z.neighborhood)} · ${+z.fee?"taxa "+brl(z.fee):"grátis"}</option>`).join("")}</select></label>`}
     <label class="field"><span>Complemento (Apto/Bloco/Casa)</span><input id="comp" class="in" value="${esc(a.comp)}"></label>
     <label class="field"><span>Ponto de referência*</span><input id="ref" class="in" value="${esc(a.ref)}"></label>
     <p class="err" id="e" hidden></p><div style="height:14px"></div>`,`<button class="btn c" id="ok">Confirmar</button><button class="link" id="cb">Voltar</button>`);
@@ -302,13 +313,30 @@ function addrSheet(){
     try{const r=await fetch(`https://viacep.com.br/ws/${d}/json/`);const j=await r.json();
       if(j.erro){msg.textContent="CEP não encontrado. Preencha o endereço abaixo.";return}
       if(j.logradouro) L("#street").value=j.logradouro;
+      a.city=j.localidade||""; a.uf=j.uf||"";
+      if(KM()){L("#bairro").value=j.bairro||"";msg.textContent=`${j.bairro||""} · ${j.localidade}. Agora é só o número e a referência.`;L("#num").focus();return}
       const z=ZONES.find(z=>norm(z.neighborhood)===norm(j.bairro))||ZONES.find(z=>norm(j.bairro)&&(norm(z.neighborhood).includes(norm(j.bairro))||norm(j.bairro).includes(norm(z.neighborhood))));
       if(z){L("#zone").value=z.id;msg.textContent=`${j.bairro} · ${j.localidade}. Agora é só o número e a referência.`}
       else msg.textContent=!ZONES.length?"A loja ainda não cadastrou os bairros de entrega. Escolha Retirar no estabelecimento ou fale com a loja.":`Seu CEP é do bairro ${j.bairro||"?"} (${j.localidade}), que ainda não está na nossa área de entrega. Se você estiver perto de algum bairro da lista, escolha ele.`;
       L("#num").focus();
     }catch{msg.textContent="Não deu pra buscar o CEP agora. Preencha o endereço abaixo."}
   }
+  if(L("#gps")) L("#gps").onclick=()=>{const m=L("#gpsmsg");if(!navigator.geolocation){m.textContent="Seu celular não liberou a localização.";return}m.textContent="Pegando sua localização…";
+    navigator.geolocation.getCurrentPosition(p=>{gps={lat:p.coords.latitude,lng:p.coords.longitude};const d=distKm(gps.lat,gps.lng);m.innerHTML=`📍 Localização pega · <b>${String(d).replace(".",",")} km</b> da loja · taxa ${brl(kmFee(d))}`},
+      ()=>{m.textContent="Não deu pra pegar a localização. Sem problema: calculamos pelo endereço."},{enableHighAccuracy:true,timeout:15000})};
   L("#cb").onclick=step1;
+  if(KM()){L("#ok").onclick=async()=>{const v=k=>L("#"+k).value.trim();
+    const n={...a,cep:v("cep"),street:v("street"),num:v("num"),bairro:v("bairro"),comp:v("comp"),ref:v("ref")};
+    if(!n.street||!n.num||!n.ref||!n.bairro){L("#e").hidden=false;L("#e").textContent="Preencha rua, número, bairro e ponto de referência.";return}
+    const btn=L("#ok"); btn.disabled=true; btn.textContent="Calculando a distância…";
+    let pos=gps; if(!pos){const city=n.city||"";
+      const tries=[`${n.street}, ${n.num}, ${n.bairro}, ${city}`,`${n.street}, ${n.bairro}, ${city}`,`${n.street}, ${city}`,`${n.bairro}, ${city}`];
+      for(const qy of tries){try{const r=await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q=${encodeURIComponent(qy)}`);const j=await r.json();if(j[0]){pos={lat:+j[0].lat,lng:+j[0].lon};break}}catch{}}}
+    btn.disabled=false; btn.textContent="Confirmar";
+    if(!pos){L("#e").hidden=false;L("#e").textContent="Não achamos esse endereço no mapa. Toque em \"Usar minha localização\" ou confira a rua.";return}
+    n.lat=pos.lat;n.lng=pos.lng;n.dist=distKm(pos.lat,pos.lng);
+    if(+S.km_max>0&&n.dist>+S.km_max){L("#e").hidden=false;L("#e").textContent=`Esse endereço fica a ${String(n.dist).replace(".",",")} km. Entregamos até ${String(+S.km_max).replace(".",",")} km.`;return}
+    ck.addr=n;ck.mode="entrega";store.set("ck",ck);step1()};return}
   L("#ok").onclick=()=>{const v=k=>L("#"+k).value.trim();const zid=+L("#zone").value||null;
     const n={cep:v("cep"),street:v("street"),num:v("num"),zone:zid,zoneName:(ZONES.find(z=>z.id===zid)||{}).neighborhood,comp:v("comp"),ref:v("ref")};
     if(!n.street||!n.num||!n.ref||!zid){L("#e").hidden=false;L("#e").textContent="Preencha rua, número, bairro e ponto de referência.";return}
@@ -342,11 +370,11 @@ function trocoVal(){
   L("#ok").onclick=()=>{const v=val();if(!(v>total())){L("#e").hidden=false;L("#e").textContent="Informe um valor maior que "+brl(total());return}ck.troco=v;step2()};
 }
 function step3(){
-  const a=ck.addr, z=zoneOf();
+  const a=ck.addr;
   sheet("Checkout",`${stepsHTML(3)}
     <div class="grp">Informações para ${ck.mode==="entrega"?"entrega":"retirada"}</div>
     <div class="ci"><div class="t"><b>👤 ${esc(ck.nm)}</b><div class="sub">${esc(ck.tel)}</div></div></div>
-    <div class="ci"><div class="t">${ck.mode==="entrega"?`<b>📍 ${esc(a.street)}, ${esc(a.num)}</b><div class="sub">${esc(z.neighborhood)}${a.comp?" · "+esc(a.comp):""}<br>Ref.: ${esc(a.ref)}</div>`:"<b>🏪 Retirar no estabelecimento</b>"}</div><button data-e1 aria-label="Editar">✏️</button></div>
+    <div class="ci"><div class="t">${ck.mode==="entrega"?`<b>📍 ${esc(a.street)}, ${esc(a.num)}</b><div class="sub">${esc(nbName(a))}${a.comp?" · "+esc(a.comp):""}<br>Ref.: ${esc(a.ref)}</div>`:"<b>🏪 Retirar no estabelecimento</b>"}</div><button data-e1 aria-label="Editar">✏️</button></div>
     <div class="grp">Itens</div>
     ${cart.map(i=>`<div class="ci"><div class="t"><span class="q">${i.n}x</span> ${esc(i.p.n)}${i.opts.length?`<div class="sub">${i.opts.map(o=>o.qty+"x "+esc(o.name)).join(", ")}</div>`:""}</div><b>${brl(lineUnit(i)*i.n)}</b></div>`).join("")}
     ${sumHTML()}
@@ -358,13 +386,13 @@ function step3(){
   L("#send").onclick=async()=>{
     const btn=L("#send"); btn.disabled=true; btn.textContent="Enviando…";
     const payload={customer_name:ck.nm,customer_phone:ck.tel,type:ck.mode==="entrega"?"delivery":"retirada",
-      zone_id:ck.mode==="entrega"?a.zone:null,cep:ck.mode==="entrega"?a.cep:null,street:ck.mode==="entrega"?a.street:null,
+      zone_id:ck.mode==="entrega"&&!KM()?a.zone:null,lat:ck.mode==="entrega"&&KM()?String(a.lat):"",lng:ck.mode==="entrega"&&KM()?String(a.lng):"",neighborhood:ck.mode==="entrega"?nbName(a):"",cep:ck.mode==="entrega"?a.cep:null,street:ck.mode==="entrega"?a.street:null,
       street_number:ck.mode==="entrega"?a.num:null,complement:ck.mode==="entrega"?a.comp:null,reference:ck.mode==="entrega"?a.ref:null,
       payment_method:ck.pay,change_for:/dinheiro/i.test(ck.pay)&&ck.troco?String(ck.troco):"",coupon_code:coupon?coupon.code:"",notes:L("#nt").value.trim(),
       items:cart.map(i=>({product_id:i.p.id,qty:i.n,notes:i.obs,options:i.opts.map(o=>({option_id:o.id,qty:o.qty}))}))};
     const {data,error}=await sb.rpc("create_order",{p:payload});
     if(error){btn.disabled=false;btn.textContent="Enviar pedido";L("#e").hidden=false;L("#e").textContent="Não foi possível enviar: "+(error.message||"tente de novo")+".";return}
-    const order={...data,at:new Date().toISOString(),items:cart.map(i=>({...i})),ck:JSON.parse(JSON.stringify(ck)),coupon,zone:z};
+    const order={...data,at:new Date().toISOString(),items:cart.map(i=>({...i})),ck:JSON.parse(JSON.stringify(ck)),coupon,nb:ck.mode==="entrega"?nbName(a):""};
     const mine=store.get("orders",[]); mine.push({id:data.id,number:data.number,total:data.total,at:order.at,phone:ck.tel}); store.set("orders",mine.slice(-20));
     cart=[]; coupon=null; saveCart(); ck.troco=null; store.set("ck",ck); render(); sentSheet(order);
   };
@@ -372,11 +400,11 @@ function step3(){
 function waMsg(o){
   const d=new Date(o.at), pad=x=>String(x).padStart(2,"0"), c=o.ck, a=c.addr;
   const M=["#### NOVO PEDIDO ####","",`#️⃣ Nº pedido: ${o.number}`,`feito em ${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`,"",`👤 ${c.nm}`,c.tel,""];
-  if(c.mode==="entrega") M.push("🛵 Endereço de entrega",`${a.street} ${a.num}`,...(a.comp?["Complemento: "+a.comp]:[]),`Bairro: ${o.zone.neighborhood}`,...(a.cep?["CEP: "+a.cep]:[]),`(${a.ref})`,"",`Link do endereço:`,`https://maps.google.com/?q=${encodeURIComponent(`${a.street}, ${a.num}, ${o.zone.neighborhood}`)}`,"");
+  if(c.mode==="entrega") M.push("🛵 Endereço de entrega",`${a.street} ${a.num}`,...(a.comp?["Complemento: "+a.comp]:[]),`Bairro: ${o.nb}`,...(a.cep?["CEP: "+a.cep]:[]),`(${a.ref})`,"",`Link do endereço:`,a.lat!=null&&KM()?`https://maps.google.com/?q=${a.lat},${a.lng}`:`https://maps.google.com/?q=${encodeURIComponent(`${a.street}, ${a.num}, ${o.nb}`)}`,"");
   else M.push("🏪 Retirar no estabelecimento","");
   M.push("------- ITENS DO PEDIDO -------","");
   o.items.forEach(i=>{M.push(`*${i.n} x ${i.p.n}*`,`💵 ${i.n} x ${brl(lineUnit(i))} = ${brl(lineUnit(i)*i.n)}`);i.opts.forEach(x=>M.push(`   + ${x.qty}x ${x.name}`));if(i.obs)M.push("Obs.: "+i.obs);M.push("")});
-  M.push("-------------------------------","",`SUBTOTAL: ${brl(o.subtotal)}`,`ENTREGA: ${c.mode==="entrega"?(+o.delivery_fee?brl(o.delivery_fee):"Grátis"):"Retirada"}`);
+  M.push("-------------------------------","",`SUBTOTAL: ${brl(o.subtotal)}`,`ENTREGA: ${c.mode==="entrega"?(+o.delivery_fee?brl(o.delivery_fee):"Grátis")+(o.distance_km!=null?` (${String(o.distance_km).replace(".",",")} km)`:""):"Retirada"}`);
   if(+o.discount) M.push(`CUPOM ${o.coupon?o.coupon.code:""}: - ${brl(o.discount)}`);
   M.push(`*VALOR FINAL: ${brl(o.total)}*`,"","PAGAMENTO",`*${c.pay}*: ${brl(o.total)}`);
   if(/dinheiro/i.test(c.pay)) M.push(...(c.troco?[`💵 Cliente vai pagar com: ${brl(c.troco)}`,`🔁 *Levar troco de: ${brl(o.change)}*`]:["Não precisa de troco"]));
@@ -415,6 +443,11 @@ async function trackSheet(id,phone){
   L("#rf").onclick=()=>trackSheet(id,phone);
 }
 function feeSheet(){
+  if(KM()){const ex=d=>brl(kmFee(d));return sheet("Taxa de entrega",`<p class="sub" style="color:var(--muted);margin-top:14px">A taxa depende da distância até você</p>
+    <div class="ci"><div class="t"><b>Até ${String(+S.km_base_km).replace(".",",")} km</b></div><b class="price">${brl(S.km_base_fee)}</b></div>
+    <div class="ci"><div class="t"><b>Cada km a mais</b></div><b class="price">+ ${brl(S.km_price)}</b></div>
+    ${+S.km_max>0?`<div class="ci"><div class="t"><b>Entregamos até</b></div><b class="price">${String(+S.km_max).replace(".",",")} km</b></div>`:""}
+    <p class="sub" style="color:var(--muted)">Exemplos: 3 km = ${ex(3)} · 5 km = ${ex(5)}. Tempo: ${S.delivery_time_min}-${S.delivery_time_max} min.</p>`)}
   sheet("Taxa de entrega",`<p class="sub" style="color:var(--muted);margin-top:14px">Bairros que atendemos</p>${ZONES.map(z=>`<div class="ci"><div class="t"><b>${esc(z.neighborhood)}</b><div class="sub">${z.eta_minutes||S.delivery_time_min}-${(z.eta_minutes||S.delivery_time_min)+10} min</div></div><b class="price">${+z.fee?brl(z.fee):"Grátis"}</b></div>`).join("")||'<div class="empty">Nenhum bairro cadastrado ainda.</div>'}`);
 }
 function promoPop(){
@@ -428,5 +461,7 @@ function promoPop(){
   try{ await load(); }
   catch(e){ app.innerHTML=`<div class="empty">Não foi possível carregar o cardápio agora. Tente de novo em instantes.</div>`; console.error(e); return; }
   restoreCart(); render();
+  const qs=new URLSearchParams(location.search);
+  if(qs.get("pedido")&&qs.get("tel")){ history.replaceState(null,"",location.pathname); trackSheet(+qs.get("pedido"),qs.get("tel")); return; }
   if(!sessionStorage.getItem("gb_promo")){ try{sessionStorage.setItem("gb_promo","1")}catch{} promoPop(); }
 })();

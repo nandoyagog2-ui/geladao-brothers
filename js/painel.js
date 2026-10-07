@@ -5,7 +5,7 @@ const root = document.getElementById("root"), ov = document.getElementById("ov")
 /* ---------- utilidades ---------- */
 const brl=v=>"R$ "+Number(v||0).toFixed(2).replace(".",",").replace(/\B(?=(\d{3})+(?!\d))/g,".");
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const num=v=>{if(v===""||v==null)return null;const n=parseFloat(String(v).replace(/\./g,"").replace(",","."));return isNaN(n)?null:n};
+const num=v=>{if(v===""||v==null)return null;let s=String(v).replace(/[^\d,.\-]/g,"");s=s.includes(",")?s.replace(/\./g,"").replace(",","."):s;const n=parseFloat(s);return isNaN(n)?null:n};
 const money=v=>v==null?"":Number(v).toFixed(2).replace(".",",");
 const digits=s=>String(s||"").replace(/\D/g,"");
 const dt=d=>new Date(d).toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"});
@@ -87,14 +87,18 @@ async function shell(){
   S=await q(sb.from("store_settings").select("*").eq("id",1).single());
   root.innerHTML=`<div class="mobilebar"><button class="x" id="mb" aria-label="Menu">☰</button><b>${esc(S.name)}</b></div>
   <div class="shell"><aside class="side" id="side"><div class="brand"><div class="lg">${S.logo_url?`<img src="${esc(S.logo_url)}" alt="">`:"GB"}</div><div><b>${esc(S.name)}</b><small>Painel de gestão</small></div></div>
-    <button class="openbtn" id="ob"></button><nav class="menu" id="menu"></nav>
+    <button class="openbtn" id="ob"></button><button class="openbtn off" id="snd"></button><nav class="menu" id="menu"></nav>
     <a class="btn o sm" href="/" target="_blank" rel="noopener" style="margin:14px 10px 0;display:flex">Ver cardápio ↗</a>
     <button class="out" id="lo">Sair</button></aside><main class="main" id="main"></main></div>`;
   $("#mb").onclick=()=>$("#side").classList.toggle("open");
   $("#side").onclick=e=>{if(e.target.id==="side")$("#side").classList.remove("open")};
   $("#lo").onclick=async()=>{await sb.auth.signOut();location.reload()};
   $("#ob").onclick=async()=>{S.is_open=!S.is_open;await q(sb.from("store_settings").update({is_open:S.is_open}).eq("id",1));openBtn();toast(S.is_open?"Loja aberta":"Loja fechada")};
-  openBtn(); menu(); listenOrders(); go(location.hash.slice(1)||"pedidos");
+  $("#snd").onclick=e=>{e.stopPropagation();unlockAudio();const ready=audioCtx&&audioCtx.state==="running";
+    if(!soundOn){soundOn=true}else if(ready){beep();toast("Esse é o som de pedido novo")}
+    try{localStorage.setItem("gb_sound",soundOn?"on":"off")}catch{};soundBtn()};
+  $("#snd").oncontextmenu=e=>{e.preventDefault();soundOn=!soundOn;try{localStorage.setItem("gb_sound",soundOn?"on":"off")}catch{};soundBtn()};
+  openBtn(); soundBtn(); menu(); listenOrders(); go(location.hash.slice(1)||"pedidos");
 }
 function openBtn(){const b=$("#ob");b.className="openbtn"+(S.is_open?"":" off");b.innerHTML=`<i></i>${S.is_open?"Loja aberta · clique p/ fechar":"Loja fechada · clique p/ abrir"}`}
 function menu(){
@@ -105,17 +109,29 @@ const PAGES={};
 function go(p){if(!PAGES[p])p="pedidos";page=p;location.hash=p;menu();closeDr();const m=$("#main");m.innerHTML='<div class="empty">Carregando…</div>';PAGES[p](m).catch(e=>{m.innerHTML=`<div class="empty">Não foi possível carregar. ${esc(e.message||"")}</div>`})}
 
 /* ---------- avisos de pedido novo ---------- */
-let audioCtx=null;
-document.addEventListener("click",()=>{if(!audioCtx){try{audioCtx=new (window.AudioContext||window.webkitAudioContext)()}catch{}}},{once:true});
-function beep(){if(!audioCtx)return;[0,0.25,0.5].forEach(t=>{const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.frequency.value=880;o.connect(g);g.connect(audioCtx.destination);g.gain.setValueAtTime(0.25,audioCtx.currentTime+t);g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+t+0.2);o.start(audioCtx.currentTime+t);o.stop(audioCtx.currentTime+t+0.2)})}
-async function countNew(){const {count}=await sb.from("orders").select("id",{count:"exact",head:true}).eq("status","novo");newCount=count||0;menu();document.title=(newCount?`(${newCount}) `:"")+"Painel · "+S.name}
+let audioCtx=null, soundOn=(()=>{try{return localStorage.getItem("gb_sound")!=="off"}catch{return true}})(), lastNew=null;
+function unlockAudio(){if(!audioCtx){try{audioCtx=new (window.AudioContext||window.webkitAudioContext)()}catch{}}if(audioCtx&&audioCtx.state==="suspended")audioCtx.resume();soundBtn()}
+document.addEventListener("click",unlockAudio);
+function beep(){
+  if(!soundOn||!audioCtx||audioCtx.state!=="running")return;
+  [[0,880],[0.18,1175],[0.36,880],[0.54,1175],[0.9,880],[1.08,1175]].forEach(([t,f])=>{const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type="square";o.frequency.value=f;o.connect(g);g.connect(audioCtx.destination);const s=audioCtx.currentTime+t;g.gain.setValueAtTime(0.0001,s);g.gain.exponentialRampToValueAtTime(0.35,s+0.02);g.gain.exponentialRampToValueAtTime(0.0001,s+0.16);o.start(s);o.stop(s+0.17)});
+}
+function soundBtn(){const b=$("#snd");if(!b)return;const ready=audioCtx&&audioCtx.state==="running";
+  b.className="openbtn"+(soundOn&&ready?"":" off");b.innerHTML=`<i></i>${!soundOn?"🔕 Som desligado · clique p/ ligar":ready?"🔔 Som ligado · clique p/ testar":"🔔 Clique aqui p/ ativar o som"}`}
+async function countNew(){
+  const {count,error}=await sb.from("orders").select("id",{count:"exact",head:true}).eq("status","novo"); if(error) return;
+  const n=count||0;
+  if(lastNew!==null&&n>lastNew){beep();toast("🔔 Pedido novo chegou!");if(page==="pedidos"&&!ov.innerHTML)PAGES.pedidos($("#main"),true)}
+  lastNew=n; newCount=n; menu(); document.title=(newCount?`(${newCount}) 🔔 `:"")+"Painel · "+S.name;
+}
 function listenOrders(){
   countNew();
-  sb.channel("orders").on("postgres_changes",{event:"*",schema:"public",table:"orders"},payload=>{
-    if(payload.eventType==="INSERT"){beep();toast("Novo pedido #"+payload.new.number)}
-    countNew(); if(page==="pedidos") PAGES.pedidos($("#main"),true);
+  sb.channel("orders").on("postgres_changes",{event:"*",schema:"public",table:"orders"},()=>{
+    countNew(); if(page==="pedidos"&&!ov.innerHTML) PAGES.pedidos($("#main"),true);
   }).subscribe();
-  setInterval(()=>{countNew();if(page==="pedidos"&&!ov.innerHTML)PAGES.pedidos($("#main"),true)},60000);
+  setInterval(countNew,15000);                                   // confere a cada 15 s, mesmo sem conexão ao vivo
+  setInterval(()=>{if(newCount>0)beep()},20000);                 // repete o alarme enquanto tiver pedido sem aceitar
+  setInterval(()=>{if(page==="pedidos"&&!ov.innerHTML)PAGES.pedidos($("#main"),true)},60000);
 }
 
 /* ================= PEDIDOS ================= */
@@ -128,11 +144,22 @@ PAGES.pedidos=async(m,soft)=>{
   m.innerHTML=`<div class="top"><h1>Pedidos</h1><div class="row"><button class="btn" id="np">➕ Novo pedido</button></div></div>
     <div class="stats"><div class="stat"><small>Pedidos hoje</small><b>${today.length}</b></div><div class="stat"><small>Vendido hoje</small><b>${brl(today.reduce((s,o)=>s+ +o.total,0))}</b></div>
     <div class="stat"><small>Ticket médio</small><b>${brl(today.length?today.reduce((s,o)=>s+ +o.total,0)/today.length:0)}</b></div><div class="stat"><small>Aguardando aceitar</small><b style="color:${newCount?"var(--y)":"inherit"}">${rows.filter(o=>o.status==="novo").length}</b></div></div>
-    ${audioCtx?"":`<p class="alert" style="margin:0 0 12px">🔔 Clique em qualquer lugar da tela uma vez pra liberar o <b>som de pedido novo</b>.</p>`}
+    ${audioCtx&&audioCtx.state==="running"?"":`<p class="alert" style="margin:0 0 12px">🔔 O navegador só libera o som depois de um clique. <b>Clique em qualquer lugar desta tela</b> (ou no botão "Ativar o som" do menu) toda vez que abrir o painel.</p>`}
     <div class="board">${cols.map(([c,l])=>{const list=rows.filter(o=>inCol(o,c));return `<div class="col"><h3><span>${l}</span><span class="muted">${list.length}</span></h3>${list.map(o=>`<button class="oc ${o.status==="novo"?"new":""}" data-o="${o.id}"><div class="h"><span>#${o.number} · ${esc(o.customer_name||"Balcão")}</span><span class="price">${brl(o.total)}</span></div><div class="m">${o.type==="delivery"?"🛵 "+esc(o.neighborhood||""):o.type==="retirada"?"🏪 Retirada":"🧾 Balcão"} · ${esc(o.payment_method||"")} · há ${ago(o.created_at)}</div></button>`).join("")||'<p class="muted" style="margin:6px">Nenhum</p>'}</div>`}).join("")}</div>`;
   $("#np").onclick=()=>go("novo");
   $$("[data-o]",m).forEach(b=>b.onclick=()=>orderDrawer(+b.dataset.o));
 };
+const WA_LABEL={em_preparo:"Pedido aceito / em preparo",saiu_entrega:"Saiu para entrega",pronto:"Pronto para retirada",concluido:"Concluído (agradecimento + avaliação)"};
+const WA_DEFAULT={em_preparo:"Olá, {nome}! 😃 Recebemos seu pedido *#{numero}* no {loja} e já estamos preparando. 🍻\nTotal: {total}\nAcompanhe aqui: {link_pedido}",saiu_entrega:"🛵 {nome}, seu pedido *#{numero}* saiu para entrega! Já já chega aí. 🍻",pronto:"✅ {nome}, seu pedido *#{numero}* está pronto pra retirada aqui no {loja}!",concluido:"Obrigado pela preferência, {nome}! 🙏💛 Esperamos que tenha gostado.\nSe puder, avalie a gente: {link_avaliacao}\nVolte sempre ao {loja}! 🍻"};
+const notifyOn=()=>{try{return localStorage.getItem("gb_notify")!=="off"}catch{return true}};
+function waText(o,status){
+  const tpl=((S.wa_templates||{})[status])||WA_DEFAULT[status]; if(!tpl) return null;
+  const first=String(o.customer_name||"").trim().split(/\s+/)[0]||"";
+  return tpl.replace(/\{nome\}/g,first).replace(/\{numero\}/g,o.number).replace(/\{loja\}/g,S.name).replace(/\{total\}/g,brl(o.total))
+    .replace(/\{link_pedido\}/g,`${location.origin}/?pedido=${o.id}&tel=${digits(o.customer_phone)}`)
+    .replace(/\{link_avaliacao\}/g,S.review_url||"responda essa mensagem com uma nota de 0 a 10 ⭐");
+}
+function waLink(o,status){const txt=waText(o,status), ph=digits(o.customer_phone); if(!txt||ph.length<10) return null; return `https://wa.me/55${ph.replace(/^55(?=\d{10,11}$)/,"")}?text=${encodeURIComponent(txt)}`}
 const NEXT={novo:["em_preparo","✅ Aceitar pedido"],em_preparo:[null,""],saiu_entrega:["concluido","✔️ Entregue / concluir"],pronto:["concluido","✔️ Retirado / concluir"]};
 async function orderDrawer(id){
   const o=await q(sb.from("orders").select("*,order_items(*)").eq("id",id).single());
@@ -142,9 +169,12 @@ async function orderDrawer(id){
   const maps=addr?`https://maps.google.com/?q=${encodeURIComponent(addr+", "+(o.neighborhood||""))}`:"";
   let next=NEXT[o.status]; if(o.status==="em_preparo") next=o.type==="delivery"?["saiu_entrega","🛵 Saiu para entrega"]:["pronto","🏪 Pronto p/ retirada"];
   if(o.status==="em_preparo"&&o.type==="balcao") next=["concluido","✔️ Concluir"];
-  const wa=o.customer_phone?`https://wa.me/55${digits(o.customer_phone).replace(/^55/,"")}?text=${encodeURIComponent(`Olá, ${o.customer_name||""}! Seu pedido #${o.number} no ${S.name}: ${STATUS[o.status]}.`)}`:"";
+  const wa=o.customer_phone&&digits(o.customer_phone).length>=10?`https://wa.me/55${digits(o.customer_phone).replace(/^55(?=\d{10,11}$)/,"")}`:"";
+  const nextWa=next&&next[0]&&notifyOn()?waLink(o,next[0]):null, curWa=waLink(o,o.status);
   const dr=drawer(`Pedido #${o.number} ${pill(o.status)}`,`
-    <div class="muted">${dt(o.created_at)} · ${o.type==="delivery"?"🛵 Entrega":o.type==="retirada"?"🏪 Retirada":"🧾 Balcão"}</div>
+    <div class="muted">${dt(o.created_at)} · ${o.type==="delivery"?"🛵 Entrega"+(o.distance_km!=null?" · "+String(o.distance_km).replace(".",",")+" km":""):o.type==="retirada"?"🏪 Retirada":"🧾 Balcão"}</div>
+    ${o.customer_phone&&o.type!=="balcao"?`<label class="chk"><input type="checkbox" id="nt" ${notifyOn()?"checked":""}> Avisar o cliente no WhatsApp quando eu mudar o status</label>`:""}
+    ${curWa?`<a class="btn o sm" href="${curWa}" target="_blank" rel="noopener" style="justify-self:start">📲 Enviar aviso de "${STATUS[o.status]}" de novo</a>`:""}
     <div class="card"><b>👤 ${esc(o.customer_name||"Cliente balcão")}</b>${o.customer_phone?`<div class="muted">${esc(o.customer_phone)}</div>`:""}
       ${o.type==="delivery"?`<div style="margin-top:8px"><b>📍 ${esc(addr)}</b><div class="muted">${esc(o.neighborhood||"")}${o.complement?" · "+esc(o.complement):""}${o.cep?" · CEP "+esc(o.cep):""}</div>${o.reference?`<div>Ref.: ${esc(o.reference)}</div>`:""}<a href="${maps}" target="_blank" rel="noopener">Abrir no mapa ↗</a></div>`:""}</div>
     <div class="card">${items.map(i=>`<div class="line"><div><b>${i.qty}x</b> ${esc(i.name)}${(i.options||[]).length?`<div class="muted">${i.options.map(x=>x.qty+"x "+esc(x.name)).join(", ")}</div>`:""}${i.notes?`<div class="muted">Obs.: ${esc(i.notes)}</div>`:""}</div><b>${brl(i.total)}</b></div>`).join("")}
@@ -156,10 +186,12 @@ async function orderDrawer(id){
     ${o.notes?`<div class="card">📝 ${esc(o.notes)}</div>`:""}
     ${o.status!=="cancelado"&&o.status!=="concluido"?`<label class="fld"><span>Mudar status</span><select class="in" id="st">${Object.entries(STATUS).map(([k,l])=>`<option value="${k}" ${k===o.status?"selected":""}>${l}</option>`).join("")}</select></label>`:""}`,
     `${wa?`<a class="btn o" href="${wa}" target="_blank" rel="noopener">WhatsApp do cliente</a>`:""}<button class="btn o" id="pr">🖨️ Imprimir</button>
-     ${o.status!=="cancelado"&&o.status!=="concluido"?`<button class="btn r" id="cc">Cancelar</button>`:""}${next&&next[0]?`<button class="btn" id="nx">${next[1]}</button>`:""}`);
-  const setSt=async s=>{await q(sb.from("orders").update({status:s}).eq("id",o.id));toast(STATUS[s]);closeDr();if(page==="pedidos")PAGES.pedidos($("#main"));countNew()};
+     ${o.status!=="cancelado"&&o.status!=="concluido"?`<button class="btn r" id="cc">Cancelar</button>`:""}${next&&next[0]?(nextWa?`<a class="btn" id="nx" href="${nextWa}" target="_blank" rel="noopener">${next[1]} + 📲</a>`:`<button class="btn" id="nx">${next[1]}</button>`):""}`);
+  const setSt=async(s,reopen)=>{await q(sb.from("orders").update({status:s}).eq("id",o.id));toast(STATUS[s]);countNew();if(page==="pedidos")PAGES.pedidos($("#main"));
+    if(reopen&&notifyOn()&&waLink({...o,status:s},s)) orderDrawer(o.id); else closeDr()};
+  if($("#nt",dr)) $("#nt",dr).onchange=e=>{try{localStorage.setItem("gb_notify",e.target.checked?"on":"off")}catch{};orderDrawer(o.id)};
   if($("#nx",dr)) $("#nx",dr).onclick=()=>setSt(next[0]);
-  if($("#st",dr)) $("#st",dr).onchange=e=>setSt(e.target.value);
+  if($("#st",dr)) $("#st",dr).onchange=e=>setSt(e.target.value,true);
   if($("#cc",dr)) $("#cc",dr).onclick=e=>{if(e.target.dataset.sure){setSt("cancelado")}else{e.target.dataset.sure=1;e.target.textContent="Confirmar cancelamento"}};
   $("#pr",dr).onclick=()=>printOrder(o,items,addr,change);
 }
@@ -516,18 +548,41 @@ PAGES.financeiro=async m=>{
 /* ================= DELIVERY ================= */
 PAGES.delivery=async m=>{
   const zs=await q(sb.from("delivery_zones").select("*").order("neighborhood"));
+  const KF=[{k:"km_base_fee",l:"Taxa mínima (R$)",t:"money"},{k:"km_base_km",l:"Até quantos km vale a taxa mínima",t:"money"},{k:"km_price",l:"Valor de cada km a mais (R$)",t:"money"},{k:"km_max",l:"Distância máxima de entrega (km)",t:"money"}];
   const F=[{k:"accepts_delivery",l:"Fazer entregas",t:"check"},{k:"accepts_pickup",l:"Aceitar retirada na loja",t:"check"},{k:"delivery_time_min",l:"Tempo de entrega mínimo (min)",t:"int"},{k:"delivery_time_max",l:"Tempo de entrega máximo (min)",t:"int"},{k:"prep_time_min",l:"Tempo pra retirada (min)",t:"int"},{k:"min_order",l:"Pedido mínimo (R$)",t:"money"}];
-  m.innerHTML=`<div class="top"><h1>Delivery e bairros</h1><button class="btn" id="nz">➕ Novo bairro</button></div>
-    <div class="grid" style="grid-template-columns:minmax(0,1fr) 320px"><div class="tw"><table><thead><tr><th>Bairro</th><th class="num">Taxa</th><th class="num">Tempo</th><th></th></tr></thead><tbody>
+  const km=S.delivery_mode==="km";
+  const ex=d=>+S.km_base_fee+Math.max(0,Math.ceil(d-(+S.km_base_km||0)))*(+S.km_price||0);
+  m.innerHTML=`<div class="top"><h1>Delivery e bairros</h1>${km?"":'<button class="btn" id="nz">➕ Novo bairro</button>'}</div>
+    <div class="card grid" style="margin-bottom:12px"><b>Como cobrar a entrega</b>
+      <div class="tabs" style="margin:0"><button data-mode="bairro" aria-current="${!km}">Por bairro</button><button data-mode="km" aria-current="${km}">Por km (distância)</button></div>
+      ${km?`<div class="grid g4">${formHTML(KF,S)}</div>
+        <p class="muted" style="margin:0">Exemplo com esses valores: 1 km = ${brl(ex(1))} · 3 km = ${brl(ex(3))} · 5 km = ${brl(ex(5))}. A distância é em linha reta da loja até o cliente (costuma ser um pouco menor que o caminho pelas ruas).</p>
+        <div class="grid g3"><label class="fld"><span>Latitude da loja</span><input class="in" id="slat" value="${S.store_lat??""}"></label><label class="fld"><span>Longitude da loja</span><input class="in" id="slng" value="${S.store_lng??""}"></label>
+          <div class="fld"><span>&nbsp;</span><div class="row"><button class="btn o sm" id="gps">📍 Usar a localização deste aparelho</button><button class="btn o sm" id="geo">🔎 Buscar pelo endereço da loja</button></div></div></div>
+        <p class="muted" style="margin:0" id="locmsg">${S.store_lat!=null?`Localização salva: <a target="_blank" rel="noopener" href="https://maps.google.com/?q=${S.store_lat},${S.store_lng}">conferir no mapa ↗</a>`:'<b style="color:var(--red)">Falta a localização da loja.</b> Estando na loja, clique em "Usar a localização deste aparelho".'}</p>
+        <button class="btn" id="svk" style="justify-self:start">Salvar taxa por km</button>`:'<p class="muted" style="margin:0">Cada bairro tem a sua taxa. Cadastre os bairros abaixo.</p>'}</div>
+    <div class="grid" style="grid-template-columns:minmax(0,1fr) 320px">${km?'<div class="card muted">Com a cobrança por km, os bairros não são usados.</div>':""}<div class="tw" ${km?"hidden":""}><table><thead><tr><th>Bairro</th><th class="num">Taxa</th><th class="num">Tempo</th><th></th></tr></thead><tbody>
     ${zs.map(z=>`<tr><td><b style="${z.active?"":"opacity:.45"}">${esc(z.neighborhood)}</b>${z.active?"":' <span class="pill p-inativo">Pausado</span>'}</td><td class="num">${+z.fee?brl(z.fee):"Grátis"}</td><td class="num">${z.eta_minutes?z.eta_minutes+" min":"padrão"}</td><td class="num"><button class="btn o sm" data-e="${z.id}">Editar</button></td></tr>`).join("")||'<tr><td colspan="4" class="empty">Cadastre os bairros que vocês entregam. <b>Sem bairro cadastrado o cliente não consegue pedir entrega.</b></td></tr>'}</tbody></table></div>
     <div class="card grid" style="align-content:start">${formHTML(F,S)}<button class="btn" id="sv">Salvar</button></div></div>
     <p class="muted">Dica: use o nome do bairro igual aos Correios (ex.: "Conjunto Ceará"), assim o CEP do cliente já encontra o bairro sozinho.</p>`;
   $("#sv").onclick=async()=>{const v=readForm(F,m);v.min_order=v.min_order??0;await q(sb.from("store_settings").update(v).eq("id",1));Object.assign(S,v);toast("Salvo")};
+  $$("[data-mode]",m).forEach(b=>b.onclick=async()=>{await q(sb.from("store_settings").update({delivery_mode:b.dataset.mode}).eq("id",1));S.delivery_mode=b.dataset.mode;toast(b.dataset.mode==="km"?"Agora a entrega é cobrada por km":"Agora a entrega é cobrada por bairro");PAGES.delivery(m)});
+  if(km){
+    const setLoc=(la,ln,txt)=>{$("#slat").value=(+la).toFixed(6);$("#slng").value=(+ln).toFixed(6);$("#locmsg").innerHTML=`${txt} <a target="_blank" rel="noopener" href="https://maps.google.com/?q=${la},${ln}">conferir no mapa ↗</a> · clique em Salvar`};
+    $("#gps").onclick=()=>{if(!navigator.geolocation){toast("Este aparelho não tem localização");return}$("#locmsg").textContent="Pegando a localização…";
+      navigator.geolocation.getCurrentPosition(p=>setLoc(p.coords.latitude,p.coords.longitude,`Localização encontrada (precisão ~${Math.round(p.coords.accuracy)} m).`),()=>{$("#locmsg").textContent="Não deu pra pegar a localização. Permita o acesso à localização no navegador ou use a busca pelo endereço."},{enableHighAccuracy:true,timeout:15000})};
+    $("#geo").onclick=async()=>{if(!S.address){toast("Preencha o endereço da loja em Configurações primeiro");return}$("#locmsg").textContent="Buscando…";
+      try{const r=await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q=${encodeURIComponent(S.address)}`);const j=await r.json();
+        if(!j[0]){$("#locmsg").textContent="Não achei esse endereço no mapa. Use a localização do aparelho estando na loja.";return}setLoc(j[0].lat,j[0].lon,"Achei pelo endereço.")}catch{$("#locmsg").textContent="A busca falhou. Tente a localização do aparelho."}};
+    $("#svk").onclick=async()=>{const v=readForm(KF,m);v.store_lat=parseFloat($("#slat").value);v.store_lng=parseFloat($("#slng").value);if(isNaN(v.store_lat)||isNaN(v.store_lng)){toast("Falta a localização da loja");return}
+      v.km_base_fee=v.km_base_fee??0;v.km_base_km=v.km_base_km??0;v.km_price=v.km_price??0;v.km_max=v.km_max??0;
+      await q(sb.from("store_settings").update(v).eq("id",1));Object.assign(S,v);toast("Taxa por km salva");PAGES.delivery(m)};
+  }
   const ZF=[{k:"neighborhood",l:"Nome do bairro"},{k:"fee",l:"Taxa de entrega (R$) · 0 = grátis",t:"money"},{k:"eta_minutes",l:"Tempo de entrega (min) · vazio = padrão",t:"int"},{k:"active",l:"Entregando nesse bairro",t:"check"}];
   const edit=z=>{const dr=drawer(z?"Editar bairro":"Novo bairro",formHTML(ZF,z||{active:true,fee:0})+'<p class="err" id="e" hidden></p>',`${z?'<button class="btn r" id="del">Excluir</button>':""}<button class="btn" id="sv2">Salvar</button>`);
     $("#sv2",dr).onclick=async()=>{const v=readForm(ZF,dr);if(!v.neighborhood){$("#e",dr).hidden=false;$("#e",dr).textContent="Informe o bairro.";return}v.fee=v.fee??0;z?await q(sb.from("delivery_zones").update(v).eq("id",z.id)):await q(sb.from("delivery_zones").insert(v));closeDr();toast("Bairro salvo");PAGES.delivery(m)};
     if(z)$("#del",dr).onclick=async e=>{if(!e.target.dataset.sure){e.target.dataset.sure=1;e.target.textContent="Confirmar exclusão";return}await q(sb.from("delivery_zones").delete().eq("id",z.id));closeDr();PAGES.delivery(m)}};
-  $("#nz").onclick=()=>edit(null); $$("[data-e]",m).forEach(b=>b.onclick=()=>edit(zs.find(x=>x.id==b.dataset.e)));
+  if($("#nz"))$("#nz").onclick=()=>edit(null); $$("[data-e]",m).forEach(b=>b.onclick=()=>edit(zs.find(x=>x.id==b.dataset.e)));
 };
 
 /* ================= CONFIGURAÇÕES ================= */
@@ -543,6 +598,9 @@ PAGES.config=async m=>{
       ${DAYS.map(([k,l])=>{const d=H[k]||{open:"16:00",close:"02:00",closed:false};return `<div class="row"><span style="width:70px">${l}</span><input type="time" class="in" style="width:120px" id="h_${k}_o" value="${d.open}"><span class="muted">às</span><input type="time" class="in" style="width:120px" id="h_${k}_c" value="${d.close}"><label class="chk"><input type="checkbox" id="h_${k}_x" ${d.closed?"checked":""}> Fechado</label></div>`}).join("")}</div>
     <div class="card grid"><b>Formas de pagamento</b>${PAYS.map(p=>`<label class="chk"><input type="checkbox" data-pay="${esc(p)}" ${(S.payment_methods||[]).includes(p)?"checked":""}> ${p}</label>`).join("")}
       <label class="fld"><span>Outras (separe por vírgula)</span><input class="in" id="pc" value="${esc(custom.join(", "))}"></label></div>
+    <div class="card grid"><b>Mensagens do WhatsApp pro cliente</b><p class="muted" style="margin:0;font-size:12px">Use {nome}, {numero}, {total}, {loja}, {link_pedido} e {link_avaliacao}. Ao mudar o status do pedido, o WhatsApp abre com a mensagem pronta, é só apertar enviar.</p>
+      ${Object.entries(WA_LABEL).map(([k,l])=>`<label class="fld"><span>${l}</span><textarea class="in" rows="3" id="wa_${k}">${esc(((S.wa_templates||{})[k])||WA_DEFAULT[k])}</textarea></label>`).join("")}
+      <label class="fld"><span>Link de avaliação (ex.: avaliação do Google Maps). Vazio = pede uma nota de 0 a 10</span><input class="in" id="rv" value="${esc(S.review_url||"")}"></label></div>
     <div class="card"><b>Link do cardápio pros clientes</b><p style="word-break:break-all"><a href="/" target="_blank" rel="noopener">${location.origin}/</a></p><button class="btn o sm" id="cpl">Copiar link</button></div></div></div>`;
   wireImgs(m);
   $("#cpl").onclick=async()=>{try{await navigator.clipboard.writeText(location.origin+"/");toast("Link copiado")}catch{toast(location.origin+"/")}};
@@ -551,6 +609,8 @@ PAGES.config=async m=>{
     v.opening_hours=Object.fromEntries(DAYS.map(([k])=>[k,{open:$(`#h_${k}_o`).value||"00:00",close:$(`#h_${k}_c`).value||"00:00",closed:$(`#h_${k}_x`).checked}]));
     v.payment_methods=$$("[data-pay]",m).filter(x=>x.checked).map(x=>x.dataset.pay).concat($("#pc").value.split(",").map(s=>s.trim()).filter(Boolean));
     if(!v.payment_methods.length){toast("Escolha pelo menos uma forma de pagamento");return}
+    v.wa_templates=Object.fromEntries(Object.keys(WA_LABEL).map(k=>[k,$("#wa_"+k).value.trim()||WA_DEFAULT[k]]));
+    v.review_url=$("#rv").value.trim()||null;
     v.updated_at=new Date().toISOString();
     await q(sb.from("store_settings").update(v).eq("id",1)); Object.assign(S,v); toast("Configurações salvas"); setTimeout(()=>location.reload(),600);};
 };
