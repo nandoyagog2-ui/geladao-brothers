@@ -415,13 +415,35 @@ function sentSheet(o){
   const msg=waMsg(o);
   sheet("Pedido enviado",`<div class="track"><small>Pedido Nº ${o.number}</small><b>Recebido!</b><div class="status"><i></i>Já chegou na loja</div></div>
     <p style="margin-top:16px">Pra confirmar mais rápido, mande o pedido também pelo WhatsApp da loja:</p>
-    ${S.whatsapp?`<a class="btn c wa" style="text-decoration:none" target="_blank" rel="noopener" href="https://wa.me/${digits(S.whatsapp).replace(/^(?!55)/,"55")}?text=${encodeURIComponent(msg)}">Enviar pedido pelo WhatsApp</a>`:""}
+    ${S.whatsapp?`<a class="btn c wa" style="text-decoration:none" target="_blank" rel="noopener" href="${storeWa(msg)}">Enviar pedido pelo WhatsApp</a>`:""}
     <div class="lbl"><span>Resumo do pedido</span></div><pre class="msg" id="msg"></pre>
     <button class="link" id="cp">Copiar mensagem</button><div style="height:14px"></div>`,
     `<button class="btn c" id="tr">Acompanhar pedido</button><div class="two"><button class="btn c o" data-home>Voltar ao cardápio</button><button class="btn c o" data-orders>Meus pedidos</button></div>`);
   L("#msg").textContent=msg;
   L("#cp").onclick=async e=>{try{await navigator.clipboard.writeText(msg);e.target.textContent="Copiado ✓"}catch{const r=document.createRange();r.selectNodeContents(L("#msg"));getSelection().removeAllRanges();getSelection().addRange(r);e.target.textContent="Texto selecionado"}};
   L("#tr").onclick=()=>trackSheet(o.id,o.ck.tel);
+}
+const storeWa=txt=>{let ph=digits(S.whatsapp);if(!/^55\d{10,11}$/.test(ph))ph="55"+ph;return `https://api.whatsapp.com/send?phone=${ph}${txt?"&text="+encodeURIComponent(txt):""}`};
+async function reviewSheet(id,phone){
+  sheet("Avaliar pedido",`<div class="loading" style="min-height:40vh">Carregando…</div>`);
+  const {data:r,error}=await sb.rpc("get_review",{p_id:id,p_phone:phone});
+  if(error||!r){sheet("Avaliar pedido",`<div class="empty">Não encontramos esse pedido.</div>`,`<button class="btn c o" data-home>Ver o cardápio</button>`);return}
+  let n=r.rating||0;
+  const draw=()=>{
+    sheet("Avaliar pedido",`<div class="track"><small>Pedido Nº ${r.number}</small><b style="font-size:19px">Como foi seu pedido${r.name?", "+esc(String(r.name).split(" ")[0]):""}?</b></div>
+      <div style="display:flex;justify-content:center;gap:6px;margin:22px 0 6px">${[1,2,3,4,5].map(i=>`<button data-s="${i}" aria-label="${i} estrela${i>1?"s":""}" style="font-size:44px;line-height:1;color:${i<=n?"var(--y)":"#444"}">★</button>`).join("")}</div>
+      <p class="sub" style="text-align:center;color:var(--muted);margin:0 0 14px">${["Toque nas estrelas","Muito ruim","Ruim","Regular","Bom","Excelente!"][n]}</p>
+      <label class="field"><span>Quer deixar um comentário? (opcional)</span><textarea id="cm" class="in" rows="3" maxlength="500" placeholder="${n&&n<=3?"Conta pra gente o que podemos melhorar":"Do que você mais gostou?"}">${esc(r.comment||"")}</textarea></label>
+      <p class="err" id="e" hidden></p><div style="height:14px"></div>`,`<button class="btn c" id="sv" ${n?"":"disabled"}>Enviar avaliação</button>`);
+    layer.querySelectorAll("[data-s]").forEach(b=>b.onclick=()=>{r.comment=L("#cm").value;n=+b.dataset.s;draw()});
+    L("#sv").onclick=async()=>{L("#sv").disabled=true;
+      const {error}=await sb.rpc("submit_review",{p_id:id,p_phone:phone,p_rating:n,p_comment:L("#cm").value});
+      if(error){L("#sv").disabled=false;L("#e").hidden=false;L("#e").textContent="Não deu pra enviar agora. Tente de novo.";return}
+      sheet("Obrigado!",`<div class="track"><b>Obrigado pela avaliação! 💛</b><div class="status" style="color:var(--y);font-size:26px;letter-spacing:3px">${"★".repeat(n)}</div></div>
+        <p style="text-align:center">${n>=4?"Que bom que você gostou! Volte sempre ao "+esc(S.name)+". 🍻":"Sentimos muito. Sua opinião já chegou pra gente e vamos melhorar."}</p>
+        ${n>=4&&S.review_url?`<a class="btn c" style="text-decoration:none;margin-top:10px" target="_blank" rel="noopener" href="${esc(S.review_url)}">⭐ Avaliar também no Google</a>`:""}`,
+        `<button class="btn c o" data-home>Ver o cardápio</button>`)};
+  }; draw();
 }
 const STATUS={novo:"Pedido recebido",em_preparo:"Pedido em preparação",saiu_entrega:"Saiu para entrega",pronto:"Pronto para retirada",concluido:"Pedido concluído",cancelado:"Pedido cancelado"};
 async function trackSheet(id,phone){
@@ -439,7 +461,7 @@ async function trackSheet(id,phone){
     <div class="ci"><div class="t"><b>👤 ${esc(o.customer_name)}</b><div class="sub">${esc(o.customer_phone)}</div></div></div>
     ${o.type==="delivery"?`<div class="ci"><div class="t"><b>📍 ${esc(o.street)}, ${esc(o.street_number)}</b><div class="sub">${esc(o.neighborhood)}${o.complement?" · "+esc(o.complement):""}<br>${esc(o.reference||"")}</div></div></div>`:""}
     <button class="link" id="rf">Atualizar status</button><div style="height:14px"></div>`,
-    `${S.whatsapp?`<a class="btn c" style="text-decoration:none" target="_blank" rel="noopener" href="https://wa.me/${digits(S.whatsapp).replace(/^(?!55)/,"55")}">Falar com o estabelecimento</a>`:""}<div class="two"><button class="btn c o" data-home>Voltar ao cardápio</button><button class="btn c o" data-orders>Meus pedidos</button></div>`);
+    `${S.whatsapp?`<a class="btn c" style="text-decoration:none" target="_blank" rel="noopener" href="${storeWa()}">Falar com o estabelecimento</a>`:""}<div class="two"><button class="btn c o" data-home>Voltar ao cardápio</button><button class="btn c o" data-orders>Meus pedidos</button></div>`);
   L("#rf").onclick=()=>trackSheet(id,phone);
 }
 function feeSheet(){
@@ -462,6 +484,7 @@ function promoPop(){
   catch(e){ app.innerHTML=`<div class="empty">Não foi possível carregar o cardápio agora. Tente de novo em instantes.</div>`; console.error(e); return; }
   restoreCart(); render();
   const qs=new URLSearchParams(location.search);
+  if(qs.get("avaliar")&&qs.get("tel")){ history.replaceState(null,"",location.pathname); reviewSheet(+qs.get("avaliar"),qs.get("tel")); return; }
   if(qs.get("pedido")&&qs.get("tel")){ history.replaceState(null,"",location.pathname); trackSheet(+qs.get("pedido"),qs.get("tel")); return; }
   if(!sessionStorage.getItem("gb_promo")){ try{sessionStorage.setItem("gb_promo","1")}catch{} promoPop(); }
 })();

@@ -80,8 +80,8 @@ function loginView(msg){
 /* ---------- estrutura ---------- */
 let S={}, page="pedidos", newCount=0;
 const MENU=[["Operação",[["pedidos","🧾","Pedidos"],["novo","➕","Novo pedido (balcão)"],["historico","📋","Histórico"],["caixa","💰","Caixa"]]],
-  ["Cardápio",[["catalogo","🍺","Catálogo"],["complementos","🧊","Complementos"],["destaques","⭐","Destaques e promoções"]]],
-  ["Clientes",[["clientes","👥","Clientes e fiado"],["cupons","🎟️","Cupons"],["fidelidade","🏆","Fidelidade"]]],
+  ["Cardápio",[["catalogo","🍺","Catálogo"],["complementos","🧊","Complementos"],["destaques","🔥","Destaques e promoções"]]],
+  ["Clientes",[["clientes","👥","Clientes e fiado"],["avaliacoes","⭐","Avaliações"],["cupons","🎟️","Cupons"],["fidelidade","🏆","Fidelidade"]]],
   ["Gestão",[["desempenho","📈","Desempenho"],["estoque","📦","Estoque"],["financeiro","💸","Despesas"],["delivery","🛵","Delivery e bairros"],["config","⚙️","Configurações"]]]];
 async function shell(){
   S=await q(sb.from("store_settings").select("*").eq("id",1).single());
@@ -150,16 +150,17 @@ PAGES.pedidos=async(m,soft)=>{
   $$("[data-o]",m).forEach(b=>b.onclick=()=>orderDrawer(+b.dataset.o));
 };
 const WA_LABEL={em_preparo:"Pedido aceito / em preparo",saiu_entrega:"Saiu para entrega",pronto:"Pronto para retirada",concluido:"Concluído (agradecimento + avaliação)"};
-const WA_DEFAULT={em_preparo:"Olá, {nome}! 😃 Recebemos seu pedido *#{numero}* no {loja} e já estamos preparando. 🍻\nTotal: {total}\nAcompanhe aqui: {link_pedido}",saiu_entrega:"🛵 {nome}, seu pedido *#{numero}* saiu para entrega! Já já chega aí. 🍻",pronto:"✅ {nome}, seu pedido *#{numero}* está pronto pra retirada aqui no {loja}!",concluido:"Obrigado pela preferência, {nome}! 🙏💛 Esperamos que tenha gostado.\nSe puder, avalie a gente: {link_avaliacao}\nVolte sempre ao {loja}! 🍻"};
+const WA_DEFAULT={em_preparo:"Olá, {nome}! 😃 Recebemos seu pedido *#{numero}* no {loja} e já estamos preparando. 🍻\nTotal: {total}",saiu_entrega:"🛵 {nome}, seu pedido *#{numero}* saiu para entrega! Já já chega aí. 🍻",pronto:"✅ {nome}, seu pedido *#{numero}* está pronto pra retirada aqui no {loja}!",concluido:"Obrigado pela preferência, {nome}! 🙏💛\nEsperamos te encontrar em breve.\nO {loja} agradece! 🍻\n\n⭐ Avalie seu pedido, leva 10 segundos:\n{link_avaliacao}"};
 const notifyOn=()=>{try{return localStorage.getItem("gb_notify")!=="off"}catch{return true}};
 function waText(o,status){
   const tpl=((S.wa_templates||{})[status])||WA_DEFAULT[status]; if(!tpl) return null;
   const first=String(o.customer_name||"").trim().split(/\s+/)[0]||"";
   return tpl.replace(/\{nome\}/g,first).replace(/\{numero\}/g,o.number).replace(/\{loja\}/g,S.name).replace(/\{total\}/g,brl(o.total))
     .replace(/\{link_pedido\}/g,`${location.origin}/?pedido=${o.id}&tel=${digits(o.customer_phone)}`)
-    .replace(/\{link_avaliacao\}/g,S.review_url||"responda essa mensagem com uma nota de 0 a 10 ⭐");
+    .replace(/\{link_avaliacao\}/g,`${location.origin}/?avaliar=${o.id}&tel=${digits(o.customer_phone)}`);
 }
-function waLink(o,status){const txt=waText(o,status), ph=digits(o.customer_phone); if(!txt||ph.length<10) return null; return `https://wa.me/55${ph.replace(/^55(?=\d{10,11}$)/,"")}?text=${encodeURIComponent(txt)}`}
+function waLink(o,status){const txt=waText(o,status), ph=digits(o.customer_phone); if(!txt||ph.length<10) return null; return waURL(ph,txt)}
+function waURL(phone,txt){const ph=digits(phone).replace(/^55(?=\d{10,11}$)/,"");return `https://api.whatsapp.com/send?phone=55${ph}${txt?"&text="+encodeURIComponent(txt):""}`}
 const NEXT={novo:["em_preparo","✅ Aceitar pedido"],em_preparo:[null,""],saiu_entrega:["concluido","✔️ Entregue / concluir"],pronto:["concluido","✔️ Retirado / concluir"]};
 async function orderDrawer(id){
   const o=await q(sb.from("orders").select("*,order_items(*)").eq("id",id).single());
@@ -169,7 +170,7 @@ async function orderDrawer(id){
   const maps=addr?`https://maps.google.com/?q=${encodeURIComponent(addr+", "+(o.neighborhood||""))}`:"";
   let next=NEXT[o.status]; if(o.status==="em_preparo") next=o.type==="delivery"?["saiu_entrega","🛵 Saiu para entrega"]:["pronto","🏪 Pronto p/ retirada"];
   if(o.status==="em_preparo"&&o.type==="balcao") next=["concluido","✔️ Concluir"];
-  const wa=o.customer_phone&&digits(o.customer_phone).length>=10?`https://wa.me/55${digits(o.customer_phone).replace(/^55(?=\d{10,11}$)/,"")}`:"";
+  const wa=o.customer_phone&&digits(o.customer_phone).length>=10?waURL(o.customer_phone):"";
   const nextWa=next&&next[0]&&notifyOn()?waLink(o,next[0]):null, curWa=waLink(o,o.status);
   const dr=drawer(`Pedido #${o.number} ${pill(o.status)}`,`
     <div class="muted">${dt(o.created_at)} · ${o.type==="delivery"?"🛵 Entrega"+(o.distance_km!=null?" · "+String(o.distance_km).replace(".",",")+" km":""):o.type==="retirada"?"🏪 Retirada":"🧾 Balcão"}</div>
@@ -435,12 +436,37 @@ PAGES.clientes=async m=>{
       ${ent.length?`<div style="margin-top:10px">${ent.map(e=>`<div class="line"><span>${dt(e.created_at)} · ${esc(e.description||(e.kind==="compra"?"Compra":"Pagamento"))}</span><b style="color:${e.kind==="compra"?"var(--red)":"var(--green)"}">${e.kind==="compra"?"+":"−"} ${brl(e.amount)}</b></div>`).join("")}</div>`:""}</div>`:""}
       ${formHTML(CF,c||{credit_limit:0,loyalty_points:0})}
       ${ords.length?`<div class="card"><b>Últimos pedidos</b>${ords.map(o=>`<div class="line"><span>#${o.number} · ${dt(o.created_at)} ${pill(o.status)}</span><b>${brl(o.total)}</b></div>`).join("")}</div>`:""}<p class="err" id="e" hidden></p>`,
-      `${c&&c.phone?`<a class="btn o" target="_blank" rel="noopener" href="https://wa.me/55${digits(c.phone).replace(/^55/,"")}">WhatsApp</a>`:""}<button class="btn" id="sv">Salvar</button>`);
+      `${c&&c.phone?`<a class="btn o" target="_blank" rel="noopener" href="${waURL(c.phone)}">WhatsApp</a>`:""}<button class="btn" id="sv">Salvar</button>`);
     $("#sv",dr).onclick=async()=>{const v=readForm(CF,dr);if(!v.name){$("#e",dr).hidden=false;$("#e",dr).textContent="Informe o nome.";return}v.credit_limit=v.credit_limit??0;v.loyalty_points=v.loyalty_points??0;
       try{c?await q(sb.from("customers").update(v).eq("id",c.id)):await q(sb.from("customers").insert(v));closeDr();toast("Cliente salvo");PAGES.clientes(m)}catch(e){$("#e",dr).hidden=false;$("#e",dr).textContent=/duplicate|unique/i.test(e.message)?"Já existe um cliente com esse telefone.":e.message}};
     const fiado=async kind=>{const v=num($("#fv",dr).value);if(!v||v<=0){toast("Informe o valor");return}await q(sb.from("credit_entries").insert({customer_id:c.id,kind,amount:v,description:$("#fd",dr).value.trim()||null}));toast(kind==="compra"?"Compra lançada":"Pagamento registrado");closeDr();await PAGES.clientes(m);};
     if(c){$("#fc",dr).onclick=()=>fiado("compra");$("#fp",dr).onclick=()=>fiado("pagamento")}
   }
+};
+
+/* ================= AVALIAÇÕES ================= */
+PAGES.avaliacoes=async m=>{
+  const rv=await q(sb.from("reviews").select("*,orders(number,customer_phone)").order("created_at",{ascending:false}).limit(500));
+  let f=0;
+  const stars=n=>"★".repeat(n)+"☆".repeat(5-n);
+  const draw=()=>{
+    const list=f?rv.filter(r=>f==="bad"?r.rating<=3:r.rating===f):rv;
+    $("#rl").innerHTML=list.map(r=>{const ph=r.orders&&r.orders.customer_phone;return `<div class="card" style="border-color:${r.rating<=2?"var(--red)":r.rating===3?"var(--orange)":"var(--line)"}">
+      <div class="row" style="justify-content:space-between"><b>${esc(r.customer_name||"Cliente")}</b><span style="color:var(--y);font-size:18px;letter-spacing:2px">${stars(r.rating)}</span></div>
+      <div class="muted" style="font-size:12px">Pedido #${r.orders?r.orders.number:"—"} · ${dt(r.created_at)}</div>
+      ${r.comment?`<p style="margin:8px 0 0">“${esc(r.comment)}”</p>`:""}
+      ${ph&&r.rating<=3?`<a class="btn o sm" style="margin-top:8px" target="_blank" rel="noopener" href="${waURL(ph,`Olá, ${String(r.customer_name||"").split(" ")[0]}! Aqui é do ${S.name}. Vimos sua avaliação do pedido #${r.orders.number} e queremos entender o que aconteceu pra melhorar. 🙏`)}">📲 Falar com o cliente</a>`:""}</div>`}).join("")||'<div class="empty">Nenhuma avaliação aqui ainda.</div>';
+  };
+  const avg=rv.length?rv.reduce((s,r)=>s+r.rating,0)/rv.length:0;
+  const cnt=n=>rv.filter(r=>r.rating===n).length;
+  m.innerHTML=`<div class="top"><h1>Avaliações</h1></div>
+    <div class="stats"><div class="stat"><small>Nota média</small><b style="color:var(--y)">${rv.length?avg.toFixed(1).replace(".",","):"—"} ★</b></div><div class="stat"><small>Avaliações</small><b>${rv.length}</b></div>
+      <div class="stat"><small>5 estrelas</small><b style="color:var(--green)">${cnt(5)}</b></div><div class="stat"><small>Nota 3 ou menos</small><b style="color:${rv.some(r=>r.rating<=3)?"var(--red)":"inherit"}">${rv.filter(r=>r.rating<=3).length}</b></div></div>
+    <div class="card" style="margin-bottom:12px">${[5,4,3,2,1].map(n=>`<div class="row" style="flex-wrap:nowrap"><span style="width:28px">${n}★</span><div style="flex:1;height:8px;background:var(--card-2);border-radius:4px;overflow:hidden"><div style="height:100%;width:${rv.length?cnt(n)/rv.length*100:0}%;background:var(--y)"></div></div><span class="muted" style="width:30px;text-align:right">${cnt(n)}</span></div>`).join("")}</div>
+    <div class="tabs">${[[0,"Todas"],["bad","Só as ruins (≤3)"],[5,"5★"],[4,"4★"],[3,"3★"],[2,"2★"],[1,"1★"]].map(([k,l])=>`<button data-f="${k}" aria-current="${f===k}">${l}</button>`).join("")}</div>
+    <div class="grid g2" id="rl"></div>`;
+  $$("[data-f]",m).forEach(b=>b.onclick=()=>{f=b.dataset.f==="bad"?"bad":+b.dataset.f;$$("[data-f]",m).forEach(x=>x.setAttribute("aria-current",x===b));draw()});
+  draw();
 };
 
 /* ================= CUPONS ================= */
@@ -598,9 +624,9 @@ PAGES.config=async m=>{
       ${DAYS.map(([k,l])=>{const d=H[k]||{open:"16:00",close:"02:00",closed:false};return `<div class="row"><span style="width:70px">${l}</span><input type="time" class="in" style="width:120px" id="h_${k}_o" value="${d.open}"><span class="muted">às</span><input type="time" class="in" style="width:120px" id="h_${k}_c" value="${d.close}"><label class="chk"><input type="checkbox" id="h_${k}_x" ${d.closed?"checked":""}> Fechado</label></div>`}).join("")}</div>
     <div class="card grid"><b>Formas de pagamento</b>${PAYS.map(p=>`<label class="chk"><input type="checkbox" data-pay="${esc(p)}" ${(S.payment_methods||[]).includes(p)?"checked":""}> ${p}</label>`).join("")}
       <label class="fld"><span>Outras (separe por vírgula)</span><input class="in" id="pc" value="${esc(custom.join(", "))}"></label></div>
-    <div class="card grid"><b>Mensagens do WhatsApp pro cliente</b><p class="muted" style="margin:0;font-size:12px">Use {nome}, {numero}, {total}, {loja}, {link_pedido} e {link_avaliacao}. Ao mudar o status do pedido, o WhatsApp abre com a mensagem pronta, é só apertar enviar.</p>
+    <div class="card grid"><b>Mensagens do WhatsApp pro cliente</b><p class="muted" style="margin:0;font-size:12px">Use {nome}, {numero}, {total}, {loja}, {link_pedido} (acompanhar pedido) e {link_avaliacao} (página de avaliação com estrelas). Ao mudar o status do pedido, o WhatsApp abre com a mensagem pronta, é só apertar enviar.</p>
       ${Object.entries(WA_LABEL).map(([k,l])=>`<label class="fld"><span>${l}</span><textarea class="in" rows="3" id="wa_${k}">${esc(((S.wa_templates||{})[k])||WA_DEFAULT[k])}</textarea></label>`).join("")}
-      <label class="fld"><span>Link de avaliação (ex.: avaliação do Google Maps). Vazio = pede uma nota de 0 a 10</span><input class="in" id="rv" value="${esc(S.review_url||"")}"></label></div>
+      <label class="fld"><span>Link de avaliação no Google (opcional). Quem der 4 ou 5 estrelas no nosso link é convidado a avaliar no Google também</span><input class="in" id="rv" value="${esc(S.review_url||"")}"></label></div>
     <div class="card"><b>Link do cardápio pros clientes</b><p style="word-break:break-all"><a href="/" target="_blank" rel="noopener">${location.origin}/</a></p><button class="btn o sm" id="cpl">Copiar link</button></div></div></div>`;
   wireImgs(m);
   $("#cpl").onclick=async()=>{try{await navigator.clipboard.writeText(location.origin+"/");toast("Link copiado")}catch{toast(location.origin+"/")}};
