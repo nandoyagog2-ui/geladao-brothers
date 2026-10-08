@@ -362,7 +362,7 @@ function step2(){
   const et=L("#et"); if(et) et.onclick=e=>{e.stopPropagation();trocoVal()};
   L("#bk").onclick=step1;
   L("#go").onclick=()=>{if(!ck.pay){L("#e").hidden=false;L("#e").textContent="Escolha a forma de pagamento.";return}store.set("ck",{...ck,troco:null});step3()};
-  function optP(n){const on=ck.pay===n,cash=/dinheiro/i.test(n);return `<button class="opt" data-pay="${esc(n)}" aria-pressed="${on}"><span>${/pix/i.test(n)?"⚡":cash?"💵":"💳"}</span><span class="t">${esc(n)}${on&&cash?`<small>${trocoTxt()} · <span id="et" style="color:var(--y);font-weight:700">EDITAR TROCO</span></small>`:""}${on&&/pix/i.test(n)&&S.pix_key?`<small>Chave Pix: ${esc(S.pix_key)}</small>`:""}</span><span class="radio"></span></button>`}
+  function optP(n){const on=ck.pay===n,cash=/dinheiro/i.test(n);return `<button class="opt" data-pay="${esc(n)}" aria-pressed="${on}"><span>${/pix/i.test(n)?"⚡":cash?"💵":"💳"}</span><span class="t">${esc(n)}${on&&cash?`<small>${trocoTxt()} · <span id="et" style="color:var(--y);font-weight:700">EDITAR TROCO</span></small>`:""}${on&&/pix/i.test(n)?`<small>${S.pix_key?"O QR Code e o Pix copia e cola aparecem ao finalizar o pedido":"Pague com Pix na entrega"}</small>`:""}</span><span class="radio"></span></button>`}
 }
 function trocoAsk(){
   sheet("",`<div class="modal"><p style="color:var(--fg)">Você vai pagar <b>${brl(total())}</b> em dinheiro</p><h3>Vai precisar de troco?</h3><div class="two"><button class="btn c o" id="no">Não</button><button class="btn c" id="yes">Sim</button></div></div>`,"",true);
@@ -423,13 +423,26 @@ function sentSheet(o){
   sheet("Pedido enviado",`<div class="track"><small>Pedido Nº ${o.number}</small><b>Recebido!</b><div class="status"><i></i>Já chegou na loja</div></div>
     <p style="margin-top:16px">Pra confirmar mais rápido, mande o pedido também pelo WhatsApp da loja:</p>
     ${S.whatsapp?`<a class="btn c wa" style="text-decoration:none" target="_blank" rel="noopener" href="${storeWa(msg)}">Enviar pedido pelo WhatsApp</a>`:""}
+    ${/pix/i.test(o.ck.pay)?pixBox(o.total,o.number):""}
     <div class="lbl"><span>Resumo do pedido</span></div><pre class="msg" id="msg"></pre>
     <button class="link" id="cp">Copiar mensagem</button><div style="height:14px"></div>`,
     `<button class="btn c" id="tr">Acompanhar pedido</button><div class="two"><button class="btn c o" data-home>Voltar ao cardápio</button><button class="btn c o" data-orders>Meus pedidos</button></div>`);
-  L("#msg").textContent=msg;
+  L("#msg").textContent=msg; wirePix();
   L("#cp").onclick=async e=>{try{await navigator.clipboard.writeText(msg);e.target.textContent="Copiado ✓"}catch{const r=document.createRange();r.selectNodeContents(L("#msg"));getSelection().removeAllRanges();getSelection().addRange(r);e.target.textContent="Texto selecionado"}};
   L("#tr").onclick=()=>trackSheet(o.id,o.ck.tel);
 }
+function pixBox(amount,txid){
+  if(!S.pix_key||!window.GBPix) return "";
+  const code=GBPix.payload({key:S.pix_key,type:S.pix_key_type,name:S.pix_name||S.name,city:S.pix_city,amount,txid:"PEDIDO"+txid});
+  return `<div class="grp">⚡ Pague com Pix · ${brl(amount)}</div>
+    <div style="display:grid;gap:8px;justify-items:center;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px">
+      <div style="background:#fff;border-radius:10px;padding:8px;width:200px;max-width:100%">${GBPix.qrSvg(code,200)}</div>
+      <p class="sub" style="color:var(--muted);margin:0;text-align:center;font-size:12.5px">Abra o app do seu banco → Pix → <b>Ler QR Code</b> ou <b>Pix Copia e Cola</b></p>
+      <textarea class="in" id="pixc" rows="3" readonly style="font-size:12px;word-break:break-all">${code}</textarea>
+      <button class="btn c" id="pixb" type="button">Copiar código Pix</button>
+      <p class="sub" style="color:var(--muted);margin:0;text-align:center;font-size:12px">Depois de pagar, mande o comprovante no WhatsApp da loja.</p></div>`;
+}
+function wirePix(){const b=L("#pixb");if(!b)return;b.onclick=async()=>{const c=L("#pixc").value;try{await navigator.clipboard.writeText(c);b.textContent="Copiado ✓"}catch{L("#pixc").select();b.textContent="Selecionado, copie com Ctrl+C"}}}
 const storeWa=txt=>{let ph=digits(S.whatsapp);if(!/^55\d{10,11}$/.test(ph))ph="55"+ph;return `https://api.whatsapp.com/send?phone=${ph}${txt?"&text="+encodeURIComponent(txt):""}`};
 async function reviewSheet(id,phone){
   sheet("Avaliar pedido",`<div class="loading" style="min-height:40vh">Carregando…</div>`);
@@ -464,12 +477,13 @@ async function trackSheet(id,phone){
     ${o.items.map(i=>`<div class="ci"><div class="t"><span class="q">${i.qty}x</span> ${esc(i.name)}${(i.options||[]).length?`<div class="sub">${i.options.map(x=>x.qty+"x "+esc(x.name)).join(", ")}</div>`:""}</div><b>${brl(i.total)}</b></div>`).join("")}
     <div class="sum"><div><span>Subtotal</span><span>${brl(o.subtotal)}</span></div><div><span>Taxa de entrega</span><span>${o.type==="delivery"?(+o.delivery_fee?brl(o.delivery_fee):"Grátis"):"Retirada"}</span></div>${+o.discount?`<div><span>Desconto</span><span>- ${brl(o.discount)}</span></div>`:""}<div class="tot"><span>Total</span><span>${brl(o.total)}</span></div></div>
     <div class="grp">Pagamento</div><div class="ci"><div class="t"><b>${esc(o.payment_method)}</b>${o.change_for?`<div class="sub">Troco para ${brl(o.change_for)} · levar ${brl(o.change_for-o.total)} de troco</div>`:""}</div></div>
+    ${/pix/i.test(o.payment_method||"")&&!["concluido","cancelado"].includes(o.status)?pixBox(o.total,o.number):""}
     <div class="grp">Informações para ${o.type==="delivery"?"entrega":"retirada"}</div>
     <div class="ci"><div class="t"><b>👤 ${esc(o.customer_name)}</b><div class="sub">${esc(o.customer_phone)}</div></div></div>
     ${o.type==="delivery"?`<div class="ci"><div class="t"><b>📍 ${esc(o.street)}, ${esc(o.street_number)}</b><div class="sub">${esc(o.neighborhood)}${o.complement?" · "+esc(o.complement):""}<br>${esc(o.reference||"")}</div></div></div>`:""}
     <button class="link" id="rf">Atualizar status</button><div style="height:14px"></div>`,
     `${S.whatsapp?`<a class="btn c" style="text-decoration:none" target="_blank" rel="noopener" href="${storeWa()}">Falar com o estabelecimento</a>`:""}<div class="two"><button class="btn c o" data-home>Voltar ao cardápio</button><button class="btn c o" data-orders>Meus pedidos</button></div>`);
-  L("#rf").onclick=()=>trackSheet(id,phone);
+  L("#rf").onclick=()=>trackSheet(id,phone); wirePix();
 }
 function feeSheet(){
   if(KM()){const ex=d=>brl(kmFee(d));return sheet("Taxa de entrega",`<p class="sub" style="color:var(--muted);margin-top:14px">A taxa depende da distância até você</p>

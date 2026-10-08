@@ -85,6 +85,7 @@ function orderMsg(o,items){
   if(+o.discount) L.push(`DESCONTO: - ${brl(o.discount)}`);
   L.push(`*VALOR FINAL: ${brl(o.total)}*`,"","PAGAMENTO",`*${o.payment_method}*: ${brl(o.total)}`);
   if(o.change_for) L.push(`💵 Vai pagar com: ${brl(o.change_for)}`,`🔁 *Levar troco de: ${brl(o.change_for-o.total)}*`);
+  if(/pix/i.test(o.payment_method||"")&&S.pix_key&&window.GBPix) L.push("","⚡ *Pix copia e cola* (copie o código abaixo e cole no app do banco):",GBPix.payload({key:S.pix_key,type:S.pix_key_type,name:S.pix_name||S.name,city:S.pix_city,amount:o.total,txid:"PEDIDO"+o.number}));
   if(o.notes) L.push("",`📝 ${o.notes}`);
   L.push("",`🕐 Prazo para ${o.type==="delivery"?"entrega: "+S.delivery_time_min+"-"+S.delivery_time_max:"retirada: "+(S.prep_time_min||10)} min`);
   return L.join("\n");

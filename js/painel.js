@@ -86,7 +86,7 @@ function loginView(msg){
 
 /* ---------- estrutura ---------- */
 let S={}, page="pedidos", newCount=0;
-const MENU=[["Operação",[["pedidos","🧾","Pedidos"],["novo","➕","Novo pedido (balcão)"],["historico","📋","Histórico"],["caixa","💰","Caixa"]]],
+const MENU=[["Operação",[["pedidos","🧾","Pedidos"],["novo","➕","Novo pedido (telefone)"],["historico","📋","Histórico"],["caixa","💰","Caixa / venda balcão"]]],
   ["Cardápio",[["catalogo","🍺","Catálogo"],["complementos","🧊","Complementos"],["destaques","🔥","Destaques e promoções"]]],
   ["Clientes",[["clientes","👥","Clientes e fiado"],["avaliacoes","⭐","Avaliações"],["cupons","🎟️","Cupons"],["fidelidade","🏆","Fidelidade"]]],
   ["Gestão",[["desempenho","📈","Desempenho"],["estoque","📦","Estoque"],["financeiro","💸","Despesas"],["delivery","🛵","Delivery e bairros"],["config","⚙️","Configurações"]]]];
@@ -702,31 +702,137 @@ PAGES.estoque=async m=>{
 /* ================= CAIXA ================= */
 PAGES.caixa=async m=>{
   const open=(await q(sb.from("cash_sessions").select("*").is("closed_at",null).order("opened_at",{ascending:false}).limit(1)))[0];
-  const past=await q(sb.from("cash_sessions").select("*").not("closed_at","is",null).order("opened_at",{ascending:false}).limit(15));
+  const {data:{user}}=await sb.auth.getUser(); const email=(user&&user.email)||"";
   if(!open){
-    m.innerHTML=`<div class="top"><h1>Caixa</h1></div><div class="grid g2"><div class="card grid"><b>Caixa fechado</b><label class="fld"><span>Dinheiro na gaveta pra começar (troco)</span><input class="in" id="oa" inputmode="decimal" placeholder="0,00"></label><button class="btn" id="ob">Abrir caixa</button></div>
-      <div class="card"><b>Últimos fechamentos</b>${past.map(s=>`<div class="line"><span>${dt(s.opened_at)} → ${hm(s.closed_at)}</span><b>${brl(s.closing_amount)}</b></div>`).join("")||'<p class="muted">Nenhum ainda.</p>'}</div></div>`;
-    $("#ob").onclick=async()=>{await q(sb.from("cash_sessions").insert({opening_amount:num($("#oa").value)||0}));toast("Caixa aberto");PAGES.caixa(m)};
+    const past=await q(sb.from("cash_sessions").select("*").not("closed_at","is",null).order("opened_at",{ascending:false}).limit(20));
+    m.innerHTML=`<div class="top"><h1>Caixa</h1></div><div class="grid g2"><div class="card grid" style="align-content:start"><b style="font-size:16px">🔒 Caixa fechado · abrir turno</b>
+        <label class="fld"><span>Quem está abrindo o caixa (funcionário)</span><input class="in" id="op" placeholder="Ex.: João" value="${esc(localStorage.getItem("gb_operador")||"")}"></label>
+        <label class="fld"><span>Dinheiro na gaveta pra começar (troco)</span><input class="in" id="oa" inputmode="decimal" placeholder="0,00"></label>
+        <p class="err" id="e" hidden></p><button class="btn" id="ob">🔓 Abrir caixa</button>
+        <p class="muted" style="margin:0;font-size:12px">Com o caixa aberto aparece a tela de venda no balcão, com todos os produtos.</p></div>
+      <div class="card"><b>Turnos anteriores</b>${past.map(s=>{const dif=s.expected_amount!=null?+s.closing_amount-+s.expected_amount:null;return `<div class="line"><span>👤 ${esc(s.operator||"—")} · ${dt(s.opened_at)} → ${hm(s.closed_at)}</span><span style="text-align:right"><b>${brl(s.closing_amount)}</b>${dif!=null&&Math.abs(dif)>=0.01?`<div style="font-size:12px;color:${dif<0?"var(--red)":"var(--green)"}">${dif<0?"faltou":"sobrou"} ${brl(Math.abs(dif))}</div>`:""}</span></div>`}).join("")||'<p class="muted">Nenhum ainda.</p>'}</div></div>`;
+    $("#ob").onclick=async()=>{const op=$("#op").value.trim();if(!op){$("#e").hidden=false;$("#e").textContent="Informe quem está abrindo o caixa.";return}
+      try{localStorage.setItem("gb_operador",op)}catch{}
+      $("#ob").disabled=true;
+      try{await q(sb.from("cash_sessions").insert({opening_amount:num($("#oa").value)||0,operator:op,opened_by:email}));toast("Caixa aberto · bom turno, "+op+"!");PAGES.caixa(m)}
+      catch(err){$("#ob").disabled=false;$("#e").hidden=false;$("#e").textContent="Não foi possível abrir: "+err.message+(/operator|column/i.test(err.message)?" · rode a parte 8 do banco no Supabase.":"")}};
     return;
   }
-  const [ords,mv]=await Promise.all([q(sb.from("orders").select("total,payment_method,change_for,status").gte("created_at",open.opened_at).eq("status","concluido")),q(sb.from("cash_movements").select("*").eq("session_id",open.id).order("created_at",{ascending:false}))]);
-  const byPay={}; ords.forEach(o=>byPay[o.payment_method||"—"]=(byPay[o.payment_method||"—"]||0)+ +o.total);
-  const cashSales=Object.entries(byPay).filter(([k])=>/dinheiro/i.test(k)).reduce((s,[,v])=>s+v,0);
-  const sumK=k=>mv.filter(x=>x.kind===k).reduce((s,x)=>s+ +x.amount,0);
-  const expected=+open.opening_amount+cashSales+sumK("entrada")+sumK("suprimento")-sumK("saida")-sumK("sangria");
+  // ---------- caixa aberto: PDV ----------
+  const [cats,prods,custs]=await Promise.all([q(sb.from("categories").select("id,name").eq("active",true).order("sort_order")),
+    q(sb.from("products").select("id,name,price,promo_price,price_tiers,image_url,category_id,status,track_stock,stock_qty,stock_parent_id,stock_factor").eq("status","ativo").order("name")),
+    q(sb.from("customers").select("id,name,phone").order("name").limit(3000))]);
+  const allP=await q(sb.from("products").select("id,stock_qty,track_stock"));
+  let cart=[], term="", cat="", pay=(S.payment_methods||["Dinheiro"]).find(x=>/dinheiro/i.test(x))||(S.payment_methods||[])[0]||"Dinheiro", troco="", disc="", cli=null, printIt=false;
+  const base=p=>p.promo_price!=null&&+p.promo_price<+p.price?+p.promo_price:+p.price;
+  const pr=p=>{const qn=(cart.find(i=>i.p===p)||{n:0}).n;let b=base(p);(p.price_tiers||[]).forEach(x=>{if(qn>=x.min_qty&&+x.price<b)b=+x.price});return b};
+  const sub=()=>cart.reduce((s,i)=>s+pr(i.p)*i.n,0), tot=()=>Math.max(0,sub()-(num(disc)||0));
+  const stockOf=p=>{if(p.stock_parent_id){const par=allP.find(x=>x.id===p.stock_parent_id);return par&&par.track_stock?Math.floor(+par.stock_qty/(+p.stock_factor||1)):null}return p.track_stock?+p.stock_qty:null};
+  async function summary(){
+    const [ords,mv]=await Promise.all([q(sb.from("orders").select("id,number,total,payment_method,type,status,created_at,customer_name").gte("created_at",open.opened_at).neq("status","cancelado").order("created_at",{ascending:false})),q(sb.from("cash_movements").select("*").eq("session_id",open.id).order("created_at",{ascending:false}))]);
+    const done=ords.filter(o=>o.status==="concluido");
+    const byPay={}; done.forEach(o=>byPay[o.payment_method||"—"]=(byPay[o.payment_method||"—"]||0)+ +o.total);
+    const cash=Object.entries(byPay).filter(([k])=>/dinheiro/i.test(k)).reduce((s,[,v])=>s+v,0);
+    const sumK=k=>mv.filter(x=>x.kind===k).reduce((s,x)=>s+ +x.amount,0);
+    const expected=+open.opening_amount+cash+sumK("entrada")+sumK("suprimento")-sumK("saida")-sumK("sangria");
+    return {ords,done,byPay,mv,expected,pending:ords.filter(o=>o.status!=="concluido")};
+  }
+  let SM=await summary();
   const KL={entrada:"Entrada",saida:"Saída / despesa",sangria:"Sangria (retirada)",suprimento:"Suprimento (reforço)"};
-  m.innerHTML=`<div class="top"><h1>Caixa aberto</h1><span class="muted">desde ${dt(open.opened_at)}</span></div>
-    <div class="stats"><div class="stat"><small>Vendas concluídas</small><b>${brl(ords.reduce((s,o)=>s+ +o.total,0))}</b></div><div class="stat"><small>Pedidos</small><b>${ords.length}</b></div><div class="stat"><small>Abertura</small><b>${brl(open.opening_amount)}</b></div><div class="stat"><small>Dinheiro esperado na gaveta</small><b style="color:var(--y)">${brl(expected)}</b></div></div>
-    <div class="grid g2"><div class="card"><b>Vendas por forma de pagamento</b>${Object.entries(byPay).map(([k,v])=>`<div class="line"><span>${esc(k)}</span><b>${brl(v)}</b></div>`).join("")||'<p class="muted">Nenhum pedido concluído ainda.</p>'}
-      <p class="muted" style="font-size:12px">Conta os pedidos marcados como Concluído desde a abertura.</p></div>
-      <div class="card grid"><b>Lançar movimento</b><div class="grid g2"><select class="in" id="mk">${Object.entries(KL).map(([k,l])=>`<option value="${k}">${l}</option>`).join("")}</select><input class="in" id="mvv" inputmode="decimal" placeholder="Valor R$"></div><input class="in" id="mvd" placeholder="Descrição"><button class="btn o" id="mva">Lançar</button>
-      ${mv.map(x=>`<div class="line"><span>${hm(x.created_at)} · ${KL[x.kind]}${x.description?" · "+esc(x.description):""}</span><b style="color:${["saida","sangria"].includes(x.kind)?"var(--red)":"var(--green)"}">${["saida","sangria"].includes(x.kind)?"−":"+"} ${brl(x.amount)}</b></div>`).join("")}</div></div>
-    <div class="card grid" style="margin-top:12px;max-width:520px"><b>Fechar caixa</b><label class="fld"><span>Quanto tem de dinheiro na gaveta agora (contado)</span><input class="in" id="ca" inputmode="decimal"></label><div id="df" class="muted"></div><label class="fld"><span>Observação</span><input class="in" id="cn"></label><button class="btn r" id="cb">Fechar caixa</button></div>`;
-  $("#mva").onclick=async()=>{const v=num($("#mvv").value);if(!v){toast("Informe o valor");return}await q(sb.from("cash_movements").insert({session_id:open.id,kind:$("#mk").value,amount:v,description:$("#mvd").value.trim()||null}));toast("Lançado");PAGES.caixa(m)};
-  $("#ca").oninput=()=>{const v=num($("#ca").value);if(v==null){$("#df").textContent="";return}const d=v-expected;$("#df").innerHTML=Math.abs(d)<0.01?'<span class="ok">Caixa bateu certinho ✓</span>':`<span class="${d<0?"err":"ok"}">${d<0?"Faltando":"Sobrando"} ${brl(Math.abs(d))}</span>`};
-  $("#cb").onclick=async e=>{const v=num($("#ca").value);if(v==null){toast("Informe o valor contado");return}if(!e.target.dataset.sure){e.target.dataset.sure=1;e.target.textContent="Confirmar fechamento";return}
-    await q(sb.from("cash_sessions").update({closed_at:new Date().toISOString(),closing_amount:v,notes:[$("#cn").value.trim(),`Esperado ${brl(expected)}`].filter(Boolean).join(" · ")}).eq("id",open.id));toast("Caixa fechado");PAGES.caixa(m)};
+  const draw=()=>{
+    const list=prods.filter(p=>(!cat||String(p.category_id)===cat)&&(!term||p.name.toLowerCase().includes(term))).slice(0,120);
+    const t=tot(), isCash=/dinheiro/i.test(pay), tr=num(troco);
+    m.innerHTML=`<div class="top"><div><h1>Caixa · venda no balcão</h1><div class="muted">🟢 Aberto por <b>${esc(open.operator||"—")}</b> desde ${dt(open.opened_at)} · ${SM.done.length} venda(s) · <b style="color:var(--y)">${brl(SM.done.reduce((s,o)=>s+ +o.total,0))}</b></div></div>
+      <div class="row"><button class="btn o" id="mvb">💸 Sangria / suprimento</button><button class="btn r" id="fc">🔒 Fechar caixa</button></div></div>
+    <div class="cat2" style="grid-template-columns:minmax(0,1fr) 380px">
+      <div class="grid" style="align-content:start;gap:10px">
+        <input class="in" id="ps" placeholder="🔍 Buscar produto… (Enter adiciona o primeiro)" value="${esc(term)}" autocomplete="off">
+        <div class="tabs" style="margin:0"><button data-c="" aria-current="${!cat}">Todos</button>${cats.map(c=>`<button data-c="${c.id}" aria-current="${String(c.id)===cat}">${esc(c.name)}</button>`).join("")}</div>
+        <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px">${list.map(p=>{const st=stockOf(p),inC=cart.find(i=>i.p===p);return `<button class="card" data-a="${p.id}" style="text-align:left;padding:8px;display:grid;gap:4px;${inC?"border-color:var(--y)":""}">
+          ${p.image_url?`<img src="${esc(p.image_url)}" alt="" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;max-width:100%">`:`<div style="aspect-ratio:1;border-radius:8px;background:var(--card-2);display:grid;place-items:center;color:var(--y);font-weight:900">GB</div>`}
+          <b style="font-size:12.5px;line-height:1.2">${esc(p.name)}</b><span class="price">${brl(base(p))}</span>
+          <span class="muted" style="font-size:11px">${st!=null?`Estoque: <b style="color:${st<=0?"var(--red)":"inherit"}">${st}</b>`:""}${inC?` · <b style="color:var(--y)">${inC.n} na venda</b>`:""}</span></button>`}).join("")||'<p class="muted">Nada encontrado.</p>'}</div></div>
+      <div class="card grid" style="align-content:start;position:sticky;top:12px">
+        <b style="font-size:16px">🧾 Venda atual</b>
+        ${cart.map((i,k)=>`<div class="line"><div style="min-width:0"><b>${esc(i.p.name)}</b><div class="muted" style="font-size:12px">${brl(pr(i.p))} cada${pr(i.p)<base(i.p)?' · <span style="color:var(--green)">atacado</span>':""}</div></div><div class="row" style="flex-wrap:nowrap"><button class="icb" data-m="${k}" aria-label="Menos">−</button><b>${i.n}</b><button class="icb" data-p="${k}" aria-label="Mais">+</button><span style="width:74px;text-align:right">${brl(pr(i.p)*i.n)}</span></div></div>`).join("")||'<p class="muted" style="margin:0">Toque nos produtos pra adicionar.</p>'}
+        <div class="line"><span class="muted">Subtotal</span><span>${brl(sub())}</span></div>
+        <label class="row" style="flex-wrap:nowrap"><span class="muted" style="flex:1">Desconto (R$)</span><input class="in" id="ds" inputmode="decimal" style="width:110px" value="${esc(disc)}" placeholder="0,00"></label>
+        <div class="line big"><span>Total</span><span class="price">${brl(t)}</span></div>
+        <div class="grid" style="grid-template-columns:1fr 1fr;gap:6px">${(S.payment_methods||[]).concat(["Fiado"]).map(x=>`<button class="btn ${x===pay?"":"o"} sm" data-pay="${esc(x)}">${/pix/i.test(x)?"⚡":/dinheiro/i.test(x)?"💵":/fiado/i.test(x)?"📒":"💳"} ${esc(x)}</button>`).join("")}</div>
+        ${isCash?`<label class="row" style="flex-wrap:nowrap"><span class="muted" style="flex:1">Cliente pagou com</span><input class="in" id="tr" inputmode="decimal" style="width:110px" value="${esc(troco)}" placeholder="0,00"></label>
+          <div class="row">${[10,20,50,100].filter(v=>v>=t).slice(0,4).map(v=>`<button class="btn o sm" data-v="${v}">${brl(v)}</button>`).join("")}</div>
+          ${tr>t?`<div class="line big" style="color:var(--green)"><span>Troco</span><span>${brl(tr-t)}</span></div>`:tr&&tr<t?`<p class="err" style="margin:0">Faltam ${brl(t-tr)}</p>`:""}`:""}
+        ${/pix/i.test(pay)&&S.pix_key&&t>0&&window.GBPix?`<div style="text-align:center;background:#fff;border-radius:10px;padding:8px;max-width:220px;justify-self:center">${GBPix.qrSvg(GBPix.payload({key:S.pix_key,type:S.pix_key_type,name:S.pix_name||S.name,city:S.pix_city,amount:t,txid:"BALCAO"}),200)}</div><p class="muted" style="margin:0;text-align:center;font-size:12px">Cliente escaneia o QR com o app do banco · ${brl(t)}</p>`:/pix/i.test(pay)&&!S.pix_key?'<p class="err" style="margin:0">Cadastre a chave Pix em Configurações pra mostrar o QR Code.</p>':""}
+        <div class="fld"><span>Cliente (opcional${pay==="Fiado"?", obrigatório no fiado":""})</span><input class="in" id="cs" list="cl" placeholder="Nome ou telefone" value="${cli?esc(cli.name+" · "+(cli.phone||"")):""}"><datalist id="cl">${custs.map(c=>`<option value="${esc(c.name+" · "+(c.phone||""))}">`).join("")}</datalist></div>
+        <label class="chk"><input type="checkbox" id="pi" ${printIt?"checked":""}> Imprimir cupom</label>
+        <p class="err" id="e" hidden></p>
+        <button class="btn" id="fz" style="padding:14px;font-size:15px;justify-content:space-between" ${cart.length?"":"disabled"}><span>✔ FINALIZAR VENDA</span><span>${brl(t)}</span></button>
+        ${cart.length?'<button class="btn o sm" id="cx">Limpar venda</button>':""}
+      </div></div>
+    <div class="grid g2" style="margin-top:14px">
+      <div class="card"><b>Vendas deste turno</b>${SM.ords.slice(0,15).map(o=>`<div class="line" data-o="${o.id}" style="cursor:pointer"><span>#${o.number} · ${hm(o.created_at)} · ${o.type==="balcao"?"🧾 Balcão":o.type==="delivery"?"🛵 Entrega":"🏪 Retirada"} · ${esc(o.payment_method||"")} ${o.status!=="concluido"?pill(o.status):""}</span><b>${brl(o.total)}</b></div>`).join("")||'<p class="muted">Nenhuma venda ainda.</p>'}</div>
+      <div class="card"><b>Por forma de pagamento</b>${Object.entries(SM.byPay).map(([k,v])=>`<div class="line"><span>${esc(k)}</span><b>${brl(v)}</b></div>`).join("")||'<p class="muted">—</p>'}
+        <div class="line"><span class="muted">Abertura (troco)</span><span>${brl(open.opening_amount)}</span></div><div class="line big"><span>💵 Dinheiro esperado na gaveta</span><span class="price">${brl(SM.expected)}</span></div>
+        ${SM.pending.length?`<p class="muted" style="font-size:12px;margin:6px 0 0">${SM.pending.length} pedido(s) de entrega ainda não concluído(s) não entram na conta.</p>`:""}</div></div>`;
+    const ps=$("#ps");
+    ps.oninput=e=>{term=e.target.value.toLowerCase();const pos=e.target.selectionStart;draw();$("#ps").focus();$("#ps").setSelectionRange(pos,pos)};
+    ps.onkeydown=e=>{if(e.key==="Enter"&&list[0]){add(list[0]);term="";draw();$("#ps").focus()}};
+    $$("[data-c]",m).forEach(b=>b.onclick=()=>{cat=b.dataset.c;draw()});
+    $$("[data-a]",m).forEach(b=>b.onclick=()=>{add(prods.find(x=>x.id==b.dataset.a));draw()});
+    $$("[data-m]",m).forEach(b=>b.onclick=()=>{const i=cart[+b.dataset.m];i.n--;if(!i.n)cart.splice(+b.dataset.m,1);draw()});
+    $$("[data-p]",m).forEach(b=>b.onclick=()=>{cart[+b.dataset.p].n++;draw()});
+    $("#ds").onchange=e=>{disc=e.target.value;draw()};
+    $$("[data-pay]",m).forEach(b=>b.onclick=()=>{pay=b.dataset.pay;if(!/dinheiro/i.test(pay))troco="";draw()});
+    if($("#tr"))$("#tr").oninput=e=>{troco=e.target.value;const pos=e.target.selectionStart;draw();const n=$("#tr");n.focus();n.setSelectionRange(pos,pos)};
+    $$("[data-v]",m).forEach(b=>b.onclick=()=>{troco=b.dataset.v;draw()});
+    $("#cs").onchange=e=>{const v=e.target.value;cli=custs.find(c=>(c.name+" · "+(c.phone||""))===v)||(v.trim()?{name:v.trim(),phone:/\d{8,}/.test(digits(v))?v.trim():""}:null)};
+    $("#pi").onchange=e=>printIt=e.target.checked;
+    if($("#cx"))$("#cx").onclick=()=>{cart=[];disc="";troco="";cli=null;draw()};
+    $$("[data-o]",m).forEach(r=>r.onclick=()=>orderDrawer(+r.dataset.o));
+    $("#mvb").onclick=movDrawer; $("#fc").onclick=closeDrawer;
+    $("#fz").onclick=finish;
+  };
+  function add(p){if(!p)return;const i=cart.find(x=>x.p===p);i?i.n++:cart.push({p,n:1})}
+  async function finish(){
+    const err=x=>{$("#e").hidden=false;$("#e").textContent=x};
+    const t=tot(), tr=num(troco);
+    if(/dinheiro/i.test(pay)&&tr&&tr<t) return err("O valor pago é menor que o total.");
+    if(pay==="Fiado"&&!(cli&&digits(cli.phone).length>=10)) return err("No fiado, escolha um cliente cadastrado com telefone.");
+    $("#fz").disabled=true;
+    try{
+      const r=await q(sb.rpc("create_order",{p:{customer_name:cli?cli.name:"Venda balcão",customer_phone:cli?cli.phone||"":"",type:"balcao",payment_method:pay,
+        change_for:/dinheiro/i.test(pay)&&tr>t?String(tr):"",discount_override:num(disc)?String(num(disc)):"",notes:"Atendente: "+(open.operator||""),
+        items:cart.map(i=>({product_id:i.p.id,qty:i.n}))}}));
+      await q(sb.from("orders").update({status:"concluido",cash_session_id:open.id}).eq("id",r.id));
+      if(pay==="Fiado"){const o=await q(sb.from("orders").select("customer_id").eq("id",r.id).single());if(o.customer_id)await q(sb.from("credit_entries").insert({customer_id:o.customer_id,kind:"compra",amount:r.total,description:"Balcão #"+r.number,order_id:r.id}))}
+      toast(`✔ Venda #${r.number} · ${brl(r.total)}${r.change?` · troco ${brl(r.change)}`:""}`);
+      if(printIt){const o=await q(sb.from("orders").select("*,order_items(*)").eq("id",r.id).single());printOrder(o,o.order_items.sort((a,b)=>a.id-b.id),"",o.change_for?o.change_for-o.total:0)}
+      cart.forEach(i=>{const tgt=i.p.stock_parent_id?allP.find(x=>x.id===i.p.stock_parent_id):allP.find(x=>x.id===i.p.id);if(tgt&&tgt.track_stock)tgt.stock_qty=+tgt.stock_qty-i.n*(i.p.stock_parent_id?(+i.p.stock_factor||1):1)});
+      cart=[];disc="";troco="";cli=null; SM=await summary(); draw(); $("#ps").focus();
+    }catch(x){$("#fz").disabled=false;err(x.message)}
+  }
+  function movDrawer(){
+    const dr=drawer("Movimento do caixa",`<label class="fld"><span>Tipo</span><select class="in" id="mk">${Object.entries(KL).map(([k,l])=>`<option value="${k}">${l}</option>`).join("")}</select></label>
+      <label class="fld"><span>Valor (R$)</span><input class="in" id="mvv" inputmode="decimal"></label><label class="fld"><span>Descrição</span><input class="in" id="mvd" placeholder="Ex.: pagamento do gelo, troco do banco…"></label>
+      ${SM.mv.length?`<div class="card">${SM.mv.map(x=>`<div class="line"><span>${hm(x.created_at)} · ${KL[x.kind]}${x.description?" · "+esc(x.description):""}</span><b style="color:${["saida","sangria"].includes(x.kind)?"var(--red)":"var(--green)"}">${["saida","sangria"].includes(x.kind)?"−":"+"} ${brl(x.amount)}</b></div>`).join("")}</div>`:""}`,`<button class="btn" id="sv">Lançar</button>`);
+    $("#sv",dr).onclick=async()=>{const v=num($("#mvv",dr).value);if(!v){toast("Informe o valor");return}await q(sb.from("cash_movements").insert({session_id:open.id,kind:$("#mk",dr).value,amount:v,description:$("#mvd",dr).value.trim()||null}));closeDr();toast("Lançado");SM=await summary();draw()};
+  }
+  async function closeDrawer(){
+    SM=await summary();
+    const dr=drawer("Fechar caixa · "+esc(open.operator||""),`<div class="card">${Object.entries(SM.byPay).map(([k,v])=>`<div class="line"><span>${esc(k)}</span><b>${brl(v)}</b></div>`).join("")||'<p class="muted">Nenhuma venda concluída.</p>'}
+      <div class="line big"><span>Total vendido</span><span class="price">${brl(SM.done.reduce((s,o)=>s+ +o.total,0))}</span></div></div>
+      <div class="card"><div class="line"><span>Abertura</span><span>${brl(open.opening_amount)}</span></div><div class="line big"><span>💵 Dinheiro esperado</span><span class="price">${brl(SM.expected)}</span></div></div>
+      ${SM.pending.length?`<p class="alert" style="margin:0">⚠️ ${SM.pending.length} pedido(s) ainda não concluído(s). Conclua antes de fechar pra entrar na conta deste turno.</p>`:""}
+      <label class="fld"><span>Quanto tem de dinheiro na gaveta agora (contado)</span><input class="in" id="ca" inputmode="decimal"></label><div id="df"></div>
+      <label class="fld"><span>Observação</span><input class="in" id="cn"></label>`,`<button class="btn r" id="cb">🔒 Fechar caixa</button>`);
+    $("#ca",dr).oninput=()=>{const v=num($("#ca",dr).value);if(v==null){$("#df",dr).innerHTML="";return}const d=v-SM.expected;$("#df",dr).innerHTML=Math.abs(d)<0.01?'<span class="ok">Caixa bateu certinho ✓</span>':`<span class="${d<0?"err":"ok"}">${d<0?"Faltando":"Sobrando"} ${brl(Math.abs(d))}</span>`};
+    $("#cb",dr).onclick=async e=>{const v=num($("#ca",dr).value);if(v==null){toast("Informe o valor contado");return}if(!e.target.dataset.sure){e.target.dataset.sure=1;e.target.textContent="Confirmar fechamento";return}
+      await q(sb.from("cash_sessions").update({closed_at:new Date().toISOString(),closing_amount:v,expected_amount:Math.round(SM.expected*100)/100,closed_by:email,notes:$("#cn",dr).value.trim()||null}).eq("id",open.id));
+      closeDr();toast("Caixa fechado. Próximo turno já pode abrir.");PAGES.caixa(m)};
+  }
+  draw(); $("#ps").focus();
 };
+
 
 /* ================= DESPESAS ================= */
 PAGES.financeiro=async m=>{
@@ -790,7 +896,7 @@ PAGES.delivery=async m=>{
 /* ================= CONFIGURAÇÕES ================= */
 PAGES.config=async m=>{
   S=await q(sb.from("store_settings").select("*").eq("id",1).single());
-  const F=[{k:"name",l:"Nome da loja"},{k:"whatsapp",l:"WhatsApp que recebe os pedidos (com DDD)"},{k:"address",l:"Endereço da loja"},{k:"pix_key",l:"Chave Pix (aparece pro cliente)"},{k:"logo_url",l:"Logo",t:"img"},{k:"banner_url",l:"Capa do cardápio (faixa do topo)",t:"img"},{k:"primary_color",l:"Cor principal",t:"color"}];
+  const F=[{k:"name",l:"Nome da loja"},{k:"whatsapp",l:"WhatsApp que recebe os pedidos (com DDD)"},{k:"address",l:"Endereço da loja"},{k:"pix_key",l:"Chave Pix"},{k:"pix_key_type",l:"Tipo da chave Pix",t:"select",o:[["telefone","Telefone"],["cpf","CPF"],["cnpj","CNPJ"],["email","E-mail"],["aleatoria","Chave aleatória"]]},{k:"pix_name",l:"Nome do recebedor do Pix (como está no banco)"},{k:"pix_city",l:"Cidade do recebedor do Pix"},{k:"logo_url",l:"Logo",t:"img"},{k:"banner_url",l:"Capa do cardápio (faixa do topo)",t:"img"},{k:"primary_color",l:"Cor principal",t:"color"}];
   const DAYS=[["seg","Segunda"],["ter","Terça"],["qua","Quarta"],["qui","Quinta"],["sex","Sexta"],["sab","Sábado"],["dom","Domingo"]];
   const H=S.opening_hours||{}, PAYS=["Pix","Dinheiro","Cartão de crédito","Cartão de débito","Vale-refeição"];
   const custom=(S.payment_methods||[]).filter(p=>!PAYS.includes(p));
@@ -803,8 +909,10 @@ PAGES.config=async m=>{
     <div class="card grid"><b>Mensagens do WhatsApp pro cliente</b><p class="muted" style="margin:0;font-size:12px">Use {nome}, {numero}, {total}, {loja}, {link_pedido} (acompanhar pedido) e {link_avaliacao} (página de avaliação com estrelas). Ao mudar o status do pedido, o WhatsApp abre com a mensagem pronta, é só apertar enviar.</p>
       ${Object.entries(WA_LABEL).map(([k,l])=>`<label class="fld"><span>${l}</span><textarea class="in" rows="3" id="wa_${k}">${esc(((S.wa_templates||{})[k])||WA_DEFAULT[k])}</textarea></label>`).join("")}
       <label class="fld"><span>Link de avaliação no Google (opcional). Quem der 4 ou 5 estrelas no nosso link é convidado a avaliar no Google também</span><input class="in" id="rv" value="${esc(S.review_url||"")}"></label></div>
+    <div class="card grid"><b>⚡ Teste do Pix</b><p class="muted" style="margin:0;font-size:12px">Salve e escaneie com o app do seu banco: tem que aparecer o seu nome e R$ 0,01. Se aparecer certo, o Pix dos pedidos está funcionando.</p><div id="pxt" style="background:#fff;border-radius:10px;padding:8px;max-width:200px"></div></div>
     <div class="card"><b>Link do cardápio pros clientes</b><p style="word-break:break-all"><a href="/" target="_blank" rel="noopener">${location.origin}/</a></p><button class="btn o sm" id="cpl">Copiar link</button></div></div></div>`;
   wireImgs(m);
+  if(window.GBPix&&S.pix_key)$("#pxt").innerHTML=GBPix.qrSvg(GBPix.payload({key:S.pix_key,type:S.pix_key_type,name:S.pix_name||S.name,city:S.pix_city,amount:0.01,txid:"TESTE"}),180);else $("#pxt").innerHTML='<p style="color:#111;margin:0">Cadastre a chave Pix</p>';
   $("#cpl").onclick=async()=>{try{await navigator.clipboard.writeText(location.origin+"/");toast("Link copiado")}catch{toast(location.origin+"/")}};
   $("#sv").onclick=async()=>{const v=readForm(F,m);
     if(!v.name){toast("Informe o nome da loja");return}
