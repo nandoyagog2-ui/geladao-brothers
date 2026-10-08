@@ -1,0 +1,67 @@
+/* Barra lateral do WhatsApp Web: tela estreita (~360-420px), uma coluna, botão de ação fixo embaixo */
+body{font-size:13.5px}
+#app{min-height:100vh;display:flex;flex-direction:column}
+.wh{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);background:var(--side);position:sticky;top:0;z-index:5}
+.wh .lg{width:34px;height:34px;border-radius:50%;background:var(--y);color:var(--ink);display:grid;place-items:center;font-family:var(--display);font-weight:900;font-size:13px;flex:none;overflow:hidden}
+.wh .lg img{width:100%;height:100%;object-fit:cover}
+.wh .t{flex:1;min-width:0}
+.wh .t b{display:block;font-size:14px}
+.wh .t small{color:var(--muted);font-size:11.5px}
+.wh .back{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;font-size:18px;background:var(--card-2)}
+.pill-btn{border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:800}
+.pill-btn.on{background:rgba(61,220,132,.14);color:var(--green)}
+.pill-btn.off{background:rgba(255,90,78,.14);color:var(--red)}
+.body{flex:1;padding:12px 14px 90px;display:grid;gap:10px;align-content:start}
+.sec{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:4px}
+.sec b{font-size:14px}
+.sec small{color:var(--muted);display:block;font-size:11.5px;font-weight:500}
+.box{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px}
+.who{display:flex;gap:10px;align-items:center}
+.who .av{width:38px;height:38px;border-radius:50%;background:var(--card-2);display:grid;place-items:center;font-size:17px;flex:none}
+.who .t{flex:1;min-width:0}
+.who .t b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.who .t small{color:var(--muted)}
+.ord{display:block;width:100%;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.ord:hover{border-color:var(--y)}
+.ord b{font-size:13.5px}
+.ord .m{color:var(--muted);font-size:12px;margin-top:2px}
+.ord .pill{margin-top:6px}
+.iconrow{display:flex;gap:6px}
+.iconrow button{width:32px;height:32px;border-radius:8px;background:var(--card-2);display:grid;place-items:center}
+.iconrow button:hover{background:var(--y);color:var(--ink)}
+.rowbtn{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px 12px}
+.rowbtn .t{flex:1;min-width:0}
+.rowbtn small{display:block;color:var(--muted);font-size:12px}
+.rowbtn:hover{border-color:var(--y)}
+.foot{position:fixed;left:0;right:0;bottom:0;padding:10px 14px;background:var(--side);border-top:1px solid var(--line);z-index:6;display:grid;gap:6px}
+.foot .btn{width:100%;justify-content:space-between;padding:12px 16px;font-size:14px}
+.foot .btn.c{justify-content:center}
+.ci2{display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.ci2:last-child{border:0}
+.ci2 .t{flex:1;min-width:0}
+.ci2 .t small{display:block;color:var(--muted);font-size:11.5px}
+.stp{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex:none}
+.stp button{width:28px;height:30px;font-weight:800;font-size:16px}
+.stp span{min-width:22px;text-align:center;font-weight:800;font-variant-numeric:tabular-nums}
+.prod{display:flex;gap:10px;align-items:center;width:100%;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 10px}
+.prod img,.prod .ph{width:46px;height:46px;border-radius:8px;object-fit:cover;background:var(--card-2);flex:none;display:grid;place-items:center;color:var(--y);font-weight:900;font-size:13px}
+.prod .t{flex:1;min-width:0}
+.prod .t b{display:block;font-size:13px;line-height:1.25}
+.prod .t small{color:var(--muted)}
+.prod .q{background:var(--y);color:var(--ink);border-radius:999px;min-width:24px;height:24px;display:grid;place-items:center;font-weight:900;font-size:12px;padding:0 6px}
+.prod.out{opacity:.45}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.paybtn{border:1px solid var(--line);border-radius:10px;padding:10px;font-weight:700;background:var(--card)}
+.paybtn[aria-pressed="true"]{border-color:var(--y);background:rgba(255,196,0,.12);color:var(--y)}
+.kv{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.kv div{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.kv small{display:block;color:var(--muted);font-size:11.5px}
+.kv b{font-size:16px;font-variant-numeric:tabular-nums}
+.banner{border-radius:10px;padding:10px 12px;font-weight:700;text-align:center}
+.b-novo{background:rgba(255,196,0,.13);color:var(--y)}.b-em_preparo{background:rgba(90,176,255,.13);color:var(--blue)}
+.b-saiu_entrega,.b-pronto{background:rgba(255,159,67,.13);color:var(--orange)}.b-concluido{background:rgba(61,220,132,.13);color:var(--green)}.b-cancelado{background:rgba(255,90,78,.13);color:var(--red)}
+.confirm{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.7);display:grid;place-items:center;padding:16px}
+.confirm .box{max-width:320px;width:100%;display:grid;gap:12px;text-align:center}
+.chip{border:1px solid var(--line);border-radius:999px;padding:5px 11px;font-weight:700;font-size:12.5px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.hint{color:var(--muted);font-size:12px}

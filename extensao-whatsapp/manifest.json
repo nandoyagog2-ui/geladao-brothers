@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Geladão Brothers no WhatsApp",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Abre o cardápio e o painel do Geladão Brothers ao lado do WhatsApp Web pra lançar pedidos e colar o resumo na conversa.",
   "icons": { "16": "icon-16.png", "32": "icon-32.png", "48": "icon-48.png", "128": "icon-128.png" },
   "action": { "default_title": "Abrir o painel do Geladão", "default_icon": { "16": "icon-16.png", "32": "icon-32.png" } },
