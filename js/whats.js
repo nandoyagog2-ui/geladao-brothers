@@ -104,11 +104,11 @@ let frameRefresh=()=>home();
 /* ---------- login ---------- */
 function loginView(){
   app.innerHTML=`<div class="login"><form id="lf"><h1>Entrar</h1><p>Use o mesmo e-mail e senha do painel. Só precisa fazer uma vez.</p>
-    <label class="fld"><span>E-mail</span><input id="em" class="in" type="email" autocomplete="username" required></label>
+    <label class="fld"><span>Usuário ou e-mail</span><input id="em" class="in" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
     <label class="fld"><span>Senha</span><input id="pw" class="in" type="password" autocomplete="current-password" required></label>
     <p class="err" id="e" hidden></p><button class="btn">Entrar</button></form></div>`;
-  $("#lf").onsubmit=async e=>{e.preventDefault();const {error}=await sb.auth.signInWithPassword({email:$("#em").value.trim(),password:$("#pw").value});
-    if(error){$("#e").hidden=false;$("#e").textContent="E-mail ou senha incorretos.";return}start()};
+  $("#lf").onsubmit=async e=>{e.preventDefault();const {error}=await sb.auth.signInWithPassword({email:(v=>v.includes("@")?v.trim().toLowerCase():v.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g,".").replace(/[^a-z0-9._-]/g,"")+"@equipe.geladao.app")($("#em").value),password:$("#pw").value});
+    if(error){$("#e").hidden=false;$("#e").textContent="Usuário ou senha incorretos.";return}start()};
 }
 
 /* ================= INÍCIO ================= */

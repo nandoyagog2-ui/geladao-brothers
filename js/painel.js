@@ -69,18 +69,20 @@ const waBridge={onChat:null,
 window.addEventListener("message",e=>{if(!String(e.origin).startsWith("chrome-extension://"))return;const d=e.data||{};if(d.gb==="chat-info"&&waBridge.onChat)waBridge.onChat(d);if(d.gb==="no-chat")toast("Abra uma conversa no WhatsApp primeiro")});
 
 /* ---------- login ---------- */
+const loginUser=v=>String(v||"").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g,".").replace(/[^a-z0-9._-]/g,"");
+const loginEmail=v=>String(v||"").includes("@")?String(v).trim().toLowerCase():loginUser(v)+"@equipe.geladao.app";
 async function boot(){
   const {data:{session}}=await sb.auth.getSession();
   session?shell():loginView();
 }
 function loginView(msg){
-  root.innerHTML=`<div class="login"><form id="lf"><h1>Painel</h1><p>Entre com o e-mail e a senha criados no Supabase.</p>
-    <label class="fld"><span>E-mail</span><input id="em" class="in" type="email" autocomplete="username" required></label>
+  root.innerHTML=`<div class="login"><form id="lf"><h1>Painel</h1><p>Entre com o seu usuário (ex.: <b>joao</b>) ou e-mail e a sua senha.</p>
+    <label class="fld"><span>Usuário ou e-mail</span><input id="em" class="in" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
     <label class="fld"><span>Senha</span><input id="pw" class="in" type="password" autocomplete="current-password" required></label>
     <p class="err" id="e" ${msg?"":"hidden"}>${esc(msg||"")}</p><button class="btn" id="go">Entrar</button></form></div>`;
   $("#lf").onsubmit=async e=>{e.preventDefault();$("#go").disabled=true;
-    const {error}=await sb.auth.signInWithPassword({email:$("#em").value.trim(),password:$("#pw").value});
-    if(error){$("#go").disabled=false;$("#e").hidden=false;$("#e").textContent="E-mail ou senha incorretos.";return}
+    const {error}=await sb.auth.signInWithPassword({email:loginEmail($("#em").value),password:$("#pw").value});
+    if(error){$("#go").disabled=false;$("#e").hidden=false;$("#e").textContent="Usuário ou senha incorretos.";return}
     shell();};
 }
 
@@ -91,16 +93,16 @@ const MENU=[["Operação",[["pedidos","🧾","Pedidos"],["novo","➕","Novo pedi
   ["Clientes",[["clientes","👥","Clientes e fiado"],["avaliacoes","⭐","Avaliações"],["cupons","🎟️","Cupons"],["fidelidade","🏆","Fidelidade"]]],
   ["Gestão",[["desempenho","📈","Desempenho"],["estoque","📦","Estoque"],["financeiro","💸","Despesas"],["delivery","🛵","Delivery e bairros"],["equipe","🪪","Equipe e acessos"],["config","⚙️","Configurações"]]]];
 /* ---------- quem está logado: dono pode tudo, funcionário só o básico ---------- */
-let ME={role:"dono",name:"",email:""};
+let ME={role:"dono",name:"",email:"",id:null};
 const OWNER=()=>ME.role==="dono";
 const EMP_PAGES=["pedidos","novo","historico","caixa","estoque","clientes"];
 const canSee=p=>OWNER()||EMP_PAGES.includes(p);
 async function loadMe(){
-  const {data:{user}}=await sb.auth.getUser(); ME.email=user?user.email:"";
+  const {data:{user}}=await sb.auth.getUser(); ME.email=user?user.email:""; ME.id=user?user.id:null;
   const r=await sb.from("staff").select("*").eq("user_id",user.id).maybeSingle();
   if(r.error){ME.role="dono";ME.name=ME.email.split("@")[0];return true}   // parte 9 ainda não rodada: tudo liberado
   if(!r.data||!r.data.active) return false;
-  ME.role=r.data.role; ME.name=r.data.name||ME.email.split("@")[0]; return true;
+  ME.role=r.data.role; ME.name=r.data.name||r.data.username||ME.email.split("@")[0]; return true;
 }
 async function setOpen(v){
   const r=await sb.rpc("set_store_open",{p_open:v});
@@ -117,7 +119,11 @@ async function shell(){
     <button class="out" id="lo">Sair</button></aside><main class="main" id="main"></main></div>`;
   $("#mb").onclick=()=>$("#side").classList.toggle("open");
   $("#side").onclick=e=>{if(e.target.id==="side")$("#side").classList.remove("open")};
-  $("#lo").onclick=async()=>{await sb.auth.signOut();location.reload()};
+  $("#lo").onclick=async()=>{
+    const r=await sb.from("cash_sessions").select("id,user_id,operator").is("closed_at",null).limit(1);
+    const mine=r.data&&r.data[0]&&(r.data[0].user_id?r.data[0].user_id===ME.id:r.data[0].operator===ME.name);
+    if(mine&&!confirm("Seu caixa ainda está ABERTO. O certo é fechar o caixa antes de sair.\n\nSair mesmo assim?")){go("caixa");return}
+    await sb.auth.signOut();location.reload()};
   $("#ob").onclick=async()=>{S.is_open=!S.is_open;await setOpen(S.is_open);openBtn();toast(S.is_open?"Loja aberta":"Loja fechada")};
   $("#snd").onclick=e=>{e.stopPropagation();unlockAudio();const ready=audioCtx&&audioCtx.state==="running";
     if(!soundOn){soundOn=true}else if(ready){beep();toast("Esse é o som de pedido novo")}
@@ -722,7 +728,8 @@ PAGES.caixa=async m=>{
   const open=(await q(sb.from("cash_sessions").select("*").is("closed_at",null).order("opened_at",{ascending:false}).limit(1)))[0];
   const {data:{user}}=await sb.auth.getUser(); const email=(user&&user.email)||"";
   if(!open){
-    const past=await q(sb.from("cash_sessions").select("*").not("closed_at","is",null).order("opened_at",{ascending:false}).limit(20));
+    let past=await q(sb.from("cash_sessions").select("*").not("closed_at","is",null).order("opened_at",{ascending:false}).limit(30));
+    if(!OWNER()) past=past.filter(s=>s.user_id?s.user_id===ME.id:s.operator===ME.name).slice(0,10);
     m.innerHTML=`<div class="top"><h1>Caixa</h1></div><div class="grid g2"><div class="card grid" style="align-content:start"><b style="font-size:16px">🔒 Caixa fechado · abrir turno</b>
         <label class="fld"><span>Quem está abrindo o caixa (funcionário)</span><input class="in" id="op" placeholder="Ex.: João" value="${esc(OWNER()?(localStorage.getItem("gb_operador")||""):ME.name)}" ${OWNER()?"":"readonly"}></label>
         <label class="fld"><span>Dinheiro na gaveta pra começar (troco)</span><input class="in" id="oa" inputmode="decimal" placeholder="0,00"></label>
@@ -736,6 +743,17 @@ PAGES.caixa=async m=>{
       catch(err){$("#abx").disabled=false;$("#e").hidden=false;$("#e").textContent="Não foi possível abrir: "+err.message+(/operator|column/i.test(err.message)?" · rode a parte 8 do banco no Supabase.":"")}};
     return;
   }
+  // ---------- caixa de outra pessoa ainda aberto ----------
+  const isMine=open.user_id?open.user_id===ME.id:(open.operator||"")===ME.name;
+  if(!isMine&&!m._force){
+    m.innerHTML=`<div class="top"><h1>Caixa</h1></div><div class="card grid" style="max-width:560px"><b style="font-size:17px">⚠️ O caixa de ${esc(open.operator||"outra pessoa")} ainda está aberto</b>
+      <p class="muted" style="margin:0">Aberto em ${dt(open.opened_at)}. Pra você abrir o seu caixa, o turno anterior precisa ser fechado (contar o dinheiro da gaveta).</p>
+      <div class="row"><button class="btn r" id="fo">🔒 Contar e fechar o caixa de ${esc(open.operator||"")}</button>${OWNER()?`<button class="btn o" id="vo">Ver / vender nesse caixa</button>`:""}</div></div>`;
+    $("#fo").onclick=()=>{m._force="close";PAGES.caixa(m)};
+    if($("#vo"))$("#vo").onclick=()=>{m._force="view";PAGES.caixa(m)};
+    return;
+  }
+  const forceClose=m._force==="close"; m._force=null;
   // ---------- caixa aberto: PDV ----------
   const [cats,prods,custs]=await Promise.all([q(sb.from("categories").select("id,name").eq("active",true).order("sort_order")),
     q(sb.from("products").select("id,name,price,promo_price,price_tiers,image_url,category_id,status,track_stock,stock_qty,stock_parent_id,stock_factor").eq("status","ativo").order("name")),
@@ -827,6 +845,7 @@ PAGES.caixa=async m=>{
   function add(p){if(!p)return;const i=cart.find(x=>x.p===p);i?i.n++:cart.push({p,n:1})}
   async function finish(){
     const err=x=>{$("#e").hidden=false;$("#e").textContent=x};
+    if(!isMine&&!OWNER()) return err("Esse caixa é de "+(open.operator||"outra pessoa")+". Feche ele e abra o seu.");
     const t=tot(), tr=num(troco);
     let ps=null, method=pay, chg="", note="";
     if(split){
@@ -874,9 +893,23 @@ PAGES.caixa=async m=>{
     $("#ca",dr).oninput=()=>{const v=num($("#ca",dr).value);if(v==null){$("#df",dr).innerHTML="";return}const d=v-SM.expected;$("#df",dr).innerHTML=Math.abs(d)<0.01?'<span class="ok">Caixa bateu certinho ✓</span>':`<span class="${d<0?"err":"ok"}">${d<0?"Faltando":"Sobrando"} ${brl(Math.abs(d))}</span>`};
     $("#cb",dr).onclick=async e=>{const v=num($("#ca",dr).value);if(v==null){toast("Informe o valor contado");return}if(!e.target.dataset.sure){e.target.dataset.sure=1;e.target.textContent="Confirmar fechamento";return}
       await q(sb.from("cash_sessions").update({closed_at:new Date().toISOString(),closing_amount:v,expected_amount:Math.round(SM.expected*100)/100,closed_by:email,notes:$("#cn",dr).value.trim()||null}).eq("id",open.id));
-      closeDr();toast("Caixa fechado. Próximo turno já pode abrir.");PAGES.caixa(m)};
+      closeDr();turnoFechado({...open,closing_amount:v,expected_amount:Math.round(SM.expected*100)/100,closed_at:new Date().toISOString(),notes:$("#cn",dr).value.trim()||null},SM)};
   }
-  draw(); $("#ps").focus();
+  function turnoFechado(sess,SM){
+    const dif=+sess.closing_amount-+sess.expected_amount, total=SM.done.reduce((s,o)=>s+ +o.total,0);
+    const mv=k=>SM.mv.filter(x=>x.kind===k).reduce((s,x)=>s+ +x.amount,0);
+    const rows=[["Operador",esc(sess.operator||"—")],["Abertura",dt(sess.opened_at)],["Fechamento",dt(sess.closed_at)],["Vendas",SM.done.length+" · "+brl(total)]]
+      .concat(Object.entries(SM.byPay).map(([k,v])=>["&nbsp; "+esc(k),brl(v)]))
+      .concat([["Troco inicial",brl(sess.opening_amount)],["Suprimentos",brl(mv("suprimento")+mv("entrada"))],["Sangrias",brl(mv("sangria"))],["Saídas",brl(mv("saida"))],["Dinheiro esperado",brl(sess.expected_amount)],["Dinheiro contado",brl(sess.closing_amount)],[Math.abs(dif)<0.01?"Diferença":dif<0?"FALTOU":"SOBROU",brl(Math.abs(dif))]]);
+    m.innerHTML=`<div class="top"><h1>Turno encerrado ✓</h1></div><div class="card grid" style="max-width:520px">
+      ${rows.map(([l,v])=>`<div class="line"><span class="muted">${l}</span><b>${v}</b></div>`).join("")}
+      ${sess.notes?`<p class="muted" style="margin:0">Obs.: ${esc(sess.notes)}</p>`:""}
+      <div class="row"><button class="btn o" id="pf">🖨️ Imprimir fechamento</button><button class="btn" id="sx">🚪 Sair (próximo funcionário entra)</button><button class="btn o" id="nv">Abrir outro caixa</button></div></div>`;
+    $("#pf").onclick=()=>{$("#print").innerHTML=`<h2>${esc(S.name)}</h2><div style="text-align:center">FECHAMENTO DE CAIXA</div><hr>${rows.map(([l,v])=>`<div>${l.replace(/&nbsp;/g," ")} <span style="float:right">${v}</span></div>`).join("")}<hr>${sess.notes?`<div>Obs.: ${esc(sess.notes)}</div>`:""}<br><div>Assinatura: ____________________</div>`;window.print()};
+    $("#sx").onclick=async()=>{await sb.auth.signOut();location.reload()};
+    $("#nv").onclick=()=>PAGES.caixa(m);
+  }
+  draw(); $("#ps").focus(); if(forceClose) closeDrawer();
 };
 
 
@@ -943,19 +976,41 @@ PAGES.delivery=async m=>{
 /* ================= EQUIPE ================= */
 PAGES.equipe=async m=>{
   const r=await sb.from("staff").select("*").order("role").order("name");
-  if(r.error){m.innerHTML=`<div class="top"><h1>Equipe e acessos</h1></div><p class="alert">Pra liberar logins de funcionário, rode a <b>parte 9</b> do banco (arquivo <b>09-equipe-e-permissoes.sql</b>) no Supabase.</p>`;return}
-  const st=r.data;
-  m.innerHTML=`<div class="top"><h1>Equipe e acessos</h1><button class="btn" id="ns">➕ Liberar funcionário</button></div>
-    <div class="grid g2"><div class="card"><b>Quem entra no painel</b>${st.map(x=>`<div class="line"><span><b>${esc(x.name||"—")}</b> <span class="muted">${esc(x.email||"")}</span><br><span class="pill ${x.active?(x.role==="dono"?"p-concluido":"p-em_preparo"):"p-inativo"}">${x.active?(x.role==="dono"?"Dono · acesso total":"Funcionário · acesso básico"):"Bloqueado"}</span></span><button class="btn o sm" data-s="${x.user_id}">Editar</button></div>`).join("")||'<p class="muted">Ninguém ainda.</p>'}</div>
-    <div class="card grid" style="align-content:start"><b>Como criar o login do funcionário</b>
-      <ol style="margin:0;padding-left:18px;line-height:1.6"><li>No <b>Supabase</b>, menu da esquerda: <b>Authentication</b> → <b>Users</b>.</li><li>Botão verde <b>Add user</b> → <b>Create new user</b>.</li><li>Coloque o e-mail e uma senha pro funcionário, deixe marcado <b>Auto Confirm User</b> e clique <b>Create user</b>.</li><li>Volte aqui, clique <b>➕ Liberar funcionário</b> e digite o mesmo e-mail.</li></ol>
-      <p class="muted" style="margin:0"><b>Funcionário pode:</b> ver e mudar pedidos, fazer pedido por telefone, abrir/fechar caixa, sangria e suprimento, vender no balcão (inclusive fiado), consultar estoque e consultar quem deve no fiado.<br><b>Não pode:</b> mexer em estoque, produtos, preços, promoções, cupons, despesas, delivery, configurações nem ver o desempenho.</p></div></div>`;
-  const edit=x=>{const dr=drawer(x?"Editar acesso":"Liberar funcionário",`<label class="fld"><span>E-mail do login (o mesmo criado no Supabase)</span><input class="in" id="se" type="email" value="${esc(x?x.email:"")}" ${x?"readonly":""}></label>
+  if(r.error){m.innerHTML=`<div class="top"><h1>Equipe e acessos</h1></div><p class="alert">Pra criar logins de funcionário, rode as partes <b>9</b> e <b>11</b> do banco no Supabase.</p>`;return}
+  const st=r.data, since=new Date(Date.now()-30*864e5).toISOString();
+  const [ss,ords]=await Promise.all([q(sb.from("cash_sessions").select("*").gte("opened_at",since).order("opened_at",{ascending:false})),q(sb.from("orders").select("id,total,status,cash_session_id,created_at").gte("created_at",since).eq("status","concluido"))]);
+  const sold=s=>ords.filter(o=>o.cash_session_id===s.id||(!o.cash_session_id&&o.created_at>=s.opened_at&&(!s.closed_at||o.created_at<=s.closed_at))).reduce((a,o)=>a+ +o.total,0);
+  const who=x=>x.username?x.username:(x.email||"");
+  m.innerHTML=`<div class="top"><h1>Equipe e acessos</h1><button class="btn" id="ns">➕ Novo funcionário</button></div>
+    <div class="grid g2"><div class="card"><b>Quem entra no painel</b>${st.map(x=>`<div class="line"><span><b>${esc(x.name||"—")}</b> <span class="muted">· usuário: <b>${esc(who(x))}</b></span><br><span class="pill ${x.active?(x.role==="dono"?"p-concluido":"p-em_preparo"):"p-inativo"}">${x.active?(x.role==="dono"?"Dono · acesso total":"Funcionário · acesso básico"):"Bloqueado"}</span></span><button class="btn o sm" data-s="${x.user_id}">Editar</button></div>`).join("")||'<p class="muted">Ninguém ainda.</p>'}</div>
+    <div class="card grid" style="align-content:start"><b>Como funciona a troca de turno</b>
+      <ol style="margin:0;padding-left:18px;line-height:1.6"><li><b>João</b> entra com o usuário e a senha dele e abre o caixa.</li><li>No fim do dia ele clica em <b>Fechar caixa</b>, conta o dinheiro da gaveta e clica em <b>Sair</b>.</li><li><b>Vera</b> entra com o usuário e a senha dela e abre o caixa dela.</li></ol>
+      <p class="muted" style="margin:0"><b>Funcionário pode:</b> pedidos, pedido por telefone, abrir/fechar o próprio caixa, sangria e suprimento, vender no balcão (inclusive fiado e pagamento dividido), consultar estoque e quem deve no fiado.<br><b>Não pode:</b> mexer em estoque, produtos, preços, promoções, cupons, despesas, delivery, configurações nem ver o desempenho.</p></div></div>
+    <div class="card" style="margin-top:14px"><b>Turnos dos últimos 30 dias</b>
+      <div class="tw" style="margin-top:8px"><table><thead><tr><th>Funcionário</th><th>Abriu</th><th>Fechou</th><th class="num">Vendeu</th><th class="num">Gaveta</th><th class="num">Diferença</th></tr></thead><tbody>
+      ${ss.map(s=>{const d=s.expected_amount!=null&&s.closing_amount!=null?+s.closing_amount-+s.expected_amount:null;return `<tr><td><b>${esc(s.operator||"—")}</b></td><td>${dt(s.opened_at)}</td><td>${s.closed_at?dt(s.closed_at):'<span class="pill p-novo">Aberto</span>'}</td><td class="num">${brl(sold(s))}</td><td class="num">${s.closing_amount!=null?brl(s.closing_amount):"—"}</td><td class="num" style="color:${d==null||Math.abs(d)<0.01?"inherit":d<0?"var(--red)":"var(--green)"}">${d==null?"—":Math.abs(d)<0.01?"✓ bateu":(d<0?"faltou ":"sobrou ")+brl(Math.abs(d))}</td></tr>`}).join("")||'<tr><td colspan="6" class="empty">Nenhum turno ainda.</td></tr>'}</tbody></table></div></div>`;
+  const edit=x=>{const dr=drawer(x?"Editar · "+esc(x.name||""):"Novo funcionário",`
       <label class="fld"><span>Nome (aparece no caixa)</span><input class="in" id="sn" value="${esc(x?x.name||"":"")}" placeholder="Ex.: João"></label>
+      <label class="fld"><span>Usuário pra entrar (sem espaço, ex.: joao)</span><input class="in" id="su" value="${esc(x?who(x):"")}" ${x?"readonly":""} autocapitalize="none" spellcheck="false" placeholder="joao"></label>
+      <div class="muted" id="sh" style="font-size:12px;margin-top:-6px"></div>
+      <label class="fld"><span>${x?"Nova senha (deixe vazio pra manter a atual)":"Senha (mínimo 4 letras ou números)"}</span><input class="in" id="sp" autocomplete="new-password"></label>
       <label class="fld"><span>Acesso</span><select class="in" id="sr"><option value="funcionario">Funcionário · básico</option><option value="dono" ${x&&x.role==="dono"?"selected":""}>Dono · acesso total</option></select></label><p class="err" id="e" hidden></p>`,
-      `${x&&x.email!==ME.email?`<button class="btn r" id="bl">${x.active?"Bloquear acesso":"Desbloquear"}</button>`:""}<button class="btn" id="sv">Salvar</button>`);
-    $("#sv",dr).onclick=async()=>{const {error}=await sb.rpc("add_staff",{p_email:$("#se",dr).value.trim(),p_name:$("#sn",dr).value.trim(),p_role:$("#sr",dr).value});
-      if(error){$("#e",dr).hidden=false;$("#e",dr).textContent=error.message;return}closeDr();toast("Acesso salvo");PAGES.equipe(m)};
+      `${x&&x.user_id!==ME.id?`<button class="btn r" id="bl">${x.active?"Bloquear acesso":"Desbloquear"}</button>`:""}<button class="btn" id="sv">Salvar</button>`);
+    const hint=()=>{const u=$("#su",dr).value;$("#sh",dr).innerHTML=u&&!u.includes("@")?`Na tela de login vai digitar: <b>${esc(loginUser(u))}</b>`:""};
+    $("#sn",dr).oninput=()=>{if(!x){$("#su",dr).value=loginUser($("#sn",dr).value.split(" ")[0]);hint()}}; $("#su",dr).oninput=hint; hint();
+    const err=t=>{$("#e",dr).hidden=false;$("#e",dr).textContent=t};
+    $("#sv",dr).onclick=async()=>{const name=$("#sn",dr).value.trim(), user=$("#su",dr).value.trim(), pw=$("#sp",dr).value, role=$("#sr",dr).value;
+      if(!name) return err("Informe o nome."); if(!x&&!user) return err("Informe o usuário."); if(!x&&pw.length<4) return err("A senha precisa ter pelo menos 4 caracteres.");
+      $("#sv",dr).disabled=true;
+      try{
+        if(!x){const {error}=await sb.rpc("create_staff_user",{p_username:user,p_name:name,p_password:pw,p_role:role});if(error)throw error}
+        else{
+          if(x.user_id===ME.id&&role!=="dono") throw new Error("Você não pode tirar o seu próprio acesso de dono.");
+          await q(sb.from("staff").update({name,role}).eq("user_id",x.user_id));
+          if(pw){if(pw.length<4)throw new Error("A senha precisa ter pelo menos 4 caracteres.");const {error}=await sb.rpc("set_staff_password",{p_user:x.user_id,p_password:pw});if(error)throw error}
+        }
+        closeDr();toast(x?"Salvo":"Login criado · "+name+" já pode entrar");PAGES.equipe(m);
+      }catch(e){$("#sv",dr).disabled=false;err(/create_staff_user|set_staff_password|function/i.test(e.message)?"Rode a parte 11 do banco no Supabase primeiro.":e.message)}};
     if($("#bl",dr))$("#bl",dr).onclick=async()=>{await q(sb.from("staff").update({active:!x.active}).eq("user_id",x.user_id));closeDr();toast(x.active?"Acesso bloqueado":"Acesso liberado");PAGES.equipe(m)};
   };
   $("#ns").onclick=()=>edit(null); $$("[data-s]",m).forEach(b=>b.onclick=()=>edit(st.find(x=>x.user_id===b.dataset.s)));
