@@ -433,6 +433,12 @@ PAGES.catalogo=async m=>{
       if(!v.name||v.price==null){$("#e",dr).hidden=false;$("#e",dr).textContent="Preencha nome e preço.";return}
       if(v.promo_price!=null&&v.promo_price>=v.price){$("#e",dr).hidden=false;$("#e",dr).textContent="O preço de promoção precisa ser menor que o preço normal.";return}
       v.stock_qty=v.stock_qty??0; v.stock_min=v.stock_min??0;
+      if(!v.stock_parent_id&&!prods.some(x=>x.stock_parent_id===(p&&p.id))){
+        const nm=s=>String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/\s+/g," ").trim();
+        const mm=String(v.name).match(/^\s*(\d+)\s*x\s*(.+)$/i);
+        const par=mm&&+mm[1]>1?prods.find(x=>(!p||x.id!==p.id)&&!x.stock_parent_id&&nm(x.name)===nm(mm[2])):null;
+        if(par){v.stock_parent_id=par.id;v.stock_factor=+mm[1];toast(`📦 Ligado ao estoque de "${par.name}" (tira ${mm[1]} un)`)}
+      }
       v.stock_factor=v.stock_parent_id?(v.stock_factor||1):1; if(v.stock_parent_id) v.track_stock=false;
       const before=p?+p.stock_qty:0;
       const saved=p?await q(sb.from("products").update(v).eq("id",p.id).select().single()):await q(sb.from("products").insert(v).select().single());
