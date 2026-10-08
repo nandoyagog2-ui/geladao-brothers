@@ -741,15 +741,21 @@ PAGES.caixa=async m=>{
     q(sb.from("products").select("id,name,price,promo_price,price_tiers,image_url,category_id,status,track_stock,stock_qty,stock_parent_id,stock_factor").eq("status","ativo").order("name")),
     q(sb.from("customers").select("id,name,phone").order("name").limit(3000))]);
   const allP=await q(sb.from("products").select("id,stock_qty,track_stock"));
-  let cart=[], term="", cat="", pay=(S.payment_methods||["Dinheiro"]).find(x=>/dinheiro/i.test(x))||(S.payment_methods||[])[0]||"Dinheiro", troco="", disc="", cli=null, printIt=false;
+  const PM=[...new Set(["Pix","Dinheiro","Cartão de crédito","Cartão de débito"].concat(S.payment_methods||[]))].concat(["Fiado"]);
+  const ico=x=>/pix/i.test(x)?"⚡":/dinheiro/i.test(x)?"💵":/fiado/i.test(x)?"📒":"💳";
+  let cart=[], term="", cat="", pay="Dinheiro", troco="", disc="", cli=null, printIt=false, split=false, parts=[];
+  const r2=v=>Math.round(v*100)/100;
+  const paid=()=>r2(parts.reduce((s,x)=>s+(num(x.v)||0),0));
+  const cashPart=()=>r2(parts.filter(x=>/dinheiro/i.test(x.m)).reduce((s,x)=>s+(num(x.v)||0),0));
+  const hasFiado=()=>split?parts.some(x=>/fiado/i.test(x.m)):pay==="Fiado";
   const base=p=>p.promo_price!=null&&+p.promo_price<+p.price?+p.promo_price:+p.price;
   const pr=p=>{const qn=(cart.find(i=>i.p===p)||{n:0}).n;let b=base(p);(p.price_tiers||[]).forEach(x=>{if(qn>=x.min_qty&&+x.price<b)b=+x.price});return b};
   const sub=()=>cart.reduce((s,i)=>s+pr(i.p)*i.n,0), tot=()=>Math.max(0,sub()-(num(disc)||0));
   const stockOf=p=>{if(p.stock_parent_id){const par=allP.find(x=>x.id===p.stock_parent_id);return par&&par.track_stock?Math.floor(+par.stock_qty/(+p.stock_factor||1)):null}return p.track_stock?+p.stock_qty:null};
   async function summary(){
-    const [ords,mv]=await Promise.all([q(sb.from("orders").select("id,number,total,payment_method,type,status,created_at,customer_name").gte("created_at",open.opened_at).neq("status","cancelado").order("created_at",{ascending:false})),q(sb.from("cash_movements").select("*").eq("session_id",open.id).order("created_at",{ascending:false}))]);
+    const [ords,mv]=await Promise.all([q(sb.from("orders").select("*").gte("created_at",open.opened_at).neq("status","cancelado").order("created_at",{ascending:false})),q(sb.from("cash_movements").select("*").eq("session_id",open.id).order("created_at",{ascending:false}))]);
     const done=ords.filter(o=>o.status==="concluido");
-    const byPay={}; done.forEach(o=>byPay[o.payment_method||"—"]=(byPay[o.payment_method||"—"]||0)+ +o.total);
+    const byPay={}; done.forEach(o=>{const ps=Array.isArray(o.payments)&&o.payments.length?o.payments:[{method:o.payment_method||"—",amount:+o.total}];ps.forEach(x=>byPay[x.method]=(byPay[x.method]||0)+ +x.amount)});
     const cash=Object.entries(byPay).filter(([k])=>/dinheiro/i.test(k)).reduce((s,[,v])=>s+v,0);
     const sumK=k=>mv.filter(x=>x.kind===k).reduce((s,x)=>s+ +x.amount,0);
     const expected=+open.opening_amount+cash+sumK("entrada")+sumK("suprimento")-sumK("saida")-sumK("sangria");
@@ -776,11 +782,15 @@ PAGES.caixa=async m=>{
         <div class="line"><span class="muted">Subtotal</span><span>${brl(sub())}</span></div>
         <label class="row" style="flex-wrap:nowrap"><span class="muted" style="flex:1">Desconto (R$)</span><input class="in" id="ds" inputmode="decimal" style="width:110px" value="${esc(disc)}" placeholder="0,00"></label>
         <div class="line big"><span>Total</span><span class="price">${brl(t)}</span></div>
-        <div class="grid" style="grid-template-columns:1fr 1fr;gap:6px">${(S.payment_methods||[]).concat(["Fiado"]).map(x=>`<button class="btn ${x===pay?"":"o"} sm" data-pay="${esc(x)}">${/pix/i.test(x)?"⚡":/dinheiro/i.test(x)?"💵":/fiado/i.test(x)?"📒":"💳"} ${esc(x)}</button>`).join("")}</div>
-        ${isCash?`<label class="row" style="flex-wrap:nowrap"><span class="muted" style="flex:1">Cliente pagou com</span><input class="in" id="tr" inputmode="decimal" style="width:110px" value="${esc(troco)}" placeholder="0,00"></label>
+        <div class="row" style="justify-content:space-between"><b style="font-size:13px">${split?"Pagamento dividido · toque pra adicionar cada parte":"Forma de pagamento"}</b><button class="btn o sm" id="spl">${split?"↩ Uma forma só":"➗ Dividir pagamento"}</button></div>
+        <div class="grid" style="grid-template-columns:1fr 1fr;gap:6px">${PM.map(x=>`<button class="btn ${!split&&x===pay?"":"o"} sm" data-pay="${esc(x)}">${ico(x)} ${esc(x)}</button>`).join("")}</div>
+        ${split?`${parts.map((x,k)=>`<div class="row" style="flex-wrap:nowrap"><span style="flex:1">${ico(x.m)} ${esc(x.m)}</span><input class="in" data-pv="${k}" inputmode="decimal" style="width:110px" value="${esc(x.v)}"><button class="icb" data-px="${k}" aria-label="Tirar">✕</button></div>`).join("")||'<p class="muted" style="margin:0;font-size:12px">Ex.: R$ 100 → toque em 💵 Dinheiro, digite 50; depois toque em ⚡ Pix (o resto entra sozinho).</p>'}
+          ${parts.length?(Math.abs(paid()-t)<0.01?'<p class="ok" style="margin:0">✓ Pagamento fechou certinho</p>':paid()<t?`<p class="err" style="margin:0">Falta ${brl(t-paid())}</p>`:`<p class="err" style="margin:0">Passou ${brl(paid()-t)} do total</p>`):""}
+          ${cashPart()>0?`<label class="row" style="flex-wrap:nowrap"><span class="muted" style="flex:1">Recebeu em dinheiro (pra troco)</span><input class="in" id="tr" inputmode="decimal" style="width:110px" value="${esc(troco)}" placeholder="0,00"></label>${tr>cashPart()?`<div class="line big" style="color:var(--green)"><span>Troco</span><span>${brl(tr-cashPart())}</span></div>`:""}`:""}`:""}
+        ${!split&&isCash?`<label class="row" style="flex-wrap:nowrap"><span class="muted" style="flex:1">Cliente pagou com</span><input class="in" id="tr" inputmode="decimal" style="width:110px" value="${esc(troco)}" placeholder="0,00"></label>
           <div class="row">${[10,20,50,100].filter(v=>v>=t).slice(0,4).map(v=>`<button class="btn o sm" data-v="${v}">${brl(v)}</button>`).join("")}</div>
           ${tr>t?`<div class="line big" style="color:var(--green)"><span>Troco</span><span>${brl(tr-t)}</span></div>`:tr&&tr<t?`<p class="err" style="margin:0">Faltam ${brl(t-tr)}</p>`:""}`:""}
-        <div class="fld"><span>Cliente (opcional${pay==="Fiado"?", obrigatório no fiado":""})</span><input class="in" id="cs" list="cl" placeholder="Nome ou telefone" value="${cli?esc(cli.name+" · "+(cli.phone||"")):""}"><datalist id="cl">${custs.map(c=>`<option value="${esc(c.name+" · "+(c.phone||""))}">`).join("")}</datalist></div>
+        <div class="fld"><span>Cliente (opcional${hasFiado()?", obrigatório no fiado":""})</span><input class="in" id="cs" list="cl" placeholder="Nome ou telefone" value="${cli?esc(cli.name+" · "+(cli.phone||"")):""}"><datalist id="cl">${custs.map(c=>`<option value="${esc(c.name+" · "+(c.phone||""))}">`).join("")}</datalist></div>
         <label class="chk"><input type="checkbox" id="pi" ${printIt?"checked":""}> Imprimir cupom</label>
         <p class="err" id="e" hidden></p>
         <button class="btn" id="fz" style="padding:14px;font-size:15px;justify-content:space-between" ${cart.length?"":"disabled"}><span>✔ FINALIZAR VENDA</span><span>${brl(t)}</span></button>
@@ -799,7 +809,12 @@ PAGES.caixa=async m=>{
     $$("[data-m]",m).forEach(b=>b.onclick=()=>{const i=cart[+b.dataset.m];i.n--;if(!i.n)cart.splice(+b.dataset.m,1);draw()});
     $$("[data-p]",m).forEach(b=>b.onclick=()=>{cart[+b.dataset.p].n++;draw()});
     $("#ds").onchange=e=>{disc=e.target.value;draw()};
-    $$("[data-pay]",m).forEach(b=>b.onclick=()=>{pay=b.dataset.pay;if(!/dinheiro/i.test(pay))troco="";draw()});
+    $$("[data-pay]",m).forEach(b=>b.onclick=()=>{const x=b.dataset.pay;
+      if(split){const rest=r2(t-paid());parts.push({m:x,v:rest>0?money(rest):""});draw();const ins=$$("[data-pv]",m);const last=ins[ins.length-1];if(last){last.focus();last.select()}return}
+      pay=x;if(!/dinheiro/i.test(pay))troco="";draw()});
+    $("#spl").onclick=()=>{split=!split;parts=[];troco="";draw()};
+    $$("[data-pv]",m).forEach(i=>i.onchange=()=>{parts[+i.dataset.pv].v=i.value;draw()});
+    $$("[data-px]",m).forEach(b=>b.onclick=()=>{parts.splice(+b.dataset.px,1);draw()});
     if($("#tr"))$("#tr").oninput=e=>{troco=e.target.value;const pos=e.target.selectionStart;draw();const n=$("#tr");n.focus();n.setSelectionRange(pos,pos)};
     $$("[data-v]",m).forEach(b=>b.onclick=()=>{troco=b.dataset.v;draw()});
     $("#cs").onchange=e=>{const v=e.target.value;cli=custs.find(c=>(c.name+" · "+(c.phone||""))===v)||(v.trim()?{name:v.trim(),phone:/\d{8,}/.test(digits(v))?v.trim():""}:null)};
@@ -813,19 +828,33 @@ PAGES.caixa=async m=>{
   async function finish(){
     const err=x=>{$("#e").hidden=false;$("#e").textContent=x};
     const t=tot(), tr=num(troco);
-    if(/dinheiro/i.test(pay)&&tr&&tr<t) return err("O valor pago é menor que o total.");
-    if(pay==="Fiado"&&!(cli&&digits(cli.phone).length>=10)) return err("No fiado, escolha um cliente cadastrado com telefone.");
+    let ps=null, method=pay, chg="", note="";
+    if(split){
+      ps=parts.map(x=>({method:x.m,amount:r2(num(x.v)||0)})).filter(x=>x.amount>0);
+      if(ps.length<2) return err("No pagamento dividido, coloque pelo menos 2 formas com valor.");
+      if(Math.abs(ps.reduce((s,x)=>s+x.amount,0)-t)>=0.01) return err("A soma das partes tem que dar "+brl(t)+".");
+      const cp=cashPart(); if(tr&&tr<cp) return err("O dinheiro recebido é menor que a parte em dinheiro.");
+      method=[...new Set(ps.map(x=>x.method))].join(" + ");
+      note=" · Pagamento: "+ps.map(x=>x.method+" "+brl(x.amount)).join(" + ")+(tr>cp?" · Troco "+brl(tr-cp):"");
+    }else{
+      if(/dinheiro/i.test(pay)&&tr&&tr<t) return err("O valor pago é menor que o total.");
+      chg=/dinheiro/i.test(pay)&&tr>t?String(tr):"";
+    }
+    if(hasFiado()&&!(cli&&digits(cli.phone).length>=10)) return err("No fiado, escolha um cliente cadastrado com telefone.");
     $("#fz").disabled=true;
     try{
-      const r=await q(sb.rpc("create_order",{p:{customer_name:cli?cli.name:"Venda balcão",customer_phone:cli?cli.phone||"":"",type:"balcao",payment_method:pay,
-        change_for:/dinheiro/i.test(pay)&&tr>t?String(tr):"",discount_override:num(disc)?String(num(disc)):"",notes:"Atendente: "+(open.operator||""),
+      const r=await q(sb.rpc("create_order",{p:{customer_name:cli?cli.name:"Venda balcão",customer_phone:cli?cli.phone||"":"",type:"balcao",payment_method:method,
+        change_for:chg,discount_override:num(disc)?String(num(disc)):"",notes:"Atendente: "+(open.operator||"")+note,
         items:cart.map(i=>({product_id:i.p.id,qty:i.n}))}}));
-      await q(sb.from("orders").update({status:"concluido",cash_session_id:open.id}).eq("id",r.id));
-      if(pay==="Fiado"){const o=await q(sb.from("orders").select("customer_id").eq("id",r.id).single());if(o.customer_id)await q(sb.from("credit_entries").insert({customer_id:o.customer_id,kind:"compra",amount:r.total,description:"Balcão #"+r.number,order_id:r.id}))}
+      const up={status:"concluido",cash_session_id:open.id}; if(ps) up.payments=ps;
+      const u1=await sb.from("orders").update(up).eq("id",r.id);
+      if(u1.error){if(ps&&/payments/i.test(u1.error.message)){delete up.payments;await q(sb.from("orders").update(up).eq("id",r.id));toast("Rode a parte 10 do banco pra separar o pagamento dividido no fechamento")}else throw u1.error}
+      const fiadoAmt=ps?ps.filter(x=>/fiado/i.test(x.method)).reduce((s,x)=>s+x.amount,0):(pay==="Fiado"?+r.total:0);
+      if(fiadoAmt>0){const o=await q(sb.from("orders").select("customer_id").eq("id",r.id).single());if(o.customer_id)await q(sb.from("credit_entries").insert({customer_id:o.customer_id,kind:"compra",amount:fiadoAmt,description:"Balcão #"+r.number,order_id:r.id}))}
       toast(`✔ Venda #${r.number} · ${brl(r.total)}${r.change?` · troco ${brl(r.change)}`:""}`);
       if(printIt){const o=await q(sb.from("orders").select("*,order_items(*)").eq("id",r.id).single());printOrder(o,o.order_items.sort((a,b)=>a.id-b.id),"",o.change_for?o.change_for-o.total:0)}
       cart.forEach(i=>{const tgt=i.p.stock_parent_id?allP.find(x=>x.id===i.p.stock_parent_id):allP.find(x=>x.id===i.p.id);if(tgt&&tgt.track_stock)tgt.stock_qty=+tgt.stock_qty-i.n*(i.p.stock_parent_id?(+i.p.stock_factor||1):1)});
-      cart=[];disc="";troco="";cli=null; SM=await summary(); draw(); $("#ps").focus();
+      cart=[];disc="";troco="";cli=null;parts=[];split=false; SM=await summary(); draw(); $("#ps").focus();
     }catch(x){$("#fz").disabled=false;err(x.message)}
   }
   function movDrawer(){
