@@ -208,9 +208,10 @@ function printOrder(o,items,addr,change){
 
 /* ================= NOVO PEDIDO (BALCÃO / TELEFONE) ================= */
 PAGES.novo=async m=>{
-  const [cats,prods,zones]=await Promise.all([q(sb.from("categories").select("*").order("sort_order")),q(sb.from("products").select("id,name,price,promo_price,category_id,status").eq("status","ativo").order("name")),q(sb.from("delivery_zones").select("*").eq("active",true).order("neighborhood"))]);
+  const [cats,prods,zones]=await Promise.all([q(sb.from("categories").select("*").order("sort_order")),q(sb.from("products").select("id,name,price,promo_price,price_tiers,category_id,status").eq("status","ativo").order("name")),q(sb.from("delivery_zones").select("*").eq("active",true).order("neighborhood"))]);
   let cart=[], type="balcao", term="";
-  const pr=p=>p.promo_price!=null&&+p.promo_price<+p.price?+p.promo_price:+p.price;
+  const base=p=>p.promo_price!=null&&+p.promo_price<+p.price?+p.promo_price:+p.price;
+  const pr=p=>{const q=(cart.find(i=>i.p===p)||{n:0}).n;let b=base(p);(p.price_tiers||[]).forEach(x=>{if(q>=x.min_qty&&+x.price<b)b=+x.price});return b};
   const draw=()=>{
     const list=prods.filter(p=>!term||p.name.toLowerCase().includes(term)).slice(0,40);
     const sub=cart.reduce((s,i)=>s+pr(i.p)*i.n,0);
@@ -312,7 +313,7 @@ PAGES.catalogo=async m=>{
         <button class="icb" data-up="${i}" aria-label="Subir">↑</button><button class="icb" data-dn="${i}" aria-label="Descer">↓</button><button class="icb" data-ec="${c.id}" aria-label="Editar">✎</button></div>`).join("")}</div>
       <div><div class="row" style="justify-content:space-between;margin-bottom:10px"><b>${term?"Resultados da busca":esc(cat?.name||"")}</b><span class="muted">${list.length} produtos</span></div>
       <div class="tw"><table><thead><tr><th></th><th>Produto</th><th class="num">Preço</th><th class="num">Promoção</th><th>Status</th><th></th></tr></thead><tbody>
-      ${list.map(p=>`<tr><td>${p.image_url?`<img class="thumb" src="${esc(p.image_url)}" alt="">`:'<div class="thumb"></div>'}</td><td><b>${esc(p.name)}</b>${p.featured?' <span class="pill p-novo">Destaque</span>':""}${p.is_new?' <span class="pill p-novo">Novidade</span>':""}${term?`<div class="muted" style="font-size:12px">${esc((cats.find(c=>c.id===p.category_id)||{}).name||"")}</div>`:""}</td>
+      ${list.map(p=>`<tr><td>${p.image_url?`<img class="thumb" src="${esc(p.image_url)}" alt="">`:'<div class="thumb"></div>'}</td><td><b>${esc(p.name)}</b>${p.featured?' <span class="pill p-novo">Destaque</span>':""}${p.is_new?' <span class="pill p-novo">Novidade</span>':""}${(p.price_tiers||[]).length?` <span class="pill p-concluido" title="${p.price_tiers.map(x=>x.min_qty+"+ un: "+brl(x.price)).join(" · ")}">🔥 Atacado</span>`:""}${term?`<div class="muted" style="font-size:12px">${esc((cats.find(c=>c.id===p.category_id)||{}).name||"")}</div>`:""}</td>
         <td class="num">${brl(p.price)}</td><td class="num">${p.promo_price!=null?`<span class="price">${brl(p.promo_price)}</span>`:"—"}</td>
         <td><button data-tg="${p.id}" title="Clique pra alternar entre ativo e em falta">${pill(p.status)}</button></td><td class="num"><button class="btn o sm" data-ep="${p.id}">Editar</button></td></tr>`).join("")||'<tr><td colspan="6" class="empty">Nenhum produto aqui.</td></tr>'}</tbody></table></div></div></div>`;
     let tm; $("#cq").oninput=e=>{clearTimeout(tm);tm=setTimeout(()=>{term=e.target.value.trim().toLowerCase();draw();const i=$("#cq");i.focus();i.setSelectionRange(i.value.length,i.value.length)},250)};
@@ -344,10 +345,20 @@ PAGES.catalogo=async m=>{
       {k:"cost_price",l:"Preço de custo (R$) · só você vê",t:"money"},{k:"track_stock",l:"Controlar estoque deste produto",t:"check"},{k:"stock_qty",l:"Estoque atual",t:"money"},{k:"stock_min",l:"Estoque mínimo (avisa quando chegar)",t:"money"}];
     const linked=new Set(pcs.filter(x=>p&&x.product_id===p.id).map(x=>x.group_id));
     const dr=drawer(p?"Editar produto":"Novo produto",formHTML(PF,p||{category_id:catSel,status:"ativo"})+
+      `<div class="card grid" style="gap:8px"><b>🔥 Preço por quantidade (atacado)</b><p class="muted" style="margin:0;font-size:12px">Ex.: a partir de 12 un sai R$ 6,80 cada; a partir de 24 un, R$ 6,70. Conta tudo desse produto que o cliente colocar na sacola.</p>
+        <div id="tiers" class="grid" style="gap:6px"></div><button class="btn o sm" type="button" id="addt" style="justify-self:start">➕ Adicionar faixa</button></div>`+
       (groups.length?`<div class="fld"><span>Complementos que o cliente pode escolher</span>${groups.map(g=>`<label class="chk"><input type="checkbox" data-gr="${g.id}" ${linked.has(g.id)?"checked":""}> ${esc(g.name)}</label>`).join("")}</div>`:"")+'<p class="err" id="e" hidden></p>',
       `${p?'<button class="btn r" id="del">Excluir</button>':""}<button class="btn" id="sv">Salvar</button>`);
     wireImgs(dr);
+    const tierRow=(x={})=>{const r=document.createElement("div");r.className="row";r.style.flexWrap="nowrap";
+      r.innerHTML=`<span class="muted" style="white-space:nowrap">A partir de</span><input class="in" data-tm inputmode="numeric" style="width:80px" value="${x.min_qty||""}" placeholder="12"><span class="muted" style="white-space:nowrap">un, R$</span><input class="in" data-tp inputmode="decimal" style="width:100px" value="${x.price!=null?money(x.price):""}" placeholder="6,80"><span class="muted">cada</span><button class="icb" type="button" aria-label="Remover faixa">✕</button>`;
+      $("button",r).onclick=()=>r.remove(); $("#tiers",dr).append(r)};
+    ((p&&p.price_tiers)||[]).forEach(tierRow);
+    $("#addt",dr).onclick=()=>tierRow();
     $("#sv",dr).onclick=async()=>{const v=readForm(PF,dr);
+      const tiers=$$("#tiers .row",dr).map(r=>({min_qty:parseInt($("[data-tm]",r).value),price:num($("[data-tp]",r).value)})).filter(x=>x.min_qty>1&&x.price>0).sort((a,b)=>a.min_qty-b.min_qty);
+      if(tiers.some(x=>v.price!=null&&x.price>=v.price)){$("#e",dr).hidden=false;$("#e",dr).textContent="O preço por quantidade precisa ser menor que o preço normal ("+brl(v.price)+").";return}
+      v.price_tiers=tiers;
       if(!v.name||v.price==null){$("#e",dr).hidden=false;$("#e",dr).textContent="Preencha nome e preço.";return}
       if(v.promo_price!=null&&v.promo_price>=v.price){$("#e",dr).hidden=false;$("#e",dr).textContent="O preço de promoção precisa ser menor que o preço normal.";return}
       v.stock_qty=v.stock_qty??0; v.stock_min=v.stock_min??0;

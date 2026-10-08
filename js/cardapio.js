@@ -24,6 +24,9 @@ const store={get(k,d){try{return JSON.parse(localStorage.getItem("gb_"+k))??d}ca
 let S={}, CATS=[], PRODS=[], GROUPS=[], ZONES=[], PC=[], SUGG=[];
 const price=p=>p.promo??p.p;
 const pct=p=>p.promo?Math.round((1-p.promo/p.p)*100):0;
+const tierPrice=(p,q)=>{let best=price(p);(p.tiers||[]).forEach(x=>{if(q>=x.min_qty&&x.price<best)best=x.price});return best};
+const qtyOf=(p,list=cart,skip=null)=>list.filter(i=>i.p.id===p.id&&i!==skip).reduce((s,i)=>s+i.n,0);
+const tierTag=p=>(p.tiers||[]).length&&p.s?`<div class="tier">🔥 ${p.tiers.map(x=>`${x.min_qty}+ un: <b>${brl(x.price)}</b>`).join(" · ")}</div>`:"";
 const priceHTML=p=>`<span class="price">${brl(price(p))}</span>${p.promo?`<span class="was">${brl(p.p)}</span><span class="off">-${pct(p)}%</span>`:""}`;
 const byId=id=>PRODS.find(p=>p.id===id);
 
@@ -31,7 +34,7 @@ async function load(){
   const [s,c,p,g,o,pc,z,ps]=await Promise.all([
     sb.from("store_settings").select("*").eq("id",1).single(),
     sb.from("categories").select("*").eq("active",true).order("sort_order").order("name"),
-    sb.from("products").select("id,category_id,name,description,price,promo_price,image_url,status,is_combo,featured,is_new,sort_order").neq("status","inativo").order("sort_order").order("name"),
+    sb.from("products").select("id,category_id,name,description,price,promo_price,image_url,status,is_combo,featured,is_new,sort_order,price_tiers").neq("status","inativo").order("sort_order").order("name"),
     sb.from("complement_groups").select("*").eq("active",true),
     sb.from("complement_options").select("*").eq("active",true).order("sort_order"),
     sb.from("product_complements").select("*").order("sort_order"),
@@ -41,7 +44,7 @@ async function load(){
   const err=[s,c,p].find(r=>r.error); if(err) throw err.error;
   S=s.data; CATS=c.data;
   const catName=Object.fromEntries(CATS.map(x=>[x.id,x.name]));
-  PRODS=p.data.filter(x=>catName[x.category_id]).map(x=>({id:x.id,cid:x.category_id,c:catName[x.category_id],n:x.name,d:x.description,p:+x.price,promo:x.promo_price!=null&&+x.promo_price<+x.price?+x.promo_price:null,s:x.status==="ativo",img:x.image_url,feat:x.featured,isNew:x.is_new}));
+  PRODS=p.data.filter(x=>catName[x.category_id]).map(x=>({id:x.id,cid:x.category_id,c:catName[x.category_id],n:x.name,d:x.description,p:+x.price,promo:x.promo_price!=null&&+x.promo_price<+x.price?+x.promo_price:null,s:x.status==="ativo",img:x.image_url,feat:x.featured,isNew:x.is_new,tiers:(Array.isArray(x.price_tiers)?x.price_tiers:[]).map(y=>({min_qty:+y.min_qty,price:+y.price})).filter(y=>y.min_qty>1&&y.price>0).sort((a,b)=>a.min_qty-b.min_qty)}));
   GROUPS=(g.data||[]).map(gr=>({...gr,options:(o.data||[]).filter(op=>op.group_id===gr.id)}));
   PC=pc.data||[]; ZONES=z.data||[]; SUGG=ps.data||[];
   document.title=S.name+" · Cardápio";
@@ -66,7 +69,7 @@ let tab="home", cat=null, q="", searching=false, cart=store.get("cart",[]), ck=s
 const app=document.getElementById("app"), layer=document.getElementById("layer");
 const saveCart=()=>store.set("cart",cart.map(i=>({id:i.p.id,n:i.n,obs:i.obs,opts:i.opts})));
 function restoreCart(){cart=cart.map(i=>{const p=byId(i.id);return p&&p.s?{p,n:i.n,obs:i.obs||"",opts:i.opts||[]}:null}).filter(Boolean)}
-const lineUnit=i=>price(i.p)+(i.opts||[]).reduce((s,o)=>s+o.price*o.qty,0);
+const lineUnit=(i,list=cart)=>tierPrice(i.p,qtyOf(i.p,list))+(i.opts||[]).reduce((s,o)=>s+o.price*o.qty,0);
 const sub=()=>cart.reduce((s,i)=>s+lineUnit(i)*i.n,0);
 
 /* ---------- telas ---------- */
@@ -114,13 +117,13 @@ function homeView(){
 }
 function featCard(p){
   const b=document.createElement("button"); b.className="feat"+(p.s?"":" out");
-  b.innerHTML=`${p.s?"":'<span class="ribbon">Esgotado</span>'}<div class="ph">${pic(p)}</div><div class="b">${p.isNew?'<span class="new">NOVIDADE</span>':""}<div class="n">${esc(p.n)}</div><div class="pr">${priceHTML(p)}</div></div>`;
+  b.innerHTML=`${p.s?"":'<span class="ribbon">Esgotado</span>'}<div class="ph">${pic(p)}</div><div class="b">${p.isNew?'<span class="new">NOVIDADE</span>':""}<div class="n">${esc(p.n)}</div><div class="pr">${priceHTML(p)}</div>${tierTag(p)}</div>`;
   b.onclick=()=>productSheet(p); return b;
 }
 function list(el,items){
   items.sort((a,b)=>b.s-a.s).forEach(p=>{
     const b=document.createElement("button"); b.className="row"+(p.s?"":" out");
-    b.innerHTML=`${p.s?"":'<span class="ribbon">Esgotado</span>'}<div class="t">${p.isNew?'<span class="new">NOVIDADE</span>':""}<div class="n">${esc(p.n)}</div>${p.d?`<div class="d">${esc(p.d)}</div>`:""}<div class="pr">${priceHTML(p)}</div></div><div class="ph">${pic(p)}</div>`;
+    b.innerHTML=`${p.s?"":'<span class="ribbon">Esgotado</span>'}<div class="t">${p.isNew?'<span class="new">NOVIDADE</span>':""}<div class="n">${esc(p.n)}</div>${p.d?`<div class="d">${esc(p.d)}</div>`:""}<div class="pr">${priceHTML(p)}</div>${tierTag(p)}</div><div class="ph">${pic(p)}</div>`;
     b.onclick=()=>productSheet(p); el.append(b);
   });
   if(!items.length) el.innerHTML='<div class="empty">Nada encontrado.</div>';
@@ -189,16 +192,20 @@ function productSheet(p,editIdx){
   const groups=PC.filter(x=>x.product_id===p.id).map(x=>GROUPS.find(g=>g.id===x.group_id)).filter(g=>g&&g.options.length);
   const sel={}; (ed?ed.opts:[]).forEach(o=>sel[o.id]=o.qty);
   let obs=ed?ed.obs:"";
+  const others=qtyOf(p,cart,ed);
+  const unitNow=()=>tierPrice(p,n+others);
   const extra=()=>groups.flatMap(g=>g.options).reduce((s,o)=>s+(sel[o.id]||0)*o.price,0);
   const draw=()=>{
     sheet("",`<div class="ph bigph" style="margin-inline:-16px">${pic(p)}</div>
       <h2 style="margin:14px 0 4px;font-size:18px">${esc(p.n)}</h2>${p.d?`<p class="sub" style="color:var(--muted);margin:0 0 6px">${esc(p.d)}</p>`:""}<div class="pr">${priceHTML(p)}</div>
+      ${(p.tiers||[]).length?`<div class="grp">🔥 Leve mais, pague menos</div><div class="opts">${[{min_qty:1,price:price(p)}].concat(p.tiers).map(x=>{const q=n+others,act=Math.max(1,...p.tiers.filter(y=>y.min_qty<=q).map(y=>y.min_qty)),on=x.min_qty===act;return `<button class="optrow" data-tq="${x.min_qty}" style="text-align:left;${on?"border-color:var(--y)":""}"><span>${x.min_qty===1?"1 unidade":"A partir de "+x.min_qty+" un"}</span><b class="price">${brl(x.price)} cada</b></button>`}).join("")}</div>${others?`<p class="sub" style="color:var(--muted);font-size:12px;margin:6px 0 0">Você já tem ${others} na sacola; conta junto pro desconto.</p>`:""}`:""}
       ${groups.map(g=>`<div class="grp">${esc(g.name)}<small class="sub" style="color:var(--muted);font-weight:500"> · ${g.min_select>0?"obrigatório, ":""}escolha até ${g.max_select}</small></div><div class="opts">${g.options.map(o=>`<div class="optrow"><span>${esc(o.name)}${+o.price?` <span class="sub" style="color:var(--muted)">+ ${brl(o.price)}</span>`:""}</span><span class="step"><button data-o="${o.id}" data-g="${g.id}" data-d="-1" aria-label="Menos">−</button><span>${sel[o.id]||0}</span><button data-o="${o.id}" data-g="${g.id}" data-d="1" aria-label="Mais">+</button></span></div>`).join("")}</div>`).join("")}
       <div class="lbl"><span>Alguma observação?</span><span id="cnt">${obs.length} / 140</span></div>
       <textarea id="obs" class="in" rows="3" maxlength="140" placeholder="Ex.: bem gelada">${esc(obs)}</textarea><p class="err" id="e" hidden></p>`,
-      `<div class="addrow"><span class="step"><button id="mi" aria-label="Menos">−</button><span>${n}</span><button id="pl" aria-label="Mais">+</button></span><button class="btn" id="add"><span>${ed?"Atualizar":"Adicionar"}</span><span>${brl((price(p)+extra())*n)}</span></button></div>`);
+      `<div class="addrow"><span class="step"><button id="mi" aria-label="Menos">−</button><span>${n}</span><button id="pl" aria-label="Mais">+</button></span><button class="btn" id="add"><span>${ed?"Atualizar":"Adicionar"}</span><span>${brl((unitNow()+extra())*n)}</span></button></div>${unitNow()<price(p)?`<p class="sub" style="text-align:center;color:var(--green);font-size:12.5px;margin:8px 0 0">Preço de atacado: ${brl(unitNow())} cada · você economiza ${brl((price(p)-unitNow())*n)}</p>`:(()=>{const nx=(p.tiers||[]).find(x=>x.min_qty>n+others&&x.price<price(p));return nx?`<p class="sub" style="text-align:center;color:var(--muted);font-size:12.5px;margin:8px 0 0">Faltam ${nx.min_qty-(n+others)} un pra pagar ${brl(nx.price)} cada</p>`:""})()}`);
     const o=L("#obs"); o.oninput=()=>{obs=o.value;L("#cnt").textContent=o.value.length+" / 140"};
     L("#mi").onclick=()=>{n=Math.max(1,n-1);draw()}; L("#pl").onclick=()=>{n++;draw()};
+    layer.querySelectorAll("[data-tq]").forEach(b=>b.onclick=()=>{n=Math.max(1,+b.dataset.tq-others);draw()});
     layer.querySelectorAll("[data-o]").forEach(b=>b.onclick=()=>{
       const g=groups.find(x=>x.id==b.dataset.g), id=+b.dataset.o, d=+b.dataset.d;
       const used=g.options.reduce((s,x)=>s+(sel[x.id]||0),0);
@@ -226,7 +233,7 @@ function cartSheet(){
   if(!cart.length) return close();
   const sugs=suggestions();
   sheet(esc(S.name),`<div class="lbl" style="margin-top:12px"><span>Sua sacola</span></div>
-    ${cart.map((i,k)=>`<div class="ci"><div class="ph mini-ph">${pic(i.p)}</div><div class="t"><div><span class="q">${i.n}x</span> ${esc(i.p.n)}</div>${i.opts.length?`<div class="sub">${i.opts.map(o=>o.qty+"x "+esc(o.name)).join(", ")}</div>`:""}${i.obs?`<div class="sub">Obs.: ${esc(i.obs)}</div>`:""}<div class="acts"><button data-ed="${k}">Editar</button><button data-rm="${k}">Remover</button></div></div><b>${brl(lineUnit(i)*i.n)}</b></div>`).join("")}
+    ${cart.map((i,k)=>`<div class="ci"><div class="ph mini-ph">${pic(i.p)}</div><div class="t"><div><span class="q">${i.n}x</span> ${esc(i.p.n)}</div>${tierPrice(i.p,qtyOf(i.p))<price(i.p)?`<div class="sub" style="color:var(--green)">🔥 Atacado: ${brl(tierPrice(i.p,qtyOf(i.p)))} cada</div>`:""}${i.opts.length?`<div class="sub">${i.opts.map(o=>o.qty+"x "+esc(o.name)).join(", ")}</div>`:""}${i.obs?`<div class="sub">Obs.: ${esc(i.obs)}</div>`:""}<div class="acts"><button data-ed="${k}">Editar</button><button data-rm="${k}">Remover</button></div></div><b>${brl(lineUnit(i)*i.n)}</b></div>`).join("")}
     <button class="link" data-close>Adicionar mais itens</button>
     ${sugs.length?`<div class="grp">Peça também</div><div class="rail" style="margin-top:8px">${sugs.map(p=>`<button class="sug" data-sg="${p.id}"><div class="ph">${pic(p)}</div><div class="b">${esc(p.n)}<div class="price">${brl(price(p))}</div></div></button>`).join("")}</div>`:""}
     <div class="sum"><div><span>Subtotal</span><span>${brl(sub())}</span></div><div><span>Taxa de entrega</span><span>A definir</span></div>${coupon?`<div><span>Cupom ${esc(coupon.code)}</span><span>${coupon.kind==="free_delivery"?"Entrega grátis":"- "+brl(discount())}</span></div>`:""}<div class="tot"><span>Total</span><span>${brl(sub()-discount())}</span></div></div>
@@ -403,7 +410,7 @@ function waMsg(o){
   if(c.mode==="entrega") M.push("🛵 Endereço de entrega",`${a.street} ${a.num}`,...(a.comp?["Complemento: "+a.comp]:[]),`Bairro: ${o.nb}`,...(a.cep?["CEP: "+a.cep]:[]),`(${a.ref})`,"",`Link do endereço:`,a.lat!=null&&KM()?`https://maps.google.com/?q=${a.lat},${a.lng}`:`https://maps.google.com/?q=${encodeURIComponent(`${a.street}, ${a.num}, ${o.nb}`)}`,"");
   else M.push("🏪 Retirar no estabelecimento","");
   M.push("------- ITENS DO PEDIDO -------","");
-  o.items.forEach(i=>{M.push(`*${i.n} x ${i.p.n}*`,`💵 ${i.n} x ${brl(lineUnit(i))} = ${brl(lineUnit(i)*i.n)}`);i.opts.forEach(x=>M.push(`   + ${x.qty}x ${x.name}`));if(i.obs)M.push("Obs.: "+i.obs);M.push("")});
+  o.items.forEach(i=>{M.push(`*${i.n} x ${i.p.n}*`,`💵 ${i.n} x ${brl(lineUnit(i,o.items))} = ${brl(lineUnit(i,o.items)*i.n)}${tierPrice(i.p,qtyOf(i.p,o.items))<price(i.p)?" (atacado)":""}`);i.opts.forEach(x=>M.push(`   + ${x.qty}x ${x.name}`));if(i.obs)M.push("Obs.: "+i.obs);M.push("")});
   M.push("-------------------------------","",`SUBTOTAL: ${brl(o.subtotal)}`,`ENTREGA: ${c.mode==="entrega"?(+o.delivery_fee?brl(o.delivery_fee):"Grátis")+(o.distance_km!=null?` (${String(o.distance_km).replace(".",",")} km)`:""):"Retirada"}`);
   if(+o.discount) M.push(`CUPOM ${o.coupon?o.coupon.code:""}: - ${brl(o.discount)}`);
   M.push(`*VALOR FINAL: ${brl(o.total)}*`,"","PAGAMENTO",`*${c.pay}*: ${brl(o.total)}`);
