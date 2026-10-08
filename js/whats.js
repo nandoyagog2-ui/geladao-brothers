@@ -21,7 +21,7 @@ const WA_DEFAULT={em_preparo:"Olá, {nome}! 😃 Recebemos seu pedido *#{numero}
 
 /* ---------- ponte com a extensão ---------- */
 const IN_EXT=window.parent!==window;
-let chat={title:"",phone:""}, pending={};
+let chat={title:"",phone:""}, pending={}, link={ok:null,box:false,v:""};
 function post(m){if(IN_EXT)parent.postMessage(m,"*")}
 function sendToChat(text,{auto=true}={}){
   return new Promise(res=>{
@@ -34,9 +34,12 @@ function sendToChat(text,{auto=true}={}){
 window.addEventListener("message",e=>{
   if(!String(e.origin).startsWith("chrome-extension://"))return;
   const d=e.data||{};
-  if(d.gb==="chat-info"){const changed=d.title!==chat.title||digits(d.phone)!==digits(chat.phone);chat={title:d.title||"",phone:digits(d.phone)};if(changed)onChat()}
+  if(d.gb==="chat-info"){link={ok:d.err!=="nowa",box:!!d.box,v:d.v||""};const changed=d.title!==chat.title||digits(d.phone)!==digits(chat.phone);chat={title:d.title||"",phone:digits(d.phone)};if(changed)onChat()}
   if(d.gb==="sent"&&pending[d.id]){const r=pending[d.id];delete pending[d.id];
-    if(!d.ok)toast(d.reason==="chat"?"A conversa aberta mudou. Volte pra conversa do cliente.":"Não consegui colar no WhatsApp. Recarregue a aba (F5).");r(!!d.ok)}
+    const why={chat:"A conversa aberta mudou. Volte pra conversa do cliente e toque em Reenviar.",box:"Não achei a caixa de mensagem. Abra a conversa do cliente.",write:"Não consegui escrever na conversa. Recarregue o WhatsApp (F5).",nowa:"A extensão não está falando com o WhatsApp. Recarregue a aba do WhatsApp (F5)."};
+    if(!d.ok) toast(why[d.reason]||why.nowa); else if(!d.sent) toast("Mensagem escrita na conversa. Aperte Enter pra enviar.");
+    r(!!d.ok)}
+  if(d.gb==="pong"){link={ok:d.ok,box:!!d.box,v:d.v||""};if(d.ok){chat={title:d.title||"",phone:digits(d.phone)};onChat()}else if(view==="home")home()}
 });
 
 /* ---------- dados ---------- */
@@ -116,19 +119,35 @@ async function home(){
   if(cust){const r=await sb.from("orders").select("id,number,total,type,status,created_at",{count:"exact"}).eq("customer_id",cust.id).order("created_at",{ascending:false}).limit(15);orders=r.data||[];count=r.count||0}
   const name=cust?cust.name:(chat.title||"");
   const phone=cust?cust.phone:(chat.phone?fmtPhone(chat.phone):"");
-  frame("Olá! 👋",`
+  const st=!IN_EXT?'<div class="hint">Aberto fora do WhatsApp Web</div>'
+    :link.ok===false?'<div class="box" style="border-color:var(--red)">🔴 <b>Não estou falando com o WhatsApp.</b><div class="hint">Recarregue a aba do WhatsApp Web (F5) e depois toque em Verificar.</div><button class="btn o sm" id="pg" style="margin-top:8px">Verificar</button></div>'
+    :`<div class="hint" style="display:flex;justify-content:space-between;gap:8px"><span>${link.ok?"🟢 WhatsApp conectado":"⏳ Conectando…"}${chat.title?` · ${chat.phone?"número ✓":"sem número"}`:""}</span><button id="pg" style="color:var(--y);font-weight:700">Verificar</button></div>`;
+  frame("Olá! 👋",`${st}
     <div class="box"><div class="sec" style="margin:0"><div><b>Link do cardápio</b><small>${esc(link.replace("https://",""))}</small></div>
       <div class="iconrow"><button id="sl" title="Enviar no chat">➤</button><button id="cl" title="Copiar">⧉</button></div></div></div>
     ${chat.title||chat.phone?`<div class="box who"><div class="av">👤</div><div class="t"><b>${esc(name||"Contato")}</b><small>${phone?esc(phone):"Telefone não identificado"}</small>${cust?"":'<small style="display:block;color:var(--y)">Cliente novo</small>'}</div><button class="btn o sm" id="ed">${cust?"Editar":"Cadastrar"}</button></div>
     <div class="sec"><div><b>Pedidos do cliente</b><small>${cust?`Total de ${count} pedido${count===1?"":"s"}`:"Nenhum pedido ainda"}</small></div><button class="btn sm" id="np">➕ Novo pedido</button></div>
-    ${orders.map(o=>`<button class="ord" data-o="${o.id}"><b>Pedido Nº ${o.number}</b><div class="m">${brl(o.total)} · ${o.type==="delivery"?"Delivery":o.type==="retirada"?"Retirada":"Balcão"} · ${dt(o.created_at)}</div>${pill(o.status)}</button>`).join("")}`
+    ${orders.map(o=>`<div class="ord" style="display:flex;gap:8px;align-items:center"><button data-o="${o.id}" style="flex:1;text-align:left"><b>Pedido Nº ${o.number}</b><div class="m">${brl(o.total)} · ${o.type==="delivery"?"Delivery":o.type==="retirada"?"Retirada":"Balcão"} · ${dt(o.created_at)}</div>${pill(o.status)}</button><button class="btn o sm" data-r="${o.id}" title="Fazer o mesmo pedido de novo">↻ Repetir</button></div>`).join("")}`
     :`<div class="box empty" style="padding:28px 12px">💬 Abra a conversa de um cliente no WhatsApp.<br><br>O cliente aparece aqui sozinho, com os pedidos dele.</div>
       <button class="btn o" id="np">➕ Novo pedido sem conversa</button>`}`);
+  if($("#pg"))$("#pg").onclick=()=>{post({gb:"ping"});toast("Verificando…")};
   $("#sl").onclick=async()=>{if(await sendToChat(`Faça seu pedido pelo nosso cardápio online 🍻👇\n${link}`))toast("Link enviado")};
   $("#cl").onclick=async()=>{try{await navigator.clipboard.writeText(link);toast("Link copiado")}catch{toast(link)}};
   if($("#ed"))$("#ed").onclick=()=>custForm();
   $("#np").onclick=()=>novo();
   $$("[data-o]").forEach(b=>b.onclick=()=>detalhe(+b.dataset.o));
+  $$("[data-r]").forEach(b=>b.onclick=()=>repetir(+b.dataset.r));
+}
+async function repetir(id){
+  const o=await q(sb.from("orders").select("*,order_items(product_id,qty)").eq("id",id).single());
+  draft=newDraft(); draft.type=o.type==="balcao"?"retirada":o.type;
+  if(o.type==="delivery"){Object.assign(draft.addr,{cep:o.cep||draft.addr.cep,street:o.street||draft.addr.street,num:o.street_number||draft.addr.num,nb:o.neighborhood||draft.addr.nb,comp:o.complement||draft.addr.comp,ref:o.reference||draft.addr.ref});
+    const z=ZONES.find(z=>z.neighborhood.toLowerCase()===String(o.neighborhood||"").toLowerCase()); if(z)draft.addr.zone=z.id; draft.fee=money(o.delivery_fee)}
+  let miss=0;
+  o.order_items.forEach(i=>{const p=PRODS.find(x=>x.id===i.product_id&&x.status==="ativo");if(!p){miss++;return}const c=draft.cart.find(x=>x.p===p);c?c.n+=i.qty:draft.cart.push({p,n:i.qty})});
+  draft.pay=o.payment_method||null;
+  toast(miss?`Pedido repetido. ${miss} item(ns) em falta ficaram de fora.`:"Pedido repetido, confira e finalize");
+  novo();
 }
 function custForm(after){
   const c=cust||{name:chat.title&&!/^[\d\s()+\-]+$/.test(chat.title)?chat.title:"",phone:chat.phone?fmtPhone(chat.phone):""};
@@ -145,7 +164,7 @@ function custForm(after){
       if(ex){await q(sb.from("customers").update({name,phone,wa_name:chat.title||ex.wa_name}).eq("id",ex.id))}
       else{await q(sb.from("customers").insert({name,phone,wa_name:chat.title||null}))}
     }catch(e){$("#e").hidden=false;$("#e").textContent=/duplicate|unique/i.test(e.message)?"Esse telefone já é de outro cliente.":e.message;return}
-    await loadCusts(); if(!chat.phone) chat.phone=digits(phone); cust=await findCust(); toast("Cliente salvo"); (after||home)();
+    await loadCusts(); if(!chat.phone) chat.phone=digits(phone); const keep=draft; cust=await findCust(); draft=keep; toast("Cliente salvo"); (after||home)();
   };
 }
 
@@ -189,6 +208,7 @@ function novo(){
   $("#obs").oninput=e=>draft.obs=e.target.value;
   $("#go").onclick=()=>{
     if(draft.type==="delivery"&&!(a.street&&a.num)){$("#e").hidden=false;$("#e").textContent="Informe o endereço de entrega.";return}
+    if(!cust&&digits(chat.phone).length<10){toast("Informe o telefone do cliente pra salvar ele");return custForm(pagamento)}
     pagamento();
   };
 }
@@ -324,9 +344,10 @@ async function detalhe(id){
       <div class="line big"><span>Total</span><span class="price">${brl(o.total)}</span></div>
       <div class="hint" style="margin-top:6px">💳 ${esc(o.payment_method||"")}${o.change_for?` · paga com ${brl(o.change_for)} · <b style="color:var(--green)">troco ${brl(o.change_for-o.total)}</b>`:""}</div></div>
     ${o.notes?`<div class="box">📝 ${esc(o.notes)}</div>`:""}
-    <div class="row"><button class="btn o sm" id="rs">📲 Reenviar pedido no chat</button><button class="btn o sm" id="pr">🖨️ Imprimir</button>${!["cancelado","concluido"].includes(o.status)?`<button class="btn o sm" id="cc" style="color:var(--red)">Cancelar</button>`:""}</div>`,
+    <div class="row"><button class="btn o sm" id="rs">📲 Reenviar pedido no chat</button><button class="btn o sm" id="rp">↻ Repetir pedido</button><button class="btn o sm" id="pr">🖨️ Imprimir</button>${!["cancelado","concluido"].includes(o.status)?`<button class="btn o sm" id="cc" style="color:var(--red)">Cancelar</button>`:""}</div>`,
     next?`<button class="btn c" id="nx">${next[1]}</button><p class="hint" style="margin:0;text-align:center">A mensagem pro cliente é enviada na conversa</p>`:"",{back:home});
   $("#rs").onclick=()=>sendToChat(orderMsg(o,items));
+  $("#rp").onclick=()=>repetir(o.id);
   $("#pr").onclick=()=>printOrder(o,items);
   if($("#cc"))$("#cc").onclick=async e=>{if(!e.target.dataset.sure){e.target.dataset.sure=1;e.target.textContent="Confirmar cancelamento";return}
     await q(sb.from("orders").update({status:"cancelado"}).eq("id",o.id));toast("Pedido cancelado");detalhe(o.id)};

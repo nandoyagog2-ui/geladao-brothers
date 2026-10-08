@@ -17,20 +17,22 @@ async function toWhats(payload) {
 }
 async function pushChat() {
   const r = await toWhats({ gb: "chat" });
-  if (r) toApp({ gb: "chat-info", title: r.title || "", phone: r.phone || "" });
+  if (r) toApp({ gb: "chat-info", title: r.title || "", phone: r.phone || "", box: r.box, v: r.v });
+  else toApp({ gb: "chat-info", title: "", phone: "", err: "nowa" });
 }
 
 // a conversa mudou no WhatsApp -> avisa a tela
 chrome.runtime.onMessage.addListener(m => {
-  if (m && m.gb === "chat-changed") toApp({ gb: "chat-info", title: m.title || "", phone: m.phone || "" });
+  if (m && m.gb === "chat-changed") toApp({ gb: "chat-info", title: m.title || "", phone: m.phone || "", box: m.box, v: m.v });
 });
 
 window.addEventListener("message", async e => {
   if (e.origin !== SITE) return;
   const d = e.data || {};
   if (d.gb === "ready" || d.gb === "chat") pushChat();
+  if (d.gb === "ping") { const r = await toWhats({ gb: "chat" }); toApp({ gb: "pong", ok: !!r, ...(r || {}) }); }
   if (d.gb === "send") {
     const r = await toWhats({ gb: "send", text: d.text, auto: d.auto !== false, expect: d.expect || {} });
-    toApp({ gb: "sent", id: d.id, ok: !!(r && r.ok), reason: r && r.reason });
+    toApp({ gb: "sent", id: d.id, ok: !!(r && r.ok), sent: !!(r && r.sent), reason: r ? r.reason : "nowa" });
   }
 });
