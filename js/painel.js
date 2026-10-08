@@ -61,6 +61,13 @@ function readForm(fields,el){
   return o;
 }
 
+/* ---------- ponte com a extensão do WhatsApp Web ---------- */
+const IN_WA=new URLSearchParams(location.search).get("modo")==="whats"&&window.parent!==window;
+const waBridge={onChat:null,
+  ask(){if(IN_WA)parent.postMessage({gb:"chat"},"*")},
+  insert(text){if(IN_WA){parent.postMessage({gb:"insert",text},"*");toast("Resumo colado no WhatsApp")}}};
+window.addEventListener("message",e=>{if(!String(e.origin).startsWith("chrome-extension://"))return;const d=e.data||{};if(d.gb==="chat-info"&&waBridge.onChat)waBridge.onChat(d);if(d.gb==="no-chat")toast("Abra uma conversa no WhatsApp primeiro")});
+
 /* ---------- login ---------- */
 async function boot(){
   const {data:{session}}=await sb.auth.getSession();
@@ -209,48 +216,110 @@ function printOrder(o,items,addr,change){
 /* ================= NOVO PEDIDO (BALCÃO / TELEFONE) ================= */
 PAGES.novo=async m=>{
   const [cats,prods,zones]=await Promise.all([q(sb.from("categories").select("*").order("sort_order")),q(sb.from("products").select("id,name,price,promo_price,price_tiers,category_id,status").eq("status","ativo").order("name")),q(sb.from("delivery_zones").select("*").eq("active",true).order("neighborhood"))]);
-  let cart=[], type="balcao", term="";
+  let cart=[], type=IN_WA?"delivery":"balcao", term="", catF="", custs=null, found=null, done=null;
+  const f={name:"",phone:"",zone:zones[0]?String(zones[0].id):"",nb:"",street:"",num:"",comp:"",ref:"",pay:(S.payment_methods||[])[0]||"Pix",troco:"",fee:"",obs:""};
+  const KM=S.delivery_mode==="km";
   const base=p=>p.promo_price!=null&&+p.promo_price<+p.price?+p.promo_price:+p.price;
   const pr=p=>{const q=(cart.find(i=>i.p===p)||{n:0}).n;let b=base(p);(p.price_tiers||[]).forEach(x=>{if(q>=x.min_qty&&+x.price<b)b=+x.price});return b};
+  const sub=()=>cart.reduce((s,i)=>s+pr(i.p)*i.n,0);
+  const feeNow=()=>type!=="delivery"?0:KM?(num(f.fee)||0):+((zones.find(z=>String(z.id)===f.zone)||{}).fee||0);
+  async function lookup(){
+    const d=digits(f.phone); if(d.length<10){found=null;return}
+    if(!custs) custs=await q(sb.from("customers").select("*").limit(5000));
+    const c=custs.find(x=>digits(x.phone).slice(-9)===d.slice(-9));
+    found=c||null;
+    if(c){ if(!f.name)f.name=c.name||""; if(!f.street)f.street=c.street||""; if(!f.num)f.num=c.street_number||""; if(!f.ref)f.ref=c.reference||""; if(!f.comp)f.comp=c.complement||"";
+      if(c.neighborhood){f.nb=c.neighborhood;const z=zones.find(z=>z.neighborhood.toLowerCase()===c.neighborhood.toLowerCase());if(z)f.zone=String(z.id)} }
+  }
+  function fromChat(info){
+    if(!info) return; const t=String(info.title||"").trim(), d=digits(t);
+    if(d.length>=10&&d.length<=13&&/^[\d\s()+\-]+$/.test(t)){f.phone=t}else if(t){f.name=t}
+    if(info.phone) f.phone=info.phone;
+    lookup().then(draw);
+  }
+  waBridge.onChat=fromChat;
+  function summary(r){
+    const L=[`*Pedido #${r.number} · ${S.name}*`,""];
+    cart.forEach(i=>L.push(`${i.n}x ${i.p.name} — ${brl(pr(i.p)*i.n)}`));
+    L.push("",`Subtotal: ${brl(r.subtotal)}`);
+    if(type==="delivery") L.push(`Entrega: ${+r.delivery_fee?brl(r.delivery_fee):"Grátis"}`);
+    if(+r.discount) L.push(`Desconto: - ${brl(r.discount)}`);
+    L.push(`*Total: ${brl(r.total)}*`,`Pagamento: ${f.pay}`);
+    if(r.change!=null) L.push(`💵 Paga com ${brl(num(f.troco))} · troco de ${brl(r.change)}`);
+    if(type==="delivery") L.push("",`📍 ${f.street}, ${f.num}${f.comp?" ("+f.comp+")":""}${(KM?f.nb:(zones.find(z=>String(z.id)===f.zone)||{}).neighborhood)?" - "+(KM?f.nb:(zones.find(z=>String(z.id)===f.zone)||{}).neighborhood):""}`,...(f.ref?["Ref.: "+f.ref]:[]),"",`🛵 Prazo: ${S.delivery_time_min}-${S.delivery_time_max} min`);
+    else if(type==="retirada") L.push("",`🏪 Retirada na loja em ${S.prep_time_min||10} min`);
+    L.push("","Obrigado pela preferência! 🍻");
+    return L.join("\n");
+  }
   const draw=()=>{
-    const list=prods.filter(p=>!term||p.name.toLowerCase().includes(term)).slice(0,40);
-    const sub=cart.reduce((s,i)=>s+pr(i.p)*i.n,0);
-    m.innerHTML=`<div class="top"><h1>Novo pedido</h1></div><div class="cat2" style="grid-template-columns:minmax(0,1fr) 360px">
-      <div><input class="in" id="ns" placeholder="Buscar produto…" value="${esc(term)}"><div class="tw" style="margin-top:10px;max-height:60vh;overflow:auto"><table><tbody>${list.map(p=>`<tr><td>${esc(p.name)}<div class="muted" style="font-size:12px">${esc((cats.find(c=>c.id===p.category_id)||{}).name||"")}</div></td><td class="num price">${brl(pr(p))}</td><td class="num"><button class="btn sm" data-a="${p.id}">+</button></td></tr>`).join("")}</tbody></table></div></div>
+    if(done) return doneView();
+    const list=prods.filter(p=>(!term||p.name.toLowerCase().includes(term))&&(!catF||String(p.category_id)===catF)).slice(0,80);
+    const tot=sub()+feeNow();
+    const inp=(k,l,extra="")=>`<label class="fld"><span>${l}</span><input class="in" data-f="${k}" value="${esc(f[k])}" ${extra}></label>`;
+    m.innerHTML=`<div class="top"><h1>Novo pedido</h1>${IN_WA?`<button class="btn o sm" id="pull">📥 Puxar cliente da conversa</button>`:""}</div>
+    <div class="cat2" style="grid-template-columns:minmax(0,1fr) 360px">
+      <div><div class="row" style="flex-wrap:nowrap"><input class="in" id="ns" placeholder="Buscar produto…" value="${esc(term)}"><select class="in" id="nc" style="max-width:170px"><option value="">Todas as categorias</option>${cats.map(c=>`<option value="${c.id}" ${String(c.id)===catF?"selected":""}>${esc(c.name)}</option>`).join("")}</select></div>
+        <div class="tw" style="margin-top:10px;max-height:${IN_WA?"38vh":"60vh"};overflow:auto"><table><tbody>${list.map(p=>`<tr><td>${esc(p.name)}${(p.price_tiers||[]).length?` <span class="muted" style="font-size:11px">🔥 ${p.price_tiers.map(x=>x.min_qty+"+ "+brl(x.price)).join(" · ")}</span>`:""}</td><td class="num price">${brl(pr(p))}</td><td class="num"><button class="btn sm" data-a="${p.id}" aria-label="Adicionar">+</button></td></tr>`).join("")||'<tr><td class="empty">Nada encontrado.</td></tr>'}</tbody></table></div></div>
       <div class="card grid" style="align-content:start">
         <div class="tabs" style="margin:0">${[["balcao","Balcão"],["retirada","Retirada"],["delivery","Entrega"]].map(([k,l])=>`<button data-t="${k}" aria-current="${type===k}">${l}</button>`).join("")}</div>
-        ${cart.map((i,k)=>`<div class="line"><div><b>${i.n}x</b> ${esc(i.p.name)}</div><div class="row"><span>${brl(pr(i.p)*i.n)}</span><button class="icb" data-m="${k}" aria-label="Diminuir">−</button></div></div>`).join("")||'<p class="muted">Adicione produtos ao lado.</p>'}
-        <div class="line big"><span>Subtotal</span><span class="price">${brl(sub)}</span></div>
-        <label class="fld"><span>Nome do cliente</span><input class="in" id="cn"></label>
-        <label class="fld"><span>Telefone</span><input class="in" id="ct" inputmode="tel"></label>
-        ${type==="delivery"?`<label class="fld"><span>Bairro</span><select class="in" id="cz">${zones.map(z=>`<option value="${z.id}">${esc(z.neighborhood)} · ${brl(z.fee)}</option>`).join("")}</select></label>
-          <div class="grid" style="grid-template-columns:1fr 80px"><label class="fld"><span>Rua</span><input class="in" id="cs"></label><label class="fld"><span>Nº</span><input class="in" id="cnu"></label></div>
-          <label class="fld"><span>Referência</span><input class="in" id="cr"></label>`:""}
-        <label class="fld"><span>Pagamento</span><select class="in" id="cp">${(S.payment_methods||[]).concat(["Fiado"]).map(p=>`<option>${esc(p)}</option>`).join("")}</select></label>
-        <label class="fld"><span>Troco para (se dinheiro)</span><input class="in" id="cg" inputmode="decimal" placeholder="0,00"></label>
+        ${cart.map((i,k)=>`<div class="line"><div><b>${i.n}x</b> ${esc(i.p.name)}${pr(i.p)<base(i.p)?` <span style="color:var(--green);font-size:12px">atacado</span>`:""}</div><div class="row" style="flex-wrap:nowrap"><span>${brl(pr(i.p)*i.n)}</span><button class="icb" data-m="${k}" aria-label="Diminuir">−</button><button class="icb" data-p="${k}" aria-label="Aumentar">+</button></div></div>`).join("")||'<p class="muted" style="margin:0">Adicione produtos.</p>'}
+        <div class="line"><span class="muted">Subtotal</span><span>${brl(sub())}</span></div>
+        ${type==="delivery"?`<div class="line"><span class="muted">Entrega</span><span>${brl(feeNow())}</span></div>`:""}
+        <div class="line big"><span>Total</span><span class="price">${brl(tot)}</span></div>
+        ${inp("phone","Telefone / WhatsApp",'inputmode="tel"')}
+        ${found?`<p class="ok" style="margin:-4px 0 0">✓ Cliente já cadastrado${custs?"":""}, dados preenchidos</p>`:""}
+        ${inp("name","Nome do cliente")}
+        ${type==="delivery"?`${KM?inp("nb","Bairro")+inp("fee","Taxa de entrega (R$)",'inputmode="decimal" placeholder="0,00"'):`<label class="fld"><span>Bairro</span><select class="in" data-f="zone">${zones.map(z=>`<option value="${z.id}" ${String(z.id)===f.zone?"selected":""}>${esc(z.neighborhood)} · ${brl(z.fee)}</option>`).join("")}</select></label>`}
+          <div class="grid" style="grid-template-columns:1fr 80px">${inp("street","Rua")}${inp("num","Nº")}</div>${inp("comp","Complemento")}${inp("ref","Referência")}`:""}
+        <label class="fld"><span>Pagamento</span><select class="in" data-f="pay">${(S.payment_methods||[]).concat(["Fiado"]).map(p=>`<option ${p===f.pay?"selected":""}>${esc(p)}</option>`).join("")}</select></label>
+        ${/dinheiro/i.test(f.pay)?inp("troco","Troco para (R$)",'inputmode="decimal" placeholder="0,00"')+(num(f.troco)>tot?`<p class="ok" style="margin:-4px 0 0">Levar ${brl(num(f.troco)-tot)} de troco</p>`:""):""}
+        ${inp("obs","Observação")}
         <p class="err" id="e" hidden></p><button class="btn" id="fz" ${cart.length?"":"disabled"}>Lançar pedido</button></div></div>`;
     $("#ns").oninput=e=>{term=e.target.value.toLowerCase();const pos=e.target.selectionStart;draw();$("#ns").focus();$("#ns").setSelectionRange(pos,pos)};
+    $("#nc").onchange=e=>{catF=e.target.value;draw()};
+    if($("#pull"))$("#pull").onclick=()=>waBridge.ask();
+    $$("[data-f]",m).forEach(i=>{const k=i.dataset.f;
+      i.oninput=()=>{f[k]=i.value; if(k==="fee"||k==="troco"||k==="zone"){const pos=i.selectionStart;draw();const n=$(`[data-f="${k}"]`,m);if(n){n.focus();try{n.setSelectionRange(pos,pos)}catch{}}}};
+      i.onchange=async()=>{f[k]=i.value; if(k==="phone"){await lookup();draw()} if(k==="pay"||k==="zone")draw()}});
     $$("[data-a]",m).forEach(b=>b.onclick=()=>{const p=prods.find(x=>x.id==b.dataset.a);const i=cart.find(x=>x.p===p);i?i.n++:cart.push({p,n:1});draw()});
     $$("[data-m]",m).forEach(b=>b.onclick=()=>{const i=cart[+b.dataset.m];i.n--;if(!i.n)cart.splice(+b.dataset.m,1);draw()});
+    $$("[data-p]",m).forEach(b=>b.onclick=()=>{cart[+b.dataset.p].n++;draw()});
     $$("[data-t]",m).forEach(b=>b.onclick=()=>{type=b.dataset.t;draw()});
     $("#fz").onclick=async()=>{
-      const v=id=>($("#"+id)||{}).value||"";
-      if(type==="delivery"&&(!v("cs")||!v("cnu"))){$("#e").hidden=false;$("#e").textContent="Preencha rua e número.";return}
-      const pay=v("cp");
-      if(pay==="Fiado"&&digits(v("ct")).length<10){$("#e").hidden=false;$("#e").textContent="Pra lançar no fiado, informe o telefone do cliente.";return}
+      const err=t=>{$("#e").hidden=false;$("#e").textContent=t};
+      if(type==="delivery"&&(!f.street||!f.num)) return err("Preencha rua e número.");
+      if(f.pay==="Fiado"&&digits(f.phone).length<10) return err("Pra lançar no fiado, informe o telefone do cliente.");
+      if(/dinheiro/i.test(f.pay)&&f.troco&&!(num(f.troco)>sub()+feeNow())) return err("O troco precisa ser maior que o total.");
       $("#fz").disabled=true;
-      const wasOpen=S.is_open; if(!wasOpen) await q(sb.from("store_settings").update({is_open:true}).eq("id",1));
       try{
-        const r=await q(sb.rpc("create_order",{p:{customer_name:v("cn")||"Cliente balcão",customer_phone:v("ct"),type,zone_id:type==="delivery"?+v("cz"):null,street:v("cs"),street_number:v("cnu"),reference:v("cr"),payment_method:pay,change_for:v("cg")?String(num(v("cg"))):"",items:cart.map(i=>({product_id:i.p.id,qty:i.n}))}}));
+        const z=zones.find(z=>String(z.id)===f.zone);
+        const r=await q(sb.rpc("create_order",{p:{customer_name:f.name||"Cliente balcão",customer_phone:f.phone,type,
+          zone_id:type==="delivery"&&!KM&&z?z.id:null,fee_override:type==="delivery"?String(feeNow()):"",neighborhood:type==="delivery"?(KM?f.nb:(z||{}).neighborhood||""):"",
+          street:f.street,street_number:f.num,complement:f.comp,reference:f.ref,payment_method:f.pay,change_for:/dinheiro/i.test(f.pay)&&f.troco?String(num(f.troco)):"",notes:f.obs,
+          items:cart.map(i=>({product_id:i.p.id,qty:i.n}))}}));
         await q(sb.from("orders").update({status:type==="balcao"?"concluido":"em_preparo"}).eq("id",r.id));
-        if(pay==="Fiado"){const o=await q(sb.from("orders").select("customer_id").eq("id",r.id).single());if(o.customer_id)await q(sb.from("credit_entries").insert({customer_id:o.customer_id,kind:"compra",amount:r.total,description:"Pedido #"+r.number,order_id:r.id}))}
-        toast("Pedido #"+r.number+" lançado"); go("pedidos");
-      }catch(e){$("#fz").disabled=false;$("#e").hidden=false;$("#e").textContent=e.message}
-      finally{if(!wasOpen) await sb.from("store_settings").update({is_open:false}).eq("id",1)}
+        if(f.pay==="Fiado"){const o=await q(sb.from("orders").select("customer_id").eq("id",r.id).single());if(o.customer_id)await q(sb.from("credit_entries").insert({customer_id:o.customer_id,kind:"compra",amount:r.total,description:"Pedido #"+r.number,order_id:r.id}))}
+        custs=null; done={r,text:summary(r),phone:f.phone}; toast("Pedido #"+r.number+" lançado");
+        if(IN_WA) waBridge.insert(done.text);
+        draw();
+      }catch(e){$("#fz").disabled=false;err(e.message)}
     };
   };
-  draw();
+  function doneView(){
+    m.innerHTML=`<div class="top"><h1>Pedido #${done.r.number} lançado ✓</h1></div><div class="card grid" style="max-width:520px">
+      ${IN_WA?'<p class="ok" style="margin:0">O resumo foi colado na conversa do WhatsApp. Confira e aperte <b>enviar</b>.</p>':""}
+      <pre style="white-space:pre-wrap;margin:0;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;font:12.5px/1.5 ui-monospace,monospace" id="sm"></pre>
+      <div class="row">${IN_WA?'<button class="btn o" id="again">📋 Colar de novo no WhatsApp</button>':`<button class="btn o" id="cp">Copiar resumo</button>${digits(done.phone).length>=10?`<a class="btn o" target="_blank" rel="noopener" href="${waURL(done.phone,done.text)}">📲 Enviar pro cliente</a>`:""}`}
+      <button class="btn" id="nw">➕ Novo pedido</button><button class="btn o" id="vp">Ver pedidos</button></div></div>`;
+    $("#sm").textContent=done.text;
+    if($("#again"))$("#again").onclick=()=>waBridge.insert(done.text);
+    if($("#cp"))$("#cp").onclick=async()=>{try{await navigator.clipboard.writeText(done.text);toast("Copiado")}catch{toast("Selecione o texto e copie")}};
+    $("#nw").onclick=()=>PAGES.novo(m); $("#vp").onclick=()=>go("pedidos");
+  }
+  await draw();
+  if(IN_WA) waBridge.ask();
 };
+
 
 /* ================= HISTÓRICO ================= */
 PAGES.historico=async m=>{

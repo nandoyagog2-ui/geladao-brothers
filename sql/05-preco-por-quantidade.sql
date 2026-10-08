@@ -1,6 +1,7 @@
 -- =========================================================
 --  GELADÃO BROTHERS — parte 5
 --  Preço por quantidade (ex.: 12 un sai a R$ 6,80 cada; 24 un a R$ 6,70)
+--  + taxa de entrega digitada na mão nos pedidos lançados pelo painel
 -- =========================================================
 alter table products add column if not exists price_tiers jsonb default '[]'::jsonb;
 grant select (price_tiers) on products to anon;
@@ -16,7 +17,10 @@ declare
   v_total_qty int; v_tier numeric; v_base numeric;
 begin
   select * into s from store_settings where id = 1;
-  if not s.is_open then raise exception 'A loja está fechada no momento'; end if;
+  -- loja fechada bloqueia o cliente, mas não o pedido lançado pelo painel
+  if not s.is_open and coalesce(nullif(current_setting('request.jwt.claims', true), '')::jsonb->>'role', '') <> 'authenticated' then
+    raise exception 'A loja está fechada no momento';
+  end if;
 
   insert into orders (customer_name, customer_phone, type, address, neighborhood,
                       cep, street, street_number, complement, reference,
@@ -63,7 +67,12 @@ begin
 
   if v_sub < s.min_order then raise exception 'Pedido mínimo é R$ %', s.min_order; end if;
 
-  if coalesce(p->>'type','delivery') = 'delivery' then
+  if coalesce(p->>'type','delivery') = 'delivery' and nullif(p->>'fee_override','') is not null
+     and coalesce(nullif(current_setting('request.jwt.claims', true), '')::jsonb->>'role', '') = 'authenticated' then
+    -- pedido lançado pelo painel (logado): taxa digitada na mão
+    v_fee := greatest(0, (p->>'fee_override')::numeric);
+    v_nb := nullif(p->>'neighborhood', '');
+  elsif coalesce(p->>'type','delivery') = 'delivery' then
     if s.delivery_mode = 'km' then
       v_lat := nullif(p->>'lat','')::float8; v_lng := nullif(p->>'lng','')::float8;
       if v_lat is null or v_lng is null or s.store_lat is null or s.store_lng is null then
