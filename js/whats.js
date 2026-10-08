@@ -85,7 +85,6 @@ function orderMsg(o,items){
   if(+o.discount) L.push(`DESCONTO: - ${brl(o.discount)}`);
   L.push(`*VALOR FINAL: ${brl(o.total)}*`,"","PAGAMENTO",`*${o.payment_method}*: ${brl(o.total)}`);
   if(o.change_for) L.push(`💵 Vai pagar com: ${brl(o.change_for)}`,`🔁 *Levar troco de: ${brl(o.change_for-o.total)}*`);
-  if(/pix/i.test(o.payment_method||"")&&S.pix_key&&window.GBPix) L.push("","⚡ *Pix copia e cola* (copie o código abaixo e cole no app do banco):",GBPix.payload({key:S.pix_key,type:S.pix_key_type,name:S.pix_name||S.name,city:S.pix_city,amount:o.total,txid:"PEDIDO"+o.number}));
   if(o.notes) L.push("",`📝 ${o.notes}`);
   L.push("",`🕐 Prazo para ${o.type==="delivery"?"entrega: "+S.delivery_time_min+"-"+S.delivery_time_max:"retirada: "+(S.prep_time_min||10)} min`);
   return L.join("\n");
@@ -98,7 +97,7 @@ function frame(title,body,foot,{back,sub}={}){
     ${back?"":`<button class="pill-btn ${S.is_open?"on":"off"}" id="op">${S.is_open?"● Aberto":"● Fechado"}</button><a class="back" href="${SITE}/painel/" target="_blank" rel="noopener" title="Abrir painel completo">↗</a>`}</div>
     <div class="body">${body}</div>${foot?`<div class="foot">${foot}</div>`:""}`;
   if(back) $("#bk").onclick=back;
-  const op=$("#op"); if(op) op.onclick=async()=>{S.is_open=!S.is_open;await q(sb.from("store_settings").update({is_open:S.is_open}).eq("id",1));toast(S.is_open?"Loja aberta":"Loja fechada");frameRefresh()};
+  const op=$("#op"); if(op) op.onclick=async()=>{S.is_open=!S.is_open;{const r=await sb.rpc("set_store_open",{p_open:S.is_open});if(r.error)await q(sb.from("store_settings").update({is_open:S.is_open}).eq("id",1));}toast(S.is_open?"Loja aberta":"Loja fechada");frameRefresh()};
 }
 let frameRefresh=()=>home();
 

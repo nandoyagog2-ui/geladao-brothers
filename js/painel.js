@@ -89,18 +89,36 @@ let S={}, page="pedidos", newCount=0;
 const MENU=[["Operação",[["pedidos","🧾","Pedidos"],["novo","➕","Novo pedido (telefone)"],["historico","📋","Histórico"],["caixa","💰","Caixa / venda balcão"]]],
   ["Cardápio",[["catalogo","🍺","Catálogo"],["complementos","🧊","Complementos"],["destaques","🔥","Destaques e promoções"]]],
   ["Clientes",[["clientes","👥","Clientes e fiado"],["avaliacoes","⭐","Avaliações"],["cupons","🎟️","Cupons"],["fidelidade","🏆","Fidelidade"]]],
-  ["Gestão",[["desempenho","📈","Desempenho"],["estoque","📦","Estoque"],["financeiro","💸","Despesas"],["delivery","🛵","Delivery e bairros"],["config","⚙️","Configurações"]]]];
+  ["Gestão",[["desempenho","📈","Desempenho"],["estoque","📦","Estoque"],["financeiro","💸","Despesas"],["delivery","🛵","Delivery e bairros"],["equipe","🪪","Equipe e acessos"],["config","⚙️","Configurações"]]]];
+/* ---------- quem está logado: dono pode tudo, funcionário só o básico ---------- */
+let ME={role:"dono",name:"",email:""};
+const OWNER=()=>ME.role==="dono";
+const EMP_PAGES=["pedidos","novo","historico","caixa","estoque","clientes"];
+const canSee=p=>OWNER()||EMP_PAGES.includes(p);
+async function loadMe(){
+  const {data:{user}}=await sb.auth.getUser(); ME.email=user?user.email:"";
+  const r=await sb.from("staff").select("*").eq("user_id",user.id).maybeSingle();
+  if(r.error){ME.role="dono";ME.name=ME.email.split("@")[0];return true}   // parte 9 ainda não rodada: tudo liberado
+  if(!r.data||!r.data.active) return false;
+  ME.role=r.data.role; ME.name=r.data.name||ME.email.split("@")[0]; return true;
+}
+async function setOpen(v){
+  const r=await sb.rpc("set_store_open",{p_open:v});
+  if(r.error&&/set_store_open|function/i.test(r.error.message)) return q(sb.from("store_settings").update({is_open:v}).eq("id",1));
+  if(r.error) throw (toast(r.error.message),r.error);
+}
 async function shell(){
   S=await q(sb.from("store_settings").select("*").eq("id",1).single());
+  if(!(await loadMe())){root.innerHTML=`<div class="login"><div class="card grid" style="max-width:380px"><h1>Acesso bloqueado</h1><p>O login <b>${esc(ME.email)}</b> ainda não foi liberado. Peça pro dono da loja liberar em <b>Equipe e acessos</b>.</p><button class="btn" id="lo">Sair</button></div></div>`;$("#lo").onclick=async()=>{await sb.auth.signOut();location.reload()};return}
   root.innerHTML=`<div class="mobilebar"><button class="x" id="mb" aria-label="Menu">☰</button><b>${esc(S.name)}</b></div>
-  <div class="shell"><aside class="side" id="side"><div class="brand"><div class="lg">${S.logo_url?`<img src="${esc(S.logo_url)}" alt="">`:"GB"}</div><div><b>${esc(S.name)}</b><small>Painel de gestão</small></div></div>
+  <div class="shell"><aside class="side" id="side"><div class="brand"><div class="lg">${S.logo_url?`<img src="${esc(S.logo_url)}" alt="">`:"GB"}</div><div><b>${esc(S.name)}</b><small>${esc(ME.name)} · ${OWNER()?"Dono":"Funcionário"}</small></div></div>
     <button class="openbtn" id="ob"></button><button class="openbtn off" id="snd"></button><nav class="menu" id="menu"></nav>
     <a class="btn o sm" href="/" target="_blank" rel="noopener" style="margin:14px 10px 0;display:flex">Ver cardápio ↗</a>
     <button class="out" id="lo">Sair</button></aside><main class="main" id="main"></main></div>`;
   $("#mb").onclick=()=>$("#side").classList.toggle("open");
   $("#side").onclick=e=>{if(e.target.id==="side")$("#side").classList.remove("open")};
   $("#lo").onclick=async()=>{await sb.auth.signOut();location.reload()};
-  $("#ob").onclick=async()=>{S.is_open=!S.is_open;await q(sb.from("store_settings").update({is_open:S.is_open}).eq("id",1));openBtn();toast(S.is_open?"Loja aberta":"Loja fechada")};
+  $("#ob").onclick=async()=>{S.is_open=!S.is_open;await setOpen(S.is_open);openBtn();toast(S.is_open?"Loja aberta":"Loja fechada")};
   $("#snd").onclick=e=>{e.stopPropagation();unlockAudio();const ready=audioCtx&&audioCtx.state==="running";
     if(!soundOn){soundOn=true}else if(ready){beep();toast("Esse é o som de pedido novo")}
     try{localStorage.setItem("gb_sound",soundOn?"on":"off")}catch{};soundBtn()};
@@ -109,11 +127,11 @@ async function shell(){
 }
 function openBtn(){const b=$("#ob");b.className="openbtn"+(S.is_open?"":" off");b.innerHTML=`<i></i>${S.is_open?"Loja aberta · clique p/ fechar":"Loja fechada · clique p/ abrir"}`}
 function menu(){
-  $("#menu").innerHTML=MENU.map(([s,items])=>`<div class="sec">${s}</div>`+items.map(([k,i,l])=>`<button data-p="${k}" aria-current="${page===k}"><span>${i}</span>${l}${k==="pedidos"&&newCount?`<span class="badge">${newCount}</span>`:""}</button>`).join("")).join("");
+  $("#menu").innerHTML=MENU.map(([s,items])=>[s,items.filter(([k])=>canSee(k))]).filter(([,items])=>items.length).map(([s,items])=>`<div class="sec">${s}</div>`+items.map(([k,i,l])=>`<button data-p="${k}" aria-current="${page===k}"><span>${i}</span>${l}${k==="pedidos"&&newCount?`<span class="badge">${newCount}</span>`:""}</button>`).join("")).join("");
   $$("#menu [data-p]").forEach(b=>b.onclick=()=>{go(b.dataset.p);$("#side").classList.remove("open")});
 }
 const PAGES={};
-function go(p){if(!PAGES[p])p="pedidos";page=p;location.hash=p;menu();closeDr();const m=$("#main");m.innerHTML='<div class="empty">Carregando…</div>';PAGES[p](m).catch(e=>{m.innerHTML=`<div class="empty">Não foi possível carregar. ${esc(e.message||"")}</div>`})}
+function go(p){if(!PAGES[p]||!canSee(p))p="pedidos";page=p;location.hash=p;menu();closeDr();const m=$("#main");m.innerHTML='<div class="empty">Carregando…</div>';PAGES[p](m).catch(e=>{m.innerHTML=`<div class="empty">Não foi possível carregar. ${esc(e.message||"")}</div>`})}
 
 /* ---------- avisos de pedido novo ---------- */
 let audioCtx=null, soundOn=(()=>{try{return localStorage.getItem("gb_sound")!=="off"}catch{return true}})(), lastNew=null;
@@ -579,12 +597,12 @@ PAGES.clientes=async m=>{
     $("#cl").innerHTML=list.slice(0,300).map(c=>`<tr data-c="${c.id}" style="cursor:pointer"><td><b>${esc(c.name)}</b></td><td>${esc(c.phone||"")}</td><td>${esc(c.neighborhood||"")}</td><td class="num">${c.loyalty_points||0}</td><td class="num" style="color:${B[c.id]>0?"var(--red)":"inherit"}">${B[c.id]?brl(B[c.id]):"—"}</td></tr>`).join("")||'<tr><td colspan="5" class="empty">Nenhum cliente.</td></tr>';
     $$("[data-c]",m).forEach(r=>r.onclick=()=>custDrawer(cs.find(c=>c.id==r.dataset.c)));
   };
-  m.innerHTML=`<div class="top"><h1>Clientes e fiado</h1><div class="row"><button class="btn" id="nc">➕ Novo cliente</button></div></div>
+  m.innerHTML=`<div class="top"><h1>Clientes e fiado</h1><div class="row">${OWNER()?'<button class="btn" id="nc">➕ Novo cliente</button>':'<span class="muted">Só consulta</span>'}</div></div>
     <div class="stats"><div class="stat"><small>Clientes</small><b>${cs.length}</b></div><div class="stat"><small>Devendo no fiado</small><b>${Object.values(B).filter(v=>v>0).length}</b></div><div class="stat"><small>Total a receber</small><b style="color:var(--red)">${brl(Object.values(B).filter(v=>v>0).reduce((s,v)=>s+v,0))}</b></div></div>
     <div class="row" style="margin-bottom:10px"><input class="in" id="cq" placeholder="Buscar nome ou telefone…" style="max-width:320px"><label class="chk"><input type="checkbox" id="od"> Só quem está devendo</label></div>
     <div class="tw"><table><thead><tr><th>Nome</th><th>Telefone</th><th>Bairro</th><th class="num">Pontos</th><th class="num">Fiado</th></tr></thead><tbody id="cl"></tbody></table></div>`;
   $("#cq").oninput=e=>{term=e.target.value.toLowerCase();draw()}; $("#od").onchange=e=>{onlyDebt=e.target.checked;draw()};
-  $("#nc").onclick=()=>custDrawer(null);
+  if($("#nc"))$("#nc").onclick=()=>custDrawer(null);
   draw();
   async function custDrawer(c){
     const CF=[{k:"name",l:"Nome"},{k:"phone",l:"Telefone"},{k:"street",l:"Rua"},{k:"street_number",l:"Número"},{k:"neighborhood",l:"Bairro"},{k:"reference",l:"Referência"},{k:"credit_limit",l:"Limite do fiado (R$) · 0 = sem limite",t:"money"},{k:"loyalty_points",l:"Pontos de fidelidade",t:"int"},{k:"notes",l:"Anotações",t:"area"}];
@@ -592,16 +610,16 @@ PAGES.clientes=async m=>{
     const ords=c?await q(sb.from("orders").select("id,number,total,created_at,status").eq("customer_id",c.id).order("created_at",{ascending:false}).limit(20)):[];
     const bal=c?B[c.id]||0:0;
     const dr=drawer(c?esc(c.name):"Novo cliente",`${c?`<div class="card"><div class="line big"><span>Saldo do fiado</span><span style="color:${bal>0?"var(--red)":"var(--green)"}">${brl(bal)}</span></div>${+c.credit_limit>0&&bal>+c.credit_limit?'<p class="err">Passou do limite do fiado.</p>':""}
-      <div class="grid g2" style="margin-top:8px"><input class="in" id="fv" inputmode="decimal" placeholder="Valor R$"><input class="in" id="fd" placeholder="Descrição (opcional)"></div>
-      <div class="row" style="margin-top:8px"><button class="btn r sm" id="fc">➕ Lançar compra</button><button class="btn g sm" id="fp">✔ Registrar pagamento</button></div>
+      ${OWNER()?`<div class="grid g2" style="margin-top:8px"><input class="in" id="fv" inputmode="decimal" placeholder="Valor R$"><input class="in" id="fd" placeholder="Descrição (opcional)"></div>
+      <div class="row" style="margin-top:8px"><button class="btn r sm" id="fc">➕ Lançar compra</button><button class="btn g sm" id="fp">✔ Registrar pagamento</button></div>`:""}
       ${ent.length?`<div style="margin-top:10px">${ent.map(e=>`<div class="line"><span>${dt(e.created_at)} · ${esc(e.description||(e.kind==="compra"?"Compra":"Pagamento"))}</span><b style="color:${e.kind==="compra"?"var(--red)":"var(--green)"}">${e.kind==="compra"?"+":"−"} ${brl(e.amount)}</b></div>`).join("")}</div>`:""}</div>`:""}
-      ${formHTML(CF,c||{credit_limit:0,loyalty_points:0})}
+      ${OWNER()?formHTML(CF,c||{credit_limit:0,loyalty_points:0}):`<div class="card">${[["Telefone",c.phone],["Endereço",[c.street,c.street_number].filter(Boolean).join(", ")],["Bairro",c.neighborhood],["Referência",c.reference],["Limite do fiado",+c.credit_limit?brl(c.credit_limit):"Sem limite"],["Pontos",c.loyalty_points||0],["Anotações",c.notes]].filter(x=>x[1]).map(([l,v])=>`<div class="line"><span class="muted">${l}</span><span>${esc(v)}</span></div>`).join("")}</div>`}
       ${ords.length?`<div class="card"><b>Últimos pedidos</b>${ords.map(o=>`<div class="line"><span>#${o.number} · ${dt(o.created_at)} ${pill(o.status)}</span><b>${brl(o.total)}</b></div>`).join("")}</div>`:""}<p class="err" id="e" hidden></p>`,
-      `${c&&c.phone?`<a class="btn o" target="_blank" rel="noopener" href="${waURL(c.phone)}">WhatsApp</a>`:""}<button class="btn" id="sv">Salvar</button>`);
-    $("#sv",dr).onclick=async()=>{const v=readForm(CF,dr);if(!v.name){$("#e",dr).hidden=false;$("#e",dr).textContent="Informe o nome.";return}v.credit_limit=v.credit_limit??0;v.loyalty_points=v.loyalty_points??0;
+      `${c&&c.phone?`<a class="btn o" target="_blank" rel="noopener" href="${waURL(c.phone)}">WhatsApp</a>`:""}${OWNER()?'<button class="btn" id="sv">Salvar</button>':""}`);
+    if(OWNER())$("#sv",dr).onclick=async()=>{const v=readForm(CF,dr);if(!v.name){$("#e",dr).hidden=false;$("#e",dr).textContent="Informe o nome.";return}v.credit_limit=v.credit_limit??0;v.loyalty_points=v.loyalty_points??0;
       try{c?await q(sb.from("customers").update(v).eq("id",c.id)):await q(sb.from("customers").insert(v));closeDr();toast("Cliente salvo");PAGES.clientes(m)}catch(e){$("#e",dr).hidden=false;$("#e",dr).textContent=/duplicate|unique/i.test(e.message)?"Já existe um cliente com esse telefone.":e.message}};
     const fiado=async kind=>{const v=num($("#fv",dr).value);if(!v||v<=0){toast("Informe o valor");return}await q(sb.from("credit_entries").insert({customer_id:c.id,kind,amount:v,description:$("#fd",dr).value.trim()||null}));toast(kind==="compra"?"Compra lançada":"Pagamento registrado");closeDr();await PAGES.clientes(m);};
-    if(c){$("#fc",dr).onclick=()=>fiado("compra");$("#fp",dr).onclick=()=>fiado("pagamento")}
+    if(c&&OWNER()){$("#fc",dr).onclick=()=>fiado("compra");$("#fp",dr).onclick=()=>fiado("pagamento")}
   }
 };
 
@@ -664,13 +682,13 @@ PAGES.estoque=async m=>{
   const draw=()=>{
     const kids=id=>prods.filter(x=>x.stock_parent_id===id);
     const list=prods.filter(p=>!p.stock_parent_id&&(all||p.track_stock)&&(!term||p.name.toLowerCase().includes(term)||kids(p.id).some(k=>k.name.toLowerCase().includes(term))));
-    const sugg=autoLinks();
+    const sugg=OWNER()?autoLinks():[];
     const low=prods.filter(p=>p.track_stock&&+p.stock_qty<=+p.stock_min);
-    $("#er").innerHTML=`<div class="stats"><div class="stat"><small>Produtos controlados</small><b>${prods.filter(p=>p.track_stock).length}</b></div><div class="stat"><small>Abaixo do mínimo</small><b style="color:${low.length?"var(--red)":"inherit"}">${low.length}</b></div><div class="stat"><small>Valor em estoque (custo)</small><b>${brl(prods.filter(p=>p.track_stock).reduce((s,p)=>s+Math.max(0,+p.stock_qty)*(+p.cost_price||0),0))}</b></div></div>
+    $("#er").innerHTML=`<div class="stats"><div class="stat"><small>Produtos controlados</small><b>${prods.filter(p=>p.track_stock).length}</b></div><div class="stat"><small>Abaixo do mínimo</small><b style="color:${low.length?"var(--red)":"inherit"}">${low.length}</b></div>${OWNER()?`<div class="stat"><small>Valor em estoque (custo)</small><b>${brl(prods.filter(p=>p.track_stock).reduce((s,p)=>s+Math.max(0,+p.stock_qty)*(+p.cost_price||0),0))}</b></div>`:""}</div>
       ${sugg.length?`<div class="alert" style="margin-bottom:12px"><b>📦 Achei ${sugg.length} fardo(s) que podem usar o estoque da unidade</b> (ex.: "${esc(sugg[0].kid.name)}" → ${+sugg[0].f} un de "${esc(sugg[0].par.name)}"). <button class="btn sm" id="al" style="margin-left:6px">Ver e ligar</button></div>`:""}
       ${!prods.some(p=>p.track_stock)?'<p class="alert">Nenhum produto com estoque controlado ainda. Marque "Mostrar todos" abaixo e clique em <b>Controlar</b> nos produtos que quiser acompanhar.</p>':""}
       <div class="tw"><table><thead><tr><th>Produto</th><th class="num">Estoque</th><th class="num">Mínimo</th><th></th></tr></thead><tbody>${list.slice(0,300).map(p=>`<tr><td>${esc(p.name)} ${p.track_stock&&+p.stock_qty<=+p.stock_min?'<span class="pill p-cancelado">Repor</span>':""}${kids(p.id).map(k=>`<div class="muted" style="font-size:12px">↳ ${esc(k.name)} tira ${+k.stock_factor} un${p.track_stock?` · dá <b>${Math.max(0,Math.floor(+p.stock_qty/(+k.stock_factor||1)))}</b>`:""}</div>`).join("")}</td><td class="num"><b>${p.track_stock?+p.stock_qty:"—"}</b></td><td class="num">${p.track_stock?+p.stock_min:"—"}</td>
-        <td class="num">${p.track_stock?`<button class="btn sm" data-in="${p.id}">Entrada</button> <button class="btn o sm" data-aj="${p.id}">Ajustar</button> <button class="btn o sm" data-hi="${p.id}">Histórico</button>`:`<button class="btn o sm" data-tr="${p.id}">Controlar</button>`}</td></tr>`).join("")||'<tr><td colspan="4" class="empty">Nada aqui.</td></tr>'}</tbody></table></div>`;
+        <td class="num">${!OWNER()?(p.track_stock?`<button class="btn o sm" data-hi="${p.id}">Histórico</button>`:""):p.track_stock?`<button class="btn sm" data-in="${p.id}">Entrada</button> <button class="btn o sm" data-aj="${p.id}">Ajustar</button> <button class="btn o sm" data-hi="${p.id}">Histórico</button>`:`<button class="btn o sm" data-tr="${p.id}">Controlar</button>`}</td></tr>`).join("")||'<tr><td colspan="4" class="empty">Nada aqui.</td></tr>'}</tbody></table></div>`;
     if($("#al",m))$("#al",m).onclick=()=>{const dr=drawer("Ligar fardos ao estoque da unidade",`<p class="muted" style="margin:0">Cada fardo vendido vai tirar as unidades do estoque do produto da direita. Desmarque o que não estiver certo.</p>
       ${sugg.map((s,i)=>`<label class="chk" style="font-weight:500;align-items:flex-start"><input type="checkbox" data-l="${i}" checked> <span><b>${esc(s.kid.name)}</b><br><span class="muted">tira ${+s.f} un de</span> ${esc(s.par.name)}</span></label>`).join("")}`,`<button class="btn" id="lk">Ligar selecionados</button>`);
       $("#lk",dr).onclick=async()=>{const pick=$$("[data-l]",dr).filter(x=>x.checked).map(x=>sugg[+x.dataset.l]);$("#lk",dr).disabled=true;
@@ -694,7 +712,7 @@ PAGES.estoque=async m=>{
       const par=prods.find(x=>x.id!==k.id&&!x.stock_parent_id&&nm(x.name)===nm(mm[2]));if(par&&+mm[1]>1)out.push({kid:k,par,f:+mm[1]})});
     return out;
   }
-  m.innerHTML=`<div class="top"><h1>Estoque</h1><div class="row"><input class="in" id="eq" placeholder="Buscar produto…" style="width:220px"><label class="chk"><input type="checkbox" id="ea"> Mostrar todos</label></div></div><div id="er"></div>`;
+  m.innerHTML=`<div class="top"><h1>Estoque${OWNER()?"":' <small class="muted" style="font-size:13px">· só consulta</small>'}</h1><div class="row"><input class="in" id="eq" placeholder="Buscar produto…" style="width:220px"><label class="chk"><input type="checkbox" id="ea"> Mostrar todos</label></div></div><div id="er"></div>`;
   $("#eq").oninput=e=>{term=e.target.value.toLowerCase();draw()}; $("#ea").onchange=e=>{all=e.target.checked;draw()};
   draw();
 };
@@ -706,16 +724,16 @@ PAGES.caixa=async m=>{
   if(!open){
     const past=await q(sb.from("cash_sessions").select("*").not("closed_at","is",null).order("opened_at",{ascending:false}).limit(20));
     m.innerHTML=`<div class="top"><h1>Caixa</h1></div><div class="grid g2"><div class="card grid" style="align-content:start"><b style="font-size:16px">🔒 Caixa fechado · abrir turno</b>
-        <label class="fld"><span>Quem está abrindo o caixa (funcionário)</span><input class="in" id="op" placeholder="Ex.: João" value="${esc(localStorage.getItem("gb_operador")||"")}"></label>
+        <label class="fld"><span>Quem está abrindo o caixa (funcionário)</span><input class="in" id="op" placeholder="Ex.: João" value="${esc(OWNER()?(localStorage.getItem("gb_operador")||""):ME.name)}" ${OWNER()?"":"readonly"}></label>
         <label class="fld"><span>Dinheiro na gaveta pra começar (troco)</span><input class="in" id="oa" inputmode="decimal" placeholder="0,00"></label>
-        <p class="err" id="e" hidden></p><button class="btn" id="ob">🔓 Abrir caixa</button>
+        <p class="err" id="e" hidden></p><button class="btn" id="abx">🔓 Abrir caixa</button>
         <p class="muted" style="margin:0;font-size:12px">Com o caixa aberto aparece a tela de venda no balcão, com todos os produtos.</p></div>
       <div class="card"><b>Turnos anteriores</b>${past.map(s=>{const dif=s.expected_amount!=null?+s.closing_amount-+s.expected_amount:null;return `<div class="line"><span>👤 ${esc(s.operator||"—")} · ${dt(s.opened_at)} → ${hm(s.closed_at)}</span><span style="text-align:right"><b>${brl(s.closing_amount)}</b>${dif!=null&&Math.abs(dif)>=0.01?`<div style="font-size:12px;color:${dif<0?"var(--red)":"var(--green)"}">${dif<0?"faltou":"sobrou"} ${brl(Math.abs(dif))}</div>`:""}</span></div>`}).join("")||'<p class="muted">Nenhum ainda.</p>'}</div></div>`;
-    $("#ob").onclick=async()=>{const op=$("#op").value.trim();if(!op){$("#e").hidden=false;$("#e").textContent="Informe quem está abrindo o caixa.";return}
+    $("#abx").onclick=async()=>{const op=$("#op").value.trim();if(!op){$("#e").hidden=false;$("#e").textContent="Informe quem está abrindo o caixa.";return}
       try{localStorage.setItem("gb_operador",op)}catch{}
-      $("#ob").disabled=true;
+      $("#abx").disabled=true;
       try{await q(sb.from("cash_sessions").insert({opening_amount:num($("#oa").value)||0,operator:op,opened_by:email}));toast("Caixa aberto · bom turno, "+op+"!");PAGES.caixa(m)}
-      catch(err){$("#ob").disabled=false;$("#e").hidden=false;$("#e").textContent="Não foi possível abrir: "+err.message+(/operator|column/i.test(err.message)?" · rode a parte 8 do banco no Supabase.":"")}};
+      catch(err){$("#abx").disabled=false;$("#e").hidden=false;$("#e").textContent="Não foi possível abrir: "+err.message+(/operator|column/i.test(err.message)?" · rode a parte 8 do banco no Supabase.":"")}};
     return;
   }
   // ---------- caixa aberto: PDV ----------
@@ -762,7 +780,6 @@ PAGES.caixa=async m=>{
         ${isCash?`<label class="row" style="flex-wrap:nowrap"><span class="muted" style="flex:1">Cliente pagou com</span><input class="in" id="tr" inputmode="decimal" style="width:110px" value="${esc(troco)}" placeholder="0,00"></label>
           <div class="row">${[10,20,50,100].filter(v=>v>=t).slice(0,4).map(v=>`<button class="btn o sm" data-v="${v}">${brl(v)}</button>`).join("")}</div>
           ${tr>t?`<div class="line big" style="color:var(--green)"><span>Troco</span><span>${brl(tr-t)}</span></div>`:tr&&tr<t?`<p class="err" style="margin:0">Faltam ${brl(t-tr)}</p>`:""}`:""}
-        ${/pix/i.test(pay)&&S.pix_key&&t>0&&window.GBPix?`<div style="text-align:center;background:#fff;border-radius:10px;padding:8px;max-width:220px;justify-self:center">${GBPix.qrSvg(GBPix.payload({key:S.pix_key,type:S.pix_key_type,name:S.pix_name||S.name,city:S.pix_city,amount:t,txid:"BALCAO"}),200)}</div><p class="muted" style="margin:0;text-align:center;font-size:12px">Cliente escaneia o QR com o app do banco · ${brl(t)}</p>`:/pix/i.test(pay)&&!S.pix_key?'<p class="err" style="margin:0">Cadastre a chave Pix em Configurações pra mostrar o QR Code.</p>':""}
         <div class="fld"><span>Cliente (opcional${pay==="Fiado"?", obrigatório no fiado":""})</span><input class="in" id="cs" list="cl" placeholder="Nome ou telefone" value="${cli?esc(cli.name+" · "+(cli.phone||"")):""}"><datalist id="cl">${custs.map(c=>`<option value="${esc(c.name+" · "+(c.phone||""))}">`).join("")}</datalist></div>
         <label class="chk"><input type="checkbox" id="pi" ${printIt?"checked":""}> Imprimir cupom</label>
         <p class="err" id="e" hidden></p>
@@ -894,9 +911,30 @@ PAGES.delivery=async m=>{
 };
 
 /* ================= CONFIGURAÇÕES ================= */
+/* ================= EQUIPE ================= */
+PAGES.equipe=async m=>{
+  const r=await sb.from("staff").select("*").order("role").order("name");
+  if(r.error){m.innerHTML=`<div class="top"><h1>Equipe e acessos</h1></div><p class="alert">Pra liberar logins de funcionário, rode a <b>parte 9</b> do banco (arquivo <b>09-equipe-e-permissoes.sql</b>) no Supabase.</p>`;return}
+  const st=r.data;
+  m.innerHTML=`<div class="top"><h1>Equipe e acessos</h1><button class="btn" id="ns">➕ Liberar funcionário</button></div>
+    <div class="grid g2"><div class="card"><b>Quem entra no painel</b>${st.map(x=>`<div class="line"><span><b>${esc(x.name||"—")}</b> <span class="muted">${esc(x.email||"")}</span><br><span class="pill ${x.active?(x.role==="dono"?"p-concluido":"p-em_preparo"):"p-inativo"}">${x.active?(x.role==="dono"?"Dono · acesso total":"Funcionário · acesso básico"):"Bloqueado"}</span></span><button class="btn o sm" data-s="${x.user_id}">Editar</button></div>`).join("")||'<p class="muted">Ninguém ainda.</p>'}</div>
+    <div class="card grid" style="align-content:start"><b>Como criar o login do funcionário</b>
+      <ol style="margin:0;padding-left:18px;line-height:1.6"><li>No <b>Supabase</b>, menu da esquerda: <b>Authentication</b> → <b>Users</b>.</li><li>Botão verde <b>Add user</b> → <b>Create new user</b>.</li><li>Coloque o e-mail e uma senha pro funcionário, deixe marcado <b>Auto Confirm User</b> e clique <b>Create user</b>.</li><li>Volte aqui, clique <b>➕ Liberar funcionário</b> e digite o mesmo e-mail.</li></ol>
+      <p class="muted" style="margin:0"><b>Funcionário pode:</b> ver e mudar pedidos, fazer pedido por telefone, abrir/fechar caixa, sangria e suprimento, vender no balcão (inclusive fiado), consultar estoque e consultar quem deve no fiado.<br><b>Não pode:</b> mexer em estoque, produtos, preços, promoções, cupons, despesas, delivery, configurações nem ver o desempenho.</p></div></div>`;
+  const edit=x=>{const dr=drawer(x?"Editar acesso":"Liberar funcionário",`<label class="fld"><span>E-mail do login (o mesmo criado no Supabase)</span><input class="in" id="se" type="email" value="${esc(x?x.email:"")}" ${x?"readonly":""}></label>
+      <label class="fld"><span>Nome (aparece no caixa)</span><input class="in" id="sn" value="${esc(x?x.name||"":"")}" placeholder="Ex.: João"></label>
+      <label class="fld"><span>Acesso</span><select class="in" id="sr"><option value="funcionario">Funcionário · básico</option><option value="dono" ${x&&x.role==="dono"?"selected":""}>Dono · acesso total</option></select></label><p class="err" id="e" hidden></p>`,
+      `${x&&x.email!==ME.email?`<button class="btn r" id="bl">${x.active?"Bloquear acesso":"Desbloquear"}</button>`:""}<button class="btn" id="sv">Salvar</button>`);
+    $("#sv",dr).onclick=async()=>{const {error}=await sb.rpc("add_staff",{p_email:$("#se",dr).value.trim(),p_name:$("#sn",dr).value.trim(),p_role:$("#sr",dr).value});
+      if(error){$("#e",dr).hidden=false;$("#e",dr).textContent=error.message;return}closeDr();toast("Acesso salvo");PAGES.equipe(m)};
+    if($("#bl",dr))$("#bl",dr).onclick=async()=>{await q(sb.from("staff").update({active:!x.active}).eq("user_id",x.user_id));closeDr();toast(x.active?"Acesso bloqueado":"Acesso liberado");PAGES.equipe(m)};
+  };
+  $("#ns").onclick=()=>edit(null); $$("[data-s]",m).forEach(b=>b.onclick=()=>edit(st.find(x=>x.user_id===b.dataset.s)));
+};
+
 PAGES.config=async m=>{
   S=await q(sb.from("store_settings").select("*").eq("id",1).single());
-  const F=[{k:"name",l:"Nome da loja"},{k:"whatsapp",l:"WhatsApp que recebe os pedidos (com DDD)"},{k:"address",l:"Endereço da loja"},{k:"pix_key",l:"Chave Pix"},{k:"pix_key_type",l:"Tipo da chave Pix",t:"select",o:[["telefone","Telefone"],["cpf","CPF"],["cnpj","CNPJ"],["email","E-mail"],["aleatoria","Chave aleatória"]]},{k:"pix_name",l:"Nome do recebedor do Pix (como está no banco)"},{k:"pix_city",l:"Cidade do recebedor do Pix"},{k:"logo_url",l:"Logo",t:"img"},{k:"banner_url",l:"Capa do cardápio (faixa do topo)",t:"img"},{k:"primary_color",l:"Cor principal",t:"color"}];
+  const F=[{k:"name",l:"Nome da loja"},{k:"whatsapp",l:"WhatsApp que recebe os pedidos (com DDD)"},{k:"address",l:"Endereço da loja"},{k:"logo_url",l:"Logo",t:"img"},{k:"banner_url",l:"Capa do cardápio (faixa do topo)",t:"img"},{k:"primary_color",l:"Cor principal",t:"color"}];
   const DAYS=[["seg","Segunda"],["ter","Terça"],["qua","Quarta"],["qui","Quinta"],["sex","Sexta"],["sab","Sábado"],["dom","Domingo"]];
   const H=S.opening_hours||{}, PAYS=["Pix","Dinheiro","Cartão de crédito","Cartão de débito","Vale-refeição"];
   const custom=(S.payment_methods||[]).filter(p=>!PAYS.includes(p));
@@ -909,10 +947,8 @@ PAGES.config=async m=>{
     <div class="card grid"><b>Mensagens do WhatsApp pro cliente</b><p class="muted" style="margin:0;font-size:12px">Use {nome}, {numero}, {total}, {loja}, {link_pedido} (acompanhar pedido) e {link_avaliacao} (página de avaliação com estrelas). Ao mudar o status do pedido, o WhatsApp abre com a mensagem pronta, é só apertar enviar.</p>
       ${Object.entries(WA_LABEL).map(([k,l])=>`<label class="fld"><span>${l}</span><textarea class="in" rows="3" id="wa_${k}">${esc(((S.wa_templates||{})[k])||WA_DEFAULT[k])}</textarea></label>`).join("")}
       <label class="fld"><span>Link de avaliação no Google (opcional). Quem der 4 ou 5 estrelas no nosso link é convidado a avaliar no Google também</span><input class="in" id="rv" value="${esc(S.review_url||"")}"></label></div>
-    <div class="card grid"><b>⚡ Teste do Pix</b><p class="muted" style="margin:0;font-size:12px">Salve e escaneie com o app do seu banco: tem que aparecer o seu nome e R$ 0,01. Se aparecer certo, o Pix dos pedidos está funcionando.</p><div id="pxt" style="background:#fff;border-radius:10px;padding:8px;max-width:200px"></div></div>
     <div class="card"><b>Link do cardápio pros clientes</b><p style="word-break:break-all"><a href="/" target="_blank" rel="noopener">${location.origin}/</a></p><button class="btn o sm" id="cpl">Copiar link</button></div></div></div>`;
   wireImgs(m);
-  if(window.GBPix&&S.pix_key)$("#pxt").innerHTML=GBPix.qrSvg(GBPix.payload({key:S.pix_key,type:S.pix_key_type,name:S.pix_name||S.name,city:S.pix_city,amount:0.01,txid:"TESTE"}),180);else $("#pxt").innerHTML='<p style="color:#111;margin:0">Cadastre a chave Pix</p>';
   $("#cpl").onclick=async()=>{try{await navigator.clipboard.writeText(location.origin+"/");toast("Link copiado")}catch{toast(location.origin+"/")}};
   $("#sv").onclick=async()=>{const v=readForm(F,m);
     if(!v.name){toast("Informe o nome da loja");return}
