@@ -146,3 +146,4 @@ td.num,th.num{text-align:right}
   #print h2{font-size:15px;margin:0 0 4px;text-align:center}
   #print hr{border:0;border-top:1px dashed #000;margin:6px 0}
 }
+td.num,.line>b{white-space:nowrap}

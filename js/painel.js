@@ -91,7 +91,7 @@ let S={}, page="pedidos", newCount=0;
 const MENU=[["Operação",[["pedidos","🧾","Pedidos"],["novo","➕","Novo pedido (telefone)"],["historico","📋","Histórico"],["caixa","💰","Caixa / venda balcão"]]],
   ["Cardápio",[["catalogo","🍺","Catálogo"],["complementos","🧊","Complementos"],["destaques","🔥","Destaques e promoções"]]],
   ["Clientes",[["clientes","👥","Clientes e fiado"],["avaliacoes","⭐","Avaliações"],["cupons","🎟️","Cupons"],["fidelidade","🏆","Fidelidade"]]],
-  ["Gestão",[["desempenho","📈","Desempenho"],["estoque","📦","Estoque"],["financeiro","💸","Despesas"],["delivery","🛵","Delivery e bairros"],["equipe","🪪","Equipe e acessos"],["config","⚙️","Configurações"]]]];
+  ["Gestão",[["desempenho","📈","Financeiro e lucro"],["estoque","📦","Estoque"],["financeiro","💸","Despesas e contas"],["delivery","🛵","Delivery e bairros"],["equipe","🪪","Equipe e acessos"],["config","⚙️","Configurações"]]]];
 /* ---------- quem está logado: dono pode tudo, funcionário só o básico ---------- */
 let ME={role:"dono",name:"",email:"",id:null};
 const OWNER=()=>ME.role==="dono";
@@ -101,9 +101,15 @@ async function loadMe(){
   const {data:{user}}=await sb.auth.getUser(); ME.email=user?user.email:""; ME.id=user?user.id:null;
   const r=await sb.from("staff").select("*").eq("user_id",user.id).maybeSingle();
   if(r.error){ME.role="dono";ME.name=ME.email.split("@")[0];return true}   // parte 9 ainda não rodada: tudo liberado
-  if(!r.data||!r.data.active) return false;
+  if(!r.data||!r.data.active){ME.block=r.data?"bloqueado":"sem_cadastro";return false}
+  const a=await sb.rpc("my_access");
+  if(!a.error&&a.data&&!a.data.ok){ME.block=a.data.reason;ME.name=a.data.name||"";ME.schedule=a.data.schedule;return false}
   ME.role=r.data.role; ME.name=r.data.name||r.data.username||ME.email.split("@")[0]; return true;
 }
+const DOW=["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
+function schedTxt(sc){if(!sc||!sc.start)return "Qualquer horário";const d=(sc.days||[0,1,2,3,4,5,6]).slice().sort();
+  const days=d.length===7?"Todos os dias":d.length&&d.every((x,i)=>i===0||x===d[i-1]+1)&&d.length>2?DOW[d[0]]+" a "+DOW[d[d.length-1]]:d.map(x=>DOW[x]).join(", ");
+  return days+", "+sc.start+" às "+sc.end}
 async function setOpen(v){
   const r=await sb.rpc("set_store_open",{p_open:v});
   if(r.error&&/set_store_open|function/i.test(r.error.message)) return q(sb.from("store_settings").update({is_open:v}).eq("id",1));
@@ -111,7 +117,7 @@ async function setOpen(v){
 }
 async function shell(){
   S=await q(sb.from("store_settings").select("*").eq("id",1).single());
-  if(!(await loadMe())){root.innerHTML=`<div class="login"><div class="card grid" style="max-width:380px"><h1>Acesso bloqueado</h1><p>O login <b>${esc(ME.email)}</b> ainda não foi liberado. Peça pro dono da loja liberar em <b>Equipe e acessos</b>.</p><button class="btn" id="lo">Sair</button></div></div>`;$("#lo").onclick=async()=>{await sb.auth.signOut();location.reload()};return}
+  if(!(await loadMe())){root.innerHTML=`<div class="login"><div class="card grid" style="max-width:380px">${ME.block==="fora_horario"?`<h1>Fora do seu horário</h1><p>Oi, ${esc(ME.name)}! Seu horário de trabalho é <b>${esc(schedTxt(ME.schedule))}</b>. Você pode entrar até 30 minutos antes de começar.</p>`:ME.block==="bloqueado"?`<h1>Acesso bloqueado</h1><p>O seu acesso foi bloqueado pelo dono da loja.</p>`:`<h1>Acesso bloqueado</h1><p>O login <b>${esc(ME.email)}</b> ainda não foi liberado. Peça pro dono da loja liberar em <b>Equipe e acessos</b>.</p>`}<button class="btn" id="lo">Sair</button></div></div>`;$("#lo").onclick=async()=>{await sb.auth.signOut();location.reload()};return}
   root.innerHTML=`<div class="mobilebar"><button class="x" id="mb" aria-label="Menu">☰</button><b>${esc(S.name)}</b></div>
   <div class="shell"><aside class="side" id="side"><div class="brand"><div class="lg">${S.logo_url?`<img src="${esc(S.logo_url)}" alt="">`:"GB"}</div><div><b>${esc(S.name)}</b><small>${esc(ME.name)} · ${OWNER()?"Dono":"Funcionário"}</small></div></div>
     <button class="openbtn" id="ob"></button><button class="openbtn off" id="snd"></button><nav class="menu" id="menu"></nav>
@@ -129,6 +135,7 @@ async function shell(){
     if(!soundOn){soundOn=true}else if(ready){beep();toast("Esse é o som de pedido novo")}
     try{localStorage.setItem("gb_sound",soundOn?"on":"off")}catch{};soundBtn()};
   $("#snd").oncontextmenu=e=>{e.preventDefault();soundOn=!soundOn;try{localStorage.setItem("gb_sound",soundOn?"on":"off")}catch{};soundBtn()};
+  if(!OWNER()) setInterval(async()=>{const a=await sb.rpc("my_access");if(!a.error&&a.data&&!a.data.ok){ME.block=a.data.reason;ME.schedule=a.data.schedule;shell()}},300000);
   openBtn(); soundBtn(); menu(); listenOrders(); go(location.hash.slice(1)||"pedidos");
 }
 function openBtn(){const b=$("#ob");b.className="openbtn"+(S.is_open?"":" off");b.innerHTML=`<i></i>${S.is_open?"Loja aberta · clique p/ fechar":"Loja fechada · clique p/ abrir"}`}
@@ -368,28 +375,7 @@ PAGES.historico=async m=>{
 };
 
 /* ================= DESEMPENHO ================= */
-PAGES.desempenho=async m=>{
-  let days=7;
-  const draw=async()=>{
-    const rows=await q(sb.from("orders").select("id,total,subtotal,created_at,status,type,payment_method,order_items(name,qty,total)").gte("created_at",startOfDay(days-1).toISOString()).neq("status","cancelado").limit(5000));
-    const tot=rows.reduce((s,o)=>s+ +o.total,0);
-    const byDay={}; for(let i=days-1;i>=0;i--){const d=startOfDay(i);byDay[d.toDateString()]={d,v:0}}
-    rows.forEach(o=>{const k=new Date(o.created_at);k.setHours(0,0,0,0);if(byDay[k.toDateString()])byDay[k.toDateString()].v+= +o.total});
-    const max=Math.max(1,...Object.values(byDay).map(x=>x.v));
-    const prod={}; rows.forEach(o=>o.order_items.forEach(i=>{prod[i.name]=prod[i.name]||{q:0,v:0};prod[i.name].q+=i.qty;prod[i.name].v+= +i.total}));
-    const top=Object.entries(prod).sort((a,b)=>b[1].v-a[1].v).slice(0,15);
-    const pay={}; rows.forEach(o=>{pay[o.payment_method||"—"]=(pay[o.payment_method||"—"]||0)+ +o.total});
-    const hours=Array(24).fill(0); rows.forEach(o=>hours[new Date(o.created_at).getHours()]++);
-    $("#dres").innerHTML=`<div class="stats"><div class="stat"><small>Faturamento</small><b>${brl(tot)}</b></div><div class="stat"><small>Pedidos</small><b>${rows.length}</b></div><div class="stat"><small>Ticket médio</small><b>${brl(rows.length?tot/rows.length:0)}</b></div><div class="stat"><small>Entregas</small><b>${rows.filter(o=>o.type==="delivery").length}</b></div></div>
-      <div class="grid g2"><div class="card"><b>Vendas por dia</b><div class="bars" style="margin-bottom:20px">${Object.values(byDay).map(x=>`<div title="${x.d.toLocaleDateString("pt-BR")}: ${brl(x.v)}" style="height:${Math.max(2,x.v/max*100)}%"><span>${days<=14?x.d.getDate():""}</span></div>`).join("")}</div></div>
-      <div class="card"><b>Pedidos por horário</b><div class="bars" style="margin-bottom:20px">${hours.map((h,i)=>`<div title="${i}h: ${h} pedidos" style="height:${Math.max(2,h/Math.max(1,...hours)*100)}%"><span>${i%3===0?i+"h":""}</span></div>`).join("")}</div></div></div>
-      <div class="grid g2" style="margin-top:12px"><div class="card"><b>Mais vendidos</b>${top.map(([n,x],i)=>`<div class="line"><span>${i+1}. ${esc(n)} <span class="muted">· ${x.q} un</span></span><b>${brl(x.v)}</b></div>`).join("")||'<p class="muted">Sem vendas no período.</p>'}</div>
-      <div class="card"><b>Por forma de pagamento</b>${Object.entries(pay).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div class="line"><span>${esc(k)}</span><b>${brl(v)}</b></div>`).join("")||'<p class="muted">—</p>'}</div></div>`;
-  };
-  m.innerHTML=`<div class="top"><h1>Desempenho</h1><div class="tabs" style="margin:0">${[[1,"Hoje"],[7,"7 dias"],[30,"30 dias"],[90,"90 dias"]].map(([d,l])=>`<button data-d="${d}" aria-current="${d===days}">${l}</button>`).join("")}</div></div><div id="dres"></div>`;
-  $$("[data-d]",m).forEach(b=>b.onclick=()=>{days=+b.dataset.d;$$("[data-d]",m).forEach(x=>x.setAttribute("aria-current",x===b));draw()});
-  await draw();
-};
+PAGES.desempenho=m=>finDash(m);
 
 /* ================= CATÁLOGO ================= */
 let catSel=null;
@@ -914,23 +900,7 @@ PAGES.caixa=async m=>{
 
 
 /* ================= DESPESAS ================= */
-PAGES.financeiro=async m=>{
-  const mStart=new Date();mStart.setDate(1);mStart.setHours(0,0,0,0);
-  const [ex,ords]=await Promise.all([q(sb.from("expenses").select("*").order("due_date",{ascending:true,nullsFirst:false}).limit(300)),q(sb.from("orders").select("total,subtotal").gte("created_at",mStart.toISOString()).eq("status","concluido"))]);
-  const month=ex.filter(e=>e.due_date&&new Date(e.due_date+"T12:00")>=mStart);
-  const sales=ords.reduce((s,o)=>s+ +o.total,0), spent=month.reduce((s,e)=>s+ +e.amount,0);
-  m.innerHTML=`<div class="top"><h1>Despesas e contas</h1><button class="btn" id="ne">➕ Nova despesa</button></div>
-    <div class="stats"><div class="stat"><small>Vendas no mês</small><b>${brl(sales)}</b></div><div class="stat"><small>Despesas no mês</small><b style="color:var(--red)">${brl(spent)}</b></div><div class="stat"><small>Resultado do mês</small><b style="color:${sales-spent>=0?"var(--green)":"var(--red)"}">${brl(sales-spent)}</b></div><div class="stat"><small>Contas em aberto</small><b>${ex.filter(e=>!e.paid).length}</b></div></div>
-    <div class="tw"><table><thead><tr><th>Vencimento</th><th>Descrição</th><th>Categoria</th><th class="num">Valor</th><th>Situação</th><th></th></tr></thead><tbody>
-    ${ex.map(e=>`<tr><td>${e.due_date?new Date(e.due_date+"T12:00").toLocaleDateString("pt-BR"):"—"}</td><td>${esc(e.description)}</td><td>${esc(e.category||"")}</td><td class="num">${brl(e.amount)}</td><td><button data-pd="${e.id}">${e.paid?'<span class="pill p-concluido">Paga</span>':'<span class="pill p-novo">A pagar</span>'}</button></td><td class="num"><button class="btn o sm" data-e="${e.id}">Editar</button></td></tr>`).join("")||'<tr><td colspan="6" class="empty">Nenhuma despesa lançada.</td></tr>'}</tbody></table></div>`;
-  const F=[{k:"description",l:"Descrição (ex.: compra de cerveja, luz, gelo)"},{k:"amount",l:"Valor (R$)",t:"money"},{k:"category",l:"Categoria",t:"select",o:[["Mercadoria","Mercadoria"],["Contas da loja","Contas da loja (luz, água, internet)"],["Aluguel","Aluguel"],["Funcionários","Funcionários / entregador"],["Outros","Outros"]]},{k:"due_date",l:"Vencimento"},{k:"paid",l:"Já está paga",t:"check"}];
-  const edit=e=>{const dr=drawer(e?"Editar despesa":"Nova despesa",formHTML(F,e||{due_date:new Date().toISOString().slice(0,10),category:"Mercadoria"})+'<p class="err" id="er" hidden></p>',`${e?'<button class="btn r" id="del">Excluir</button>':""}<button class="btn" id="sv">Salvar</button>`);
-    $("#f_due_date",dr).type="date";
-    $("#sv",dr).onclick=async()=>{const v=readForm(F,dr);if(!v.description||!v.amount){$("#er",dr).hidden=false;$("#er",dr).textContent="Preencha descrição e valor.";return}e?await q(sb.from("expenses").update(v).eq("id",e.id)):await q(sb.from("expenses").insert(v));closeDr();toast("Salvo");PAGES.financeiro(m)};
-    if(e)$("#del",dr).onclick=async x=>{if(!x.target.dataset.sure){x.target.dataset.sure=1;x.target.textContent="Confirmar exclusão";return}await q(sb.from("expenses").delete().eq("id",e.id));closeDr();PAGES.financeiro(m)}};
-  $("#ne").onclick=()=>edit(null); $$("[data-e]",m).forEach(b=>b.onclick=()=>edit(ex.find(x=>x.id==b.dataset.e)));
-  $$("[data-pd]",m).forEach(b=>b.onclick=async()=>{const e=ex.find(x=>x.id==b.dataset.pd);await q(sb.from("expenses").update({paid:!e.paid}).eq("id",e.id));PAGES.financeiro(m)});
-};
+PAGES.financeiro=m=>finDesp(m);
 
 /* ================= DELIVERY ================= */
 PAGES.delivery=async m=>{
@@ -982,7 +952,7 @@ PAGES.equipe=async m=>{
   const sold=s=>ords.filter(o=>o.cash_session_id===s.id||(!o.cash_session_id&&o.created_at>=s.opened_at&&(!s.closed_at||o.created_at<=s.closed_at))).reduce((a,o)=>a+ +o.total,0);
   const who=x=>x.username?x.username:(x.email||"");
   m.innerHTML=`<div class="top"><h1>Equipe e acessos</h1><button class="btn" id="ns">➕ Novo funcionário</button></div>
-    <div class="grid g2"><div class="card"><b>Quem entra no painel</b>${st.map(x=>`<div class="line"><span><b>${esc(x.name||"—")}</b> <span class="muted">· usuário: <b>${esc(who(x))}</b></span><br><span class="pill ${x.active?(x.role==="dono"?"p-concluido":"p-em_preparo"):"p-inativo"}">${x.active?(x.role==="dono"?"Dono · acesso total":"Funcionário · acesso básico"):"Bloqueado"}</span></span><button class="btn o sm" data-s="${x.user_id}">Editar</button></div>`).join("")||'<p class="muted">Ninguém ainda.</p>'}</div>
+    <div class="grid g2"><div class="card"><b>Quem entra no painel</b>${st.map(x=>`<div class="line"><span><b>${esc(x.name||"—")}</b> <span class="muted">· usuário: <b>${esc(who(x))}</b></span><br>${x.role!=="dono"?`<span class="muted" style="font-size:12px">🕒 ${esc(schedTxt(x.schedule))}</span><br>`:""}<span class="pill ${x.active?(x.role==="dono"?"p-concluido":"p-em_preparo"):"p-inativo"}">${x.active?(x.role==="dono"?"Dono · acesso total":"Funcionário · acesso básico"):"Bloqueado"}</span></span><button class="btn o sm" data-s="${x.user_id}">Editar</button></div>`).join("")||'<p class="muted">Ninguém ainda.</p>'}</div>
     <div class="card grid" style="align-content:start"><b>Como funciona a troca de turno</b>
       <ol style="margin:0;padding-left:18px;line-height:1.6"><li><b>João</b> entra com o usuário e a senha dele e abre o caixa.</li><li>No fim do dia ele clica em <b>Fechar caixa</b>, conta o dinheiro da gaveta e clica em <b>Sair</b>.</li><li><b>Vera</b> entra com o usuário e a senha dela e abre o caixa dela.</li></ol>
       <p class="muted" style="margin:0"><b>Funcionário pode:</b> pedidos, pedido por telefone, abrir/fechar o próprio caixa, sangria e suprimento, vender no balcão (inclusive fiado e pagamento dividido), consultar estoque e quem deve no fiado.<br><b>Não pode:</b> mexer em estoque, produtos, preços, promoções, cupons, despesas, delivery, configurações nem ver o desempenho.</p></div></div>
@@ -994,19 +964,29 @@ PAGES.equipe=async m=>{
       <label class="fld"><span>Usuário pra entrar (sem espaço, ex.: joao)</span><input class="in" id="su" value="${esc(x?who(x):"")}" ${x?"readonly":""} autocapitalize="none" spellcheck="false" placeholder="joao"></label>
       <div class="muted" id="sh" style="font-size:12px;margin-top:-6px"></div>
       <label class="fld"><span>${x?"Nova senha (deixe vazio pra manter a atual)":"Senha (mínimo 4 letras ou números)"}</span><input class="in" id="sp" autocomplete="new-password"></label>
-      <label class="fld"><span>Acesso</span><select class="in" id="sr"><option value="funcionario">Funcionário · básico</option><option value="dono" ${x&&x.role==="dono"?"selected":""}>Dono · acesso total</option></select></label><p class="err" id="e" hidden></p>`,
+      <label class="fld"><span>Acesso</span><select class="in" id="sr"><option value="funcionario">Funcionário · básico</option><option value="dono" ${x&&x.role==="dono"?"selected":""}>Dono · acesso total</option></select></label>
+      <div class="card grid" id="hz"><b>🕒 Horário de trabalho</b><label class="chk"><input type="checkbox" id="hl" ${x&&x.schedule&&x.schedule.start?"":"checked"}> Pode entrar em qualquer horário</label>
+        <div id="hb" class="grid"><div class="row">${DOW.map((d,i)=>`<label class="chk"><input type="checkbox" data-dw="${i}" ${(x&&x.schedule&&x.schedule.days?x.schedule.days:[1,2,3,4,5,6]).includes(i)?"checked":""}> ${d}</label>`).join("")}</div>
+        <div class="grid g2"><label class="fld"><span>Começa</span><input class="in" type="time" id="hs" value="${esc(x&&x.schedule&&x.schedule.start||"08:00")}"></label><label class="fld"><span>Termina</span><input class="in" type="time" id="he" value="${esc(x&&x.schedule&&x.schedule.end||"16:00")}"></label></div>
+        <p class="muted" style="margin:0;font-size:12px">Fora desse horário o login não entra. Pode entrar 30 min antes e tem 1 h de tolerância no fim. Se o caixa dele ainda estiver aberto, ele consegue entrar pra fechar. Turno da noite (ex.: 18:00 às 02:00) também funciona.</p></div></div><p class="err" id="e" hidden></p>`,
       `${x&&x.user_id!==ME.id?`<button class="btn r" id="bl">${x.active?"Bloquear acesso":"Desbloquear"}</button>`:""}<button class="btn" id="sv">Salvar</button>`);
     const hint=()=>{const u=$("#su",dr).value;$("#sh",dr).innerHTML=u&&!u.includes("@")?`Na tela de login vai digitar: <b>${esc(loginUser(u))}</b>`:""};
     $("#sn",dr).oninput=()=>{if(!x){$("#su",dr).value=loginUser($("#sn",dr).value.split(" ")[0]);hint()}}; $("#su",dr).oninput=hint; hint();
     const err=t=>{$("#e",dr).hidden=false;$("#e",dr).textContent=t};
+    const hzv=()=>{$("#hz",dr).hidden=$("#sr",dr).value==="dono";$("#hb",dr).hidden=$("#hl",dr).checked}; $("#sr",dr).onchange=hzv; $("#hl",dr).onchange=hzv; hzv();
     $("#sv",dr).onclick=async()=>{const name=$("#sn",dr).value.trim(), user=$("#su",dr).value.trim(), pw=$("#sp",dr).value, role=$("#sr",dr).value;
+      const days=$$("[data-dw]",dr).filter(c=>c.checked).map(c=>+c.dataset.dw);
+      const schedule=role==="dono"||$("#hl",dr).checked?null:{days,start:$("#hs",dr).value,end:$("#he",dr).value};
+      if(schedule&&(!days.length||!schedule.start||!schedule.end)) return err("Marque os dias e o horário de começo e fim.");
       if(!name) return err("Informe o nome."); if(!x&&!user) return err("Informe o usuário."); if(!x&&pw.length<4) return err("A senha precisa ter pelo menos 4 caracteres.");
       $("#sv",dr).disabled=true;
       try{
-        if(!x){const {error}=await sb.rpc("create_staff_user",{p_username:user,p_name:name,p_password:pw,p_role:role});if(error)throw error}
+        if(!x){const {data,error}=await sb.rpc("create_staff_user",{p_username:user,p_name:name,p_password:pw,p_role:role});if(error)throw error;
+          const r2=await sb.from("staff").update({schedule}).eq("email",data.email);if(r2.error&&schedule)toast("Rode a parte 12 do banco pra salvar o horário")}
         else{
           if(x.user_id===ME.id&&role!=="dono") throw new Error("Você não pode tirar o seu próprio acesso de dono.");
-          await q(sb.from("staff").update({name,role}).eq("user_id",x.user_id));
+          const r2=await sb.from("staff").update({name,role,schedule}).eq("user_id",x.user_id);
+          if(r2.error){if(/schedule/i.test(r2.error.message)){await q(sb.from("staff").update({name,role}).eq("user_id",x.user_id));if(schedule)toast("Rode a parte 12 do banco pra salvar o horário")}else throw r2.error}
           if(pw){if(pw.length<4)throw new Error("A senha precisa ter pelo menos 4 caracteres.");const {error}=await sb.rpc("set_staff_password",{p_user:x.user_id,p_password:pw});if(error)throw error}
         }
         closeDr();toast(x?"Salvo":"Login criado · "+name+" já pode entrar");PAGES.equipe(m);
