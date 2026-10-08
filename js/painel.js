@@ -411,7 +411,9 @@ PAGES.catalogo=async m=>{
       {k:"price",l:"Preço (R$)",t:"money"},{k:"promo_price",l:"Preço de promoção (R$) · deixe vazio se não tiver",t:"money"},
       {k:"status",l:"Situação",t:"select",o:[["ativo","Ativo (aparece e vende)"],["em_falta","Em falta (aparece como esgotado)"],["inativo","Oculto (não aparece)"]]},
       {k:"image_url",l:"Foto",t:"img"},{k:"featured",l:"Mostrar nos Destaques",t:"check"},{k:"is_new",l:"Selo NOVIDADE",t:"check"},
-      {k:"cost_price",l:"Preço de custo (R$) · só você vê",t:"money"},{k:"track_stock",l:"Controlar estoque deste produto",t:"check"},{k:"stock_qty",l:"Estoque atual",t:"money"},{k:"stock_min",l:"Estoque mínimo (avisa quando chegar)",t:"money"}];
+      {k:"cost_price",l:"Preço de custo (R$) · só você vê",t:"money"},{k:"track_stock",l:"Controlar estoque deste produto",t:"check"},{k:"stock_qty",l:"Estoque atual",t:"money"},{k:"stock_min",l:"Estoque mínimo (avisa quando chegar)",t:"money"},
+      {k:"stock_parent_id",l:"📦 Usa o estoque de outro produto? (ex.: o fardo \"12 x Amstel\" usa o estoque da \"Amstel Lata\")",t:"select",num:true,o:[["","Não, tem estoque próprio"]].concat(prods.filter(x=>(!p||x.id!==p.id)&&!x.stock_parent_id).map(x=>[x.id,x.name]))},
+      {k:"stock_factor",l:"Quantas unidades saem do estoque a cada 1 vendido (ex.: 12)",t:"money"}];
     const linked=new Set(pcs.filter(x=>p&&x.product_id===p.id).map(x=>x.group_id));
     const dr=drawer(p?"Editar produto":"Novo produto",formHTML(PF,p||{category_id:catSel,status:"ativo"})+
       `<div class="card grid" style="gap:8px"><b>🔥 Preço por quantidade (atacado)</b><p class="muted" style="margin:0;font-size:12px">Ex.: a partir de 12 un sai R$ 6,80 cada; a partir de 24 un, R$ 6,70. Conta tudo desse produto que o cliente colocar na sacola.</p>
@@ -431,6 +433,7 @@ PAGES.catalogo=async m=>{
       if(!v.name||v.price==null){$("#e",dr).hidden=false;$("#e",dr).textContent="Preencha nome e preço.";return}
       if(v.promo_price!=null&&v.promo_price>=v.price){$("#e",dr).hidden=false;$("#e",dr).textContent="O preço de promoção precisa ser menor que o preço normal.";return}
       v.stock_qty=v.stock_qty??0; v.stock_min=v.stock_min??0;
+      v.stock_factor=v.stock_parent_id?(v.stock_factor||1):1; if(v.stock_parent_id) v.track_stock=false;
       const before=p?+p.stock_qty:0;
       const saved=p?await q(sb.from("products").update(v).eq("id",p.id).select().single()):await q(sb.from("products").insert(v).select().single());
       if(v.track_stock&&+v.stock_qty!==before) await sb.from("stock_movements").insert({product_id:saved.id,kind:"ajuste",qty:+v.stock_qty-before,description:"Ajuste pelo cadastro"});
@@ -469,24 +472,96 @@ PAGES.complementos=async m=>{
 
 /* ================= DESTAQUES E PROMOÇÕES ================= */
 PAGES.destaques=async m=>{
-  const prods=await q(sb.from("products").select("id,name,price,promo_price,featured,is_new,status").neq("status","inativo").order("name"));
+  const [prods,cats]=await Promise.all([q(sb.from("products").select("id,name,price,promo_price,price_tiers,featured,is_new,status,category_id").neq("status","inativo").order("name")),q(sb.from("categories").select("id,name").order("sort_order"))]);
   let term="";
+  const tiersTxt=p=>(p.price_tiers||[]).map(x=>`${x.min_qty}+ un: <b>${brl(x.price)}</b>`).join(" · ");
+  const withT=prods.filter(p=>(p.price_tiers||[]).length);
   const draw=()=>{
     const list=prods.filter(p=>!term||p.name.toLowerCase().includes(term));
-    $("#dl").innerHTML=list.slice(0,150).map(p=>`<tr><td>${esc(p.name)}</td><td class="num">${brl(p.price)}</td>
+    $("#dl").innerHTML=list.slice(0,150).map(p=>`<tr><td>${esc(p.name)}${(p.price_tiers||[]).length?`<div class="muted" style="font-size:12px;color:var(--green)">🔥 ${tiersTxt(p)}</div>`:""}</td><td class="num">${brl(p.price)}</td>
       <td style="width:130px"><input class="in" data-pp="${p.id}" inputmode="decimal" placeholder="—" value="${money(p.promo_price)}"></td>
       <td><label class="chk"><input type="checkbox" data-ft="${p.id}" ${p.featured?"checked":""}> Destaque</label></td><td><label class="chk"><input type="checkbox" data-nw="${p.id}" ${p.is_new?"checked":""}> Novidade</label></td></tr>`).join("");
     $$("[data-pp]").forEach(i=>i.onchange=async()=>{const p=prods.find(x=>x.id==i.dataset.pp),v=num(i.value);if(v!=null&&v>=p.price){toast("Promoção precisa ser menor que "+brl(p.price));i.value=money(p.promo_price);return}await q(sb.from("products").update({promo_price:v}).eq("id",p.id));p.promo_price=v;toast(v==null?"Promoção removida":"Promoção salva")});
     $$("[data-ft]").forEach(i=>i.onchange=async()=>{await q(sb.from("products").update({featured:i.checked}).eq("id",+i.dataset.ft));prods.find(x=>x.id==i.dataset.ft).featured=i.checked;toast("Salvo")});
     $$("[data-nw]").forEach(i=>i.onchange=async()=>{await q(sb.from("products").update({is_new:i.checked}).eq("id",+i.dataset.nw));prods.find(x=>x.id==i.dataset.nw).is_new=i.checked;toast("Salvo")});
   };
-  m.innerHTML=`<div class="top"><h1>Destaques e promoções</h1><input class="in" id="dq" placeholder="Buscar produto…" style="width:240px"></div>
-    <p class="muted" style="margin-top:-6px">Preço de promoção aparece riscado no cardápio e no pop-up de Promoções. Destaques aparecem no topo. Salva sozinho.</p>
-    <div class="stats"><div class="stat"><small>Em promoção</small><b>${prods.filter(p=>p.promo_price!=null).length}</b></div><div class="stat"><small>Destaques</small><b>${prods.filter(p=>p.featured).length}</b></div></div>
+  m.innerHTML=`<div class="top"><h1>Destaques e promoções</h1></div>
+    <div class="card grid" style="margin-bottom:14px;border-color:rgba(61,220,132,.35)">
+      <div class="row" style="justify-content:space-between"><div><b style="font-size:16px">🔥 Leve mais, pague menos</b><div class="muted" style="font-size:12.5px">Ex.: Heineken R$ 7,00 · levando 12 sai R$ 6,80 cada · levando 24, R$ 6,70. Você escolhe os produtos.</div></div><button class="btn" id="nt">➕ Nova promoção por quantidade</button></div>
+      ${withT.length?`<div class="tw"><table><thead><tr><th>Produto</th><th class="num">Preço normal</th><th>Faixas</th><th></th></tr></thead><tbody>${withT.map(p=>`<tr><td><b>${esc(p.name)}</b></td><td class="num">${brl(p.price)}</td><td style="color:var(--green)">${tiersTxt(p)}</td><td class="num"><button class="btn o sm" data-et="${p.id}">Editar</button> <button class="btn o sm" data-rt="${p.id}" style="color:var(--red)">Remover</button></td></tr>`).join("")}</tbody></table></div>`
+        :'<p class="muted" style="margin:0">Nenhum produto com promoção por quantidade ainda.</p>'}</div>
+    <div class="row" style="justify-content:space-between;margin-bottom:8px"><b>Preço promocional, destaques e novidades</b><input class="in" id="dq" placeholder="Buscar produto…" style="width:240px"></div>
+    <p class="muted" style="margin-top:0">Preço de promoção aparece riscado no cardápio e no pop-up de Promoções. Destaques aparecem no topo. Salva sozinho.</p>
+    <div class="stats"><div class="stat"><small>Em promoção</small><b>${prods.filter(p=>p.promo_price!=null).length}</b></div><div class="stat"><small>Destaques</small><b>${prods.filter(p=>p.featured).length}</b></div><div class="stat"><small>Leve mais, pague menos</small><b>${withT.length}</b></div></div>
     <div class="tw"><table><thead><tr><th>Produto</th><th class="num">Preço</th><th>Promoção (R$)</th><th></th><th></th></tr></thead><tbody id="dl"></tbody></table></div>`;
   $("#dq").oninput=e=>{term=e.target.value.toLowerCase();draw()};
+  $("#nt").onclick=()=>tierEditor([]);
+  $$("[data-et]",m).forEach(b=>b.onclick=()=>tierEditor([+b.dataset.et]));
+  $$("[data-rt]",m).forEach(b=>b.onclick=async e=>{if(!e.target.dataset.sure){e.target.dataset.sure=1;e.target.textContent="Confirmar";return}await q(sb.from("products").update({price_tiers:[]}).eq("id",+b.dataset.rt));toast("Promoção removida");PAGES.destaques(m)});
   draw();
+
+  function tierEditor(preIds){
+    const sel=new Set(preIds); let ft="", fc="";
+    const first=prods.find(p=>p.id===preIds[0]);
+    let mode="preco", rows=first&&(first.price_tiers||[]).length?first.price_tiers.map(x=>({q:x.min_qty,v:money(x.price)})):[{q:12,v:""},{q:24,v:""}];
+    const dr=drawer(preIds.length===1?"Promoção por quantidade · "+esc(first.name):"Nova promoção por quantidade",`
+      <div class="card grid"><b>1. Escolha os produtos</b>
+        <div class="row" style="flex-wrap:nowrap"><input class="in" id="ts" placeholder="Buscar (ex.: lata, heineken)…"><select class="in" id="tc" style="max-width:170px"><option value="">Todas as categorias</option>${cats.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join("")}</select></div>
+        <div class="row"><button class="btn o sm" id="ta" type="button">Marcar todos da lista</button><button class="btn o sm" id="tn" type="button">Desmarcar todos</button><span class="muted" id="tcnt"></span></div>
+        <div id="tl" style="max-height:34vh;overflow:auto;display:grid;gap:2px"></div></div>
+      <div class="card grid"><b>2. Como é o desconto</b>
+        <select class="in" id="tm"><option value="preco">Preço final por unidade (R$) · ex.: 6,80</option><option value="reais">R$ a menos por unidade · ex.: 0,20</option><option value="pct">% de desconto · ex.: 3</option></select>
+        <div id="tr" class="grid" style="gap:6px"></div><button class="btn o sm" id="tadd" type="button" style="justify-self:start">➕ Adicionar faixa</button>
+        <p class="muted" id="tprev" style="margin:0;font-size:12.5px"></p></div><p class="err" id="e" hidden></p>`,
+      `<button class="btn" id="tsv">Salvar promoção</button>`);
+    const drawList=()=>{
+      const list=prods.filter(p=>(!ft||p.name.toLowerCase().includes(ft))&&(!fc||String(p.category_id)===fc));
+      $("#tl",dr).innerHTML=list.map(p=>`<label class="chk" style="font-weight:500;padding:4px 2px"><input type="checkbox" data-s="${p.id}" ${sel.has(p.id)?"checked":""}> ${esc(p.name)} <span class="muted">· ${brl(p.price)}</span></label>`).join("")||'<p class="muted">Nada encontrado.</p>';
+      $$("[data-s]",dr).forEach(c=>c.onchange=()=>{c.checked?sel.add(+c.dataset.s):sel.delete(+c.dataset.s);upd()});
+      upd();
+      return list;
+    };
+    const drawRows=()=>{
+      $("#tr",dr).innerHTML=rows.map((r,i)=>`<div class="row" style="flex-wrap:nowrap"><span class="muted" style="white-space:nowrap">A partir de</span><input class="in" data-q="${i}" inputmode="numeric" style="width:76px" value="${r.q}"><span class="muted" style="white-space:nowrap">un →</span><input class="in" data-v="${i}" inputmode="decimal" style="width:100px" value="${esc(r.v)}" placeholder="${mode==="preco"?"6,80":mode==="reais"?"0,20":"3"}"><span class="muted">${mode==="preco"?"R$ cada":mode==="reais"?"R$ a menos":"%"}</span><button class="icb" data-x="${i}" type="button" aria-label="Remover">✕</button></div>`).join("");
+      $$("[data-q]",dr).forEach(i=>i.oninput=()=>{rows[+i.dataset.q].q=parseInt(i.value)||"";upd()});
+      $$("[data-v]",dr).forEach(i=>i.oninput=()=>{rows[+i.dataset.v].v=i.value;upd()});
+      $$("[data-x]",dr).forEach(b=>b.onclick=()=>{rows.splice(+b.dataset.x,1);drawRows()});
+      upd();
+    };
+    const calc=(p,r)=>{const v=num(r.v);if(v==null)return null;const base=+p.price;
+      const x=mode==="preco"?v:mode==="reais"?base-v:base*(1-v/100);return Math.round(x*100)/100};
+    function upd(){
+      $("#tcnt",dr).textContent=sel.size+" selecionado(s)";
+      const p=prods.find(x=>sel.has(x.id));
+      const ok=rows.filter(r=>r.q>1&&num(r.v)!=null).sort((a,b)=>a.q-b.q);
+      $("#tprev",dr).innerHTML=p&&ok.length?`Exemplo · <b>${esc(p.name)}</b> (${brl(p.price)}): `+ok.map(r=>`${r.q}+ un = <b style="color:var(--green)">${brl(calc(p,r))}</b> cada`).join(" · ")+(sel.size>1?` <br>Os outros produtos usam o mesmo cálculo, cada um com o seu preço.`:""):"Marque os produtos e preencha as faixas pra ver o exemplo.";
+    }
+    let current=[];
+    $("#ts",dr).oninput=e=>{ft=e.target.value.toLowerCase();current=drawList()};
+    $("#tc",dr).onchange=e=>{fc=e.target.value;current=drawList()};
+    $("#ta",dr).onclick=()=>{current.forEach(p=>sel.add(p.id));current=drawList()};
+    $("#tn",dr).onclick=()=>{sel.clear();current=drawList()};
+    $("#tm",dr).onchange=e=>{mode=e.target.value;rows.forEach(r=>r.v="");drawRows()};
+    $("#tadd",dr).onclick=()=>{rows.push({q:"",v:""});drawRows()};
+    $("#tsv",dr).onclick=async()=>{
+      const err=x=>{$("#e",dr).hidden=false;$("#e",dr).textContent=x};
+      if(!sel.size) return err("Marque pelo menos um produto.");
+      const ok=rows.filter(r=>r.q>1&&num(r.v)!=null).sort((a,b)=>a.q-b.q);
+      if(!ok.length) return err("Preencha pelo menos uma faixa (quantidade a partir de 2 e o valor).");
+      const ups=[];
+      for(const id of sel){const p=prods.find(x=>x.id===id);
+        const tiers=ok.map(r=>({min_qty:r.q,price:calc(p,r)}));
+        const bad=tiers.find(x=>!(x.price>0&&x.price<+p.price));
+        if(bad) return err(`Em "${p.name}" o preço da faixa ficou ${brl(bad.price)}, que não é menor que o normal (${brl(p.price)}). Ajuste os valores.`);
+        ups.push({id,tiers});}
+      $("#tsv",dr).disabled=true;
+      for(const u of ups) await q(sb.from("products").update({price_tiers:u.tiers}).eq("id",u.id));
+      closeDr(); toast(`Promoção salva em ${ups.length} produto(s)`); PAGES.destaques(m);
+    };
+    current=drawList(); drawRows();
+  }
 };
+
 
 /* ================= CLIENTES E FIADO ================= */
 PAGES.clientes=async m=>{
@@ -578,15 +653,23 @@ PAGES.fidelidade=async m=>{
 
 /* ================= ESTOQUE ================= */
 PAGES.estoque=async m=>{
-  const prods=await q(sb.from("products").select("id,name,stock_qty,stock_min,track_stock,cost_price,status").order("name"));
+  const prods=await q(sb.from("products").select("id,name,stock_qty,stock_min,track_stock,cost_price,status,stock_parent_id,stock_factor").order("name"));
   let term="", all=false;
   const draw=()=>{
-    const list=prods.filter(p=>(all||p.track_stock)&&(!term||p.name.toLowerCase().includes(term)));
+    const kids=id=>prods.filter(x=>x.stock_parent_id===id);
+    const list=prods.filter(p=>!p.stock_parent_id&&(all||p.track_stock)&&(!term||p.name.toLowerCase().includes(term)||kids(p.id).some(k=>k.name.toLowerCase().includes(term))));
+    const sugg=autoLinks();
     const low=prods.filter(p=>p.track_stock&&+p.stock_qty<=+p.stock_min);
     $("#er").innerHTML=`<div class="stats"><div class="stat"><small>Produtos controlados</small><b>${prods.filter(p=>p.track_stock).length}</b></div><div class="stat"><small>Abaixo do mínimo</small><b style="color:${low.length?"var(--red)":"inherit"}">${low.length}</b></div><div class="stat"><small>Valor em estoque (custo)</small><b>${brl(prods.filter(p=>p.track_stock).reduce((s,p)=>s+Math.max(0,+p.stock_qty)*(+p.cost_price||0),0))}</b></div></div>
+      ${sugg.length?`<div class="alert" style="margin-bottom:12px"><b>📦 Achei ${sugg.length} fardo(s) que podem usar o estoque da unidade</b> (ex.: "${esc(sugg[0].kid.name)}" → ${+sugg[0].f} un de "${esc(sugg[0].par.name)}"). <button class="btn sm" id="al" style="margin-left:6px">Ver e ligar</button></div>`:""}
       ${!prods.some(p=>p.track_stock)?'<p class="alert">Nenhum produto com estoque controlado ainda. Marque "Mostrar todos" abaixo e clique em <b>Controlar</b> nos produtos que quiser acompanhar.</p>':""}
-      <div class="tw"><table><thead><tr><th>Produto</th><th class="num">Estoque</th><th class="num">Mínimo</th><th></th></tr></thead><tbody>${list.slice(0,300).map(p=>`<tr><td>${esc(p.name)} ${p.track_stock&&+p.stock_qty<=+p.stock_min?'<span class="pill p-cancelado">Repor</span>':""}</td><td class="num"><b>${p.track_stock?+p.stock_qty:"—"}</b></td><td class="num">${p.track_stock?+p.stock_min:"—"}</td>
+      <div class="tw"><table><thead><tr><th>Produto</th><th class="num">Estoque</th><th class="num">Mínimo</th><th></th></tr></thead><tbody>${list.slice(0,300).map(p=>`<tr><td>${esc(p.name)} ${p.track_stock&&+p.stock_qty<=+p.stock_min?'<span class="pill p-cancelado">Repor</span>':""}${kids(p.id).map(k=>`<div class="muted" style="font-size:12px">↳ ${esc(k.name)} tira ${+k.stock_factor} un${p.track_stock?` · dá <b>${Math.max(0,Math.floor(+p.stock_qty/(+k.stock_factor||1)))}</b>`:""}</div>`).join("")}</td><td class="num"><b>${p.track_stock?+p.stock_qty:"—"}</b></td><td class="num">${p.track_stock?+p.stock_min:"—"}</td>
         <td class="num">${p.track_stock?`<button class="btn sm" data-in="${p.id}">Entrada</button> <button class="btn o sm" data-aj="${p.id}">Ajustar</button> <button class="btn o sm" data-hi="${p.id}">Histórico</button>`:`<button class="btn o sm" data-tr="${p.id}">Controlar</button>`}</td></tr>`).join("")||'<tr><td colspan="4" class="empty">Nada aqui.</td></tr>'}</tbody></table></div>`;
+    if($("#al",m))$("#al",m).onclick=()=>{const dr=drawer("Ligar fardos ao estoque da unidade",`<p class="muted" style="margin:0">Cada fardo vendido vai tirar as unidades do estoque do produto da direita. Desmarque o que não estiver certo.</p>
+      ${sugg.map((s,i)=>`<label class="chk" style="font-weight:500;align-items:flex-start"><input type="checkbox" data-l="${i}" checked> <span><b>${esc(s.kid.name)}</b><br><span class="muted">tira ${+s.f} un de</span> ${esc(s.par.name)}</span></label>`).join("")}`,`<button class="btn" id="lk">Ligar selecionados</button>`);
+      $("#lk",dr).onclick=async()=>{const pick=$$("[data-l]",dr).filter(x=>x.checked).map(x=>sugg[+x.dataset.l]);$("#lk",dr).disabled=true;
+        for(const s of pick){await q(sb.from("products").update({stock_parent_id:s.par.id,stock_factor:s.f,track_stock:false}).eq("id",s.kid.id));Object.assign(s.kid,{stock_parent_id:s.par.id,stock_factor:s.f,track_stock:false})}
+        closeDr();toast(pick.length+" fardo(s) ligado(s)");draw()}};
     $$("[data-tr]",m).forEach(b=>b.onclick=async()=>{await q(sb.from("products").update({track_stock:true}).eq("id",+b.dataset.tr));prods.find(p=>p.id==b.dataset.tr).track_stock=true;draw();toast("Agora é só lançar a entrada")});
     $$("[data-in],[data-aj]",m).forEach(b=>b.onclick=()=>{const isIn=!!b.dataset.in,p=prods.find(x=>x.id==(b.dataset.in||b.dataset.aj));
       const dr=drawer((isIn?"Entrada de estoque · ":"Ajustar estoque · ")+esc(p.name),`<p class="muted">Estoque atual: <b>${+p.stock_qty}</b></p><label class="fld"><span>${isIn?"Quantidade que chegou":"Quantidade correta agora (contagem)"}</span><input class="in" id="qq" inputmode="decimal"></label>${isIn?`<label class="fld"><span>Preço de custo por unidade (opcional)</span><input class="in" id="cp" inputmode="decimal" value="${money(p.cost_price)}"></label>`:""}<label class="fld"><span>Observação</span><input class="in" id="ob" placeholder="${isIn?"Ex.: compra no atacado":"Ex.: contagem do mês"}"></label>${isIn?"":`<label class="fld"><span>Estoque mínimo</span><input class="in" id="mn" inputmode="decimal" value="${+p.stock_min}"></label>`}`,`<button class="btn" id="sv">Salvar</button>`);
@@ -598,6 +681,13 @@ PAGES.estoque=async m=>{
     $$("[data-hi]",m).forEach(b=>b.onclick=async()=>{const p=prods.find(x=>x.id==b.dataset.hi);const mv=await q(sb.from("stock_movements").select("*").eq("product_id",p.id).order("created_at",{ascending:false}).limit(100));
       drawer("Histórico · "+esc(p.name),mv.map(x=>`<div class="line"><span>${dt(x.created_at)} · ${({entrada:"Entrada",saida:"Saída",ajuste:"Ajuste",venda:"Venda"})[x.kind]}${x.description?" · "+esc(x.description):""}</span><b style="color:${+x.qty<0?"var(--red)":"var(--green)"}">${+x.qty>0?"+":""}${+x.qty}</b></div>`).join("")||'<p class="muted">Sem movimentações.</p>')});
   };
+  function autoLinks(){
+    const nm=s=>String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/\s+/g," ").trim();
+    const out=[];
+    prods.forEach(k=>{if(k.stock_parent_id)return;const mm=String(k.name).match(/^\s*(\d+)\s*x\s*(.+)$/i);if(!mm)return;
+      const par=prods.find(x=>x.id!==k.id&&!x.stock_parent_id&&nm(x.name)===nm(mm[2]));if(par&&+mm[1]>1)out.push({kid:k,par,f:+mm[1]})});
+    return out;
+  }
   m.innerHTML=`<div class="top"><h1>Estoque</h1><div class="row"><input class="in" id="eq" placeholder="Buscar produto…" style="width:220px"><label class="chk"><input type="checkbox" id="ea"> Mostrar todos</label></div></div><div id="er"></div>`;
   $("#eq").oninput=e=>{term=e.target.value.toLowerCase();draw()}; $("#ea").onchange=e=>{all=e.target.checked;draw()};
   draw();
