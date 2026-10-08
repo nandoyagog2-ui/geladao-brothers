@@ -497,6 +497,8 @@ PAGES.destaques=async m=>{
     $("#dl").innerHTML=list.slice(0,150).map(p=>`<tr><td>${esc(p.name)}${(p.price_tiers||[]).length?`<div class="muted" style="font-size:12px;color:var(--green)">🔥 ${tiersTxt(p)}</div>`:""}</td><td class="num">${brl(p.price)}</td>
       <td style="width:130px"><input class="in" data-pp="${p.id}" inputmode="decimal" placeholder="—" value="${money(p.promo_price)}"></td>
       <td><label class="chk"><input type="checkbox" data-ft="${p.id}" ${p.featured?"checked":""}> Destaque</label></td><td><label class="chk"><input type="checkbox" data-nw="${p.id}" ${p.is_new?"checked":""}> Novidade</label></td></tr>`).join("");
+    if($("#pbal"))$("#pbal").onchange=async e=>{const v=e.target.checked;const r=await sb.from("store_settings").update({promos_no_balcao:v}).eq("id",1);
+      if(r.error){e.target.checked=!v;toast(/promos_no_balcao/.test(r.error.message)?"Rode a parte 13 do banco no Supabase primeiro":r.error.message);return}S.promos_no_balcao=v;toast(v?"Promoções valendo também no balcão":"Promoções só no cardápio");PAGES.destaques(m)};
     $$("[data-pp]").forEach(i=>i.onchange=async()=>{const p=prods.find(x=>x.id==i.dataset.pp),v=num(i.value);if(v!=null&&v>=p.price){toast("Promoção precisa ser menor que "+brl(p.price));i.value=money(p.promo_price);return}await q(sb.from("products").update({promo_price:v}).eq("id",p.id));p.promo_price=v;toast(v==null?"Promoção removida":"Promoção salva")});
     $$("[data-ft]").forEach(i=>i.onchange=async()=>{await q(sb.from("products").update({featured:i.checked}).eq("id",+i.dataset.ft));prods.find(x=>x.id==i.dataset.ft).featured=i.checked;toast("Salvo")});
     $$("[data-nw]").forEach(i=>i.onchange=async()=>{await q(sb.from("products").update({is_new:i.checked}).eq("id",+i.dataset.nw));prods.find(x=>x.id==i.dataset.nw).is_new=i.checked;toast("Salvo")});
@@ -508,6 +510,8 @@ PAGES.destaques=async m=>{
         :'<p class="muted" style="margin:0">Nenhum produto com promoção por quantidade ainda.</p>'}</div>
     <div class="row" style="justify-content:space-between;margin-bottom:8px"><b>Preço promocional, destaques e novidades</b><input class="in" id="dq" placeholder="Buscar produto…" style="width:240px"></div>
     <p class="muted" style="margin-top:0">Preço de promoção aparece riscado no cardápio e no pop-up de Promoções. Destaques aparecem no topo. Salva sozinho.</p>
+    <div class="card" style="margin-bottom:12px"><label class="chk" style="font-weight:600"><input type="checkbox" id="pbal" ${S.promos_no_balcao?"checked":""}> Usar as promoções também no caixa / balcão</label>
+      <div class="muted" style="font-size:12.5px;margin-top:4px">${S.promos_no_balcao?"Ligado: o cliente da loja também paga o preço promocional.":"Desligado (recomendado): as promoções valem <b>só no cardápio</b>. No balcão o preço é o normal e o atendente dá desconto se você quiser."}</div></div>
     <div class="stats"><div class="stat"><small>Em promoção</small><b>${prods.filter(p=>p.promo_price!=null).length}</b></div><div class="stat"><small>Destaques</small><b>${prods.filter(p=>p.featured).length}</b></div><div class="stat"><small>Leve mais, pague menos</small><b>${withT.length}</b></div></div>
     <div class="tw"><table><thead><tr><th>Produto</th><th class="num">Preço</th><th>Promoção (R$)</th><th></th><th></th></tr></thead><tbody id="dl"></tbody></table></div>`;
   $("#dq").oninput=e=>{term=e.target.value.toLowerCase();draw()};
@@ -717,7 +721,7 @@ PAGES.caixa=async m=>{
     let past=await q(sb.from("cash_sessions").select("*").not("closed_at","is",null).order("opened_at",{ascending:false}).limit(30));
     if(!OWNER()) past=past.filter(s=>s.user_id?s.user_id===ME.id:s.operator===ME.name).slice(0,10);
     m.innerHTML=`<div class="top"><h1>Caixa</h1></div><div class="grid g2"><div class="card grid" style="align-content:start"><b style="font-size:16px">🔒 Caixa fechado · abrir turno</b>
-        <label class="fld"><span>Quem está abrindo o caixa (funcionário)</span><input class="in" id="op" placeholder="Ex.: João" value="${esc(OWNER()?(localStorage.getItem("gb_operador")||""):ME.name)}" ${OWNER()?"":"readonly"}></label>
+        <label class="fld"><span>Quem está abrindo o caixa (funcionário)</span><input class="in" id="op" placeholder="Ex.: João" value="${esc(ME.name||"")}" ${OWNER()?"":"readonly"}></label>
         <label class="fld"><span>Dinheiro na gaveta pra começar (troco)</span><input class="in" id="oa" inputmode="decimal" placeholder="0,00"></label>
         <p class="err" id="e" hidden></p><button class="btn" id="abx">🔓 Abrir caixa</button>
         <p class="muted" style="margin:0;font-size:12px">Com o caixa aberto aparece a tela de venda no balcão, com todos os produtos.</p></div>
@@ -752,8 +756,9 @@ PAGES.caixa=async m=>{
   const paid=()=>r2(parts.reduce((s,x)=>s+(num(x.v)||0),0));
   const cashPart=()=>r2(parts.filter(x=>/dinheiro/i.test(x.m)).reduce((s,x)=>s+(num(x.v)||0),0));
   const hasFiado=()=>split?parts.some(x=>/fiado/i.test(x.m)):pay==="Fiado";
-  const base=p=>p.promo_price!=null&&+p.promo_price<+p.price?+p.promo_price:+p.price;
-  const pr=p=>{const qn=(cart.find(i=>i.p===p)||{n:0}).n;let b=base(p);(p.price_tiers||[]).forEach(x=>{if(qn>=x.min_qty&&+x.price<b)b=+x.price});return b};
+  const PROMO=!!S.promos_no_balcao;   // promoções só no cardápio (padrão)
+  const base=p=>PROMO&&p.promo_price!=null&&+p.promo_price<+p.price?+p.promo_price:+p.price;
+  const pr=p=>{if(!PROMO)return +p.price;const qn=cart.filter(i=>i.p===p).reduce((s,i)=>s+i.n,0);let b=base(p);(p.price_tiers||[]).forEach(x=>{if(qn>=x.min_qty&&+x.price<b)b=+x.price});return b};
   const sub=()=>cart.reduce((s,i)=>s+pr(i.p)*i.n,0), tot=()=>Math.max(0,sub()-(num(disc)||0));
   const stockOf=p=>{if(p.stock_parent_id){const par=allP.find(x=>x.id===p.stock_parent_id);return par&&par.track_stock?Math.floor(+par.stock_qty/(+p.stock_factor||1)):null}return p.track_stock?+p.stock_qty:null};
   async function summary(){
