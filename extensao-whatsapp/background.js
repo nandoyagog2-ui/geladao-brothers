@@ -1,5 +1,13 @@
-// Clicar no ícone da extensão abre o painel lateral
-chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
+// Clicar no ícone da extensão mostra/esconde o painel dentro do WhatsApp Web
+chrome.action.onClicked.addListener(async tab => {
+  if (tab && tab.url && tab.url.startsWith("https://web.whatsapp.com")) {
+    try { await chrome.tabs.sendMessage(tab.id, { gb: "toggle-panel" }); } catch { chrome.tabs.reload(tab.id); }
+  } else {
+    const [wa] = await chrome.tabs.query({ url: "https://web.whatsapp.com/*" });
+    if (wa) { chrome.tabs.update(wa.id, { active: true }); chrome.windows.update(wa.windowId, { focused: true }); }
+    else chrome.tabs.create({ url: "https://web.whatsapp.com/" });
+  }
+});
 
 // Configurações do robô (vêm do painel, leitura pública da loja)
 const SB_URL = "https://qjhhewvwptjnswaxofkn.supabase.co";

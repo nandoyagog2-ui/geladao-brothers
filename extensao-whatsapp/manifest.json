@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Geladão Brothers no WhatsApp",
-  "version": "2.2.0",
-  "description": "Painel do Geladão Brothers ao lado do WhatsApp Web: pedidos, robô de respostas automáticas e avisos de status.",
+  "version": "3.0.0",
+  "description": "Painel do Geladão Brothers dentro do WhatsApp Web: pedidos, robô de respostas automáticas e avisos de status.",
   "icons": {
     "16": "icon-16.png",
     "32": "icon-32.png",
@@ -10,20 +10,16 @@
     "128": "icon-128.png"
   },
   "action": {
-    "default_title": "Abrir o painel do Geladão",
+    "default_title": "Mostrar/esconder o painel do Geladão",
     "default_icon": {
       "16": "icon-16.png",
       "32": "icon-32.png"
     }
   },
-  "side_panel": {
-    "default_path": "panel.html"
-  },
   "background": {
     "service_worker": "background.js"
   },
   "permissions": [
-    "sidePanel",
     "tabs",
     "storage"
   ],
@@ -40,6 +36,18 @@
         "whatsapp.js"
       ],
       "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "panel.html",
+        "panel.js",
+        "icon-48.png"
+      ],
+      "matches": [
+        "https://web.whatsapp.com/*"
+      ]
     }
   ]
 }

@@ -3,13 +3,13 @@
     {
       "source": "/painel/(.*)",
       "headers": [
-        { "key": "Content-Security-Policy", "value": "frame-ancestors 'self' chrome-extension:" }
+        { "key": "Content-Security-Policy", "value": "frame-ancestors 'self' chrome-extension: https://web.whatsapp.com" }
       ]
     },
     {
       "source": "/painel",
       "headers": [
-        { "key": "Content-Security-Policy", "value": "frame-ancestors 'self' chrome-extension:" }
+        { "key": "Content-Security-Policy", "value": "frame-ancestors 'self' chrome-extension: https://web.whatsapp.com" }
       ]
     }
   ]

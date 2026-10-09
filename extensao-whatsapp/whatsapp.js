@@ -2,7 +2,7 @@
 //  - descobre a conversa aberta e escreve/envia mensagens nela
 //  - robô de respostas automáticas (chatbot) com cores e botão AJUDA
 //  - envia avisos de pedido abrindo a conversa do cliente pelo número
-const VERSION = "2.2";
+const VERSION = "3.0";
 
 /* ================= conversa aberta ================= */
 function headerTitle() {
@@ -482,4 +482,36 @@ chrome.runtime.onMessage.addListener((m, _s, replyFn) => {
   if (m && m.gb === "sendto") { jobs.push({ id: m.id, phone: m.phone, text: m.text }); pumpJobs(); replyFn({ ok: true, queued: true }); return false; }
   if (m && m.gb === "bot-reload") { loadCfg(true); replyFn({ ok: true }); return false; }
   return false;
+});
+
+/* ================= painel do Geladão DENTRO do WhatsApp (coluna da direita) ================= */
+const PANEL_W = 360;
+const pcss = document.createElement("style");
+pcss.textContent = `html.gb-open #app{width:calc(100vw - ${PANEL_W}px)!important;max-width:calc(100vw - ${PANEL_W}px)!important}
+#gb-panel{position:fixed;top:0;right:0;bottom:0;width:${PANEL_W}px;z-index:2147482000;background:#0E0E0E;border-left:1px solid #2a2a2a;box-shadow:-2px 0 10px rgba(0,0,0,.25);display:none}
+html.gb-open #gb-panel{display:block}
+#gb-panel iframe{border:0;width:100%;height:100%;display:block}
+#gb-panel .gb-x{position:absolute;top:8px;left:-30px;width:28px;height:44px;border:0;border-radius:8px 0 0 8px;background:#FFC400;color:#111;font:900 14px system-ui,sans-serif;cursor:pointer;box-shadow:-2px 2px 6px rgba(0,0,0,.3)}
+#gb-tab{position:fixed;top:72px;right:0;z-index:2147482000;border:0;border-radius:10px 0 0 10px;background:#FFC400;color:#111;font:900 12px system-ui,sans-serif;padding:10px 6px;cursor:pointer;writing-mode:vertical-rl;box-shadow:-2px 2px 8px rgba(0,0,0,.35)}
+html.gb-open #gb-tab{display:none}`;
+document.documentElement.appendChild(pcss);
+const panel = document.createElement("div"); panel.id = "gb-panel";
+panel.innerHTML = `<button class="gb-x" title="Esconder o painel">›</button><iframe allow="clipboard-write" src="${chrome.runtime.getURL("panel.html")}"></iframe>`;
+const tab = document.createElement("button"); tab.id = "gb-tab"; tab.textContent = "🍺 GELADÃO"; tab.title = "Mostrar o painel do Geladão";
+function mountPanel() {
+  const root = document.body || document.documentElement;
+  if (!panel.isConnected) root.appendChild(panel);
+  if (!tab.isConnected) root.appendChild(tab);
+}
+function setOpen(v) {
+  document.documentElement.classList.toggle("gb-open", !!v);
+  chrome.storage.local.set({ gb_panel_open: !!v });
+  setTimeout(() => window.dispatchEvent(new Event("resize")), 50);
+}
+panel.querySelector(".gb-x").onclick = () => setOpen(false);
+tab.onclick = () => setOpen(true);
+chrome.storage.local.get("gb_panel_open", v => { mountPanel(); setOpen(v.gb_panel_open !== false); });
+setInterval(mountPanel, 2000);
+chrome.runtime.onMessage.addListener(m => {
+  if (m && m.gb === "toggle-panel") setOpen(!document.documentElement.classList.contains("gb-open"));
 });
