@@ -46,11 +46,11 @@ async function shrinkImage(blob,max){
   const sc=Math.min(1,max/Math.max(bmp.width,bmp.height)), w=Math.round(bmp.width*sc), h=Math.round(bmp.height*sc);
   const c=document.createElement("canvas"); c.width=w; c.height=h; c.getContext("2d").drawImage(bmp,0,0,w,h);
   const tb=(t,qq)=>new Promise(r=>c.toBlob(r,t,qq));
-  let out=await tb("image/webp",0.82);
+  let out=await tb("image/webp",0.92);
   if(!out||out.type!=="image/webp"){ const png=/png/i.test(blob.type||""); out=await tb(png?"image/png":"image/jpeg",0.85); }
   return out&&out.size<blob.size?out:(sc<1?out:null);
 }
-const imgMax=id=>/banner/.test(id)?1600:/logo/.test(id)?600:900;
+const imgMax=id=>/banner/.test(id)?2000:/logo/.test(id)?800:1400;
 async function uploadImage(blob,max){
   const small=await shrinkImage(blob,max)||blob;
   const ext=(small.type.split("/")[1]||"jpg").replace("jpeg","jpg");
@@ -1088,24 +1088,24 @@ PAGES.config=async m=>{
     <div class="card grid"><b>Mensagens do WhatsApp pro cliente</b><p class="muted" style="margin:0;font-size:12px">Use {nome}, {numero}, {total}, {loja}, {link_pedido} (acompanhar pedido) e {link_avaliacao} (página de avaliação com estrelas). Ao mudar o status do pedido, o WhatsApp abre com a mensagem pronta, é só apertar enviar.</p>
       ${Object.entries(WA_LABEL).map(([k,l])=>`<label class="fld"><span>${l}</span><textarea class="in" rows="3" id="wa_${k}">${esc(((S.wa_templates||{})[k])||WA_DEFAULT[k])}</textarea></label>`).join("")}
       <label class="fld"><span>Link de avaliação no Google (opcional). Quem der 4 ou 5 estrelas no nosso link é convidado a avaliar no Google também</span><input class="in" id="rv" value="${esc(S.review_url||"")}"></label></div>
-    <div class="card grid"><b>⚡ Deixar o cardápio mais rápido</b><p class="muted" style="margin:0;font-size:12px">Diminui as fotos que já estão no sistema (logo, capa, categorias e produtos) pra abrirem rápido no celular do cliente. A qualidade continua boa. Pode levar alguns minutos, deixe esta tela aberta.</p><button class="btn o" id="opt">⚡ Otimizar fotos agora</button><div id="optm" class="muted" style="font-size:12.5px"></div></div>
+    <div class="card grid"><b>⚡ Deixar o cardápio mais rápido</b><p class="muted" style="margin:0;font-size:12px">Diminui as fotos que já estão no sistema (logo, capa, categorias e produtos) pra abrirem rápido no celular do cliente. A qualidade continua boa. Pode levar alguns minutos, deixe esta tela aberta.</p><button class="btn o" id="opt">⚡ Otimizar fotos agora</button><button class="btn o" id="rst">↩ Voltar as fotos originais (qualidade máxima)</button><div id="optm" class="muted" style="font-size:12.5px"></div></div>
     <div class="card"><b>Link do cardápio pros clientes</b><p style="word-break:break-all"><a href="/" target="_blank" rel="noopener">${location.origin}/</a></p><button class="btn o sm" id="cpl">Copiar link</button></div></div></div>`;
   wireImgs(m);
   $("#opt").onclick=async e=>{const b=e.target; b.disabled=true; const msg=t=>$("#optm").textContent=t;
     try{
       const [cats,prods]=await Promise.all([q(sb.from("categories").select("id,image_url")),q(sb.from("products").select("id,image_url"))]);
       const jobs=[];
-      if(S.logo_url) jobs.push({url:S.logo_url,max:600,save:u=>sb.from("store_settings").update({logo_url:u}).eq("id",1)});
-      if(S.banner_url) jobs.push({url:S.banner_url,max:1600,save:u=>sb.from("store_settings").update({banner_url:u}).eq("id",1)});
+      if(S.logo_url) jobs.push({url:S.logo_url,max:800,save:u=>sb.from("store_settings").update({logo_url:u}).eq("id",1)});
+      if(S.banner_url) jobs.push({url:S.banner_url,max:2000,save:u=>sb.from("store_settings").update({banner_url:u}).eq("id",1)});
       const byUrl={}; prods.filter(p=>p.image_url).forEach(p=>(byUrl[p.image_url]=byUrl[p.image_url]||[]).push(p.id));
-      cats.filter(c=>c.image_url).forEach(c=>jobs.push({url:c.image_url,max:900,save:u=>sb.from("categories").update({image_url:u}).eq("id",c.id)}));
-      Object.entries(byUrl).forEach(([u,ids])=>jobs.push({url:u,max:900,save:nu=>sb.from("products").update({image_url:nu}).in("id",ids)}));
+      cats.filter(c=>c.image_url).forEach(c=>jobs.push({url:c.image_url,max:1400,save:u=>sb.from("categories").update({image_url:u}).eq("id",c.id)}));
+      Object.entries(byUrl).forEach(([u,ids])=>jobs.push({url:u,max:1400,save:nu=>sb.from("products").update({image_url:nu}).in("id",ids)}));
       let done=0,saved=0,kb=0,skip=0;
       for(const j of jobs){
         done++; msg(`Otimizando ${done} de ${jobs.length}…`);
         try{
           const r=await fetch(j.url,{mode:"cors"}); if(!r.ok) throw 0; const blob=await r.blob();
-          if(blob.size<120*1024){skip++;continue}
+          if(blob.size<500*1024){skip++;continue}
           const small=await shrinkImage(blob,j.max); if(!small||small.size>=blob.size*0.9){skip++;continue}
           const nu=await uploadImage(small,j.max); const res=await j.save(nu); if(res.error) throw res.error;
           saved++; kb+=(blob.size-small.size)/1024;
@@ -1113,6 +1113,36 @@ PAGES.config=async m=>{
       }
       S=(await sb.from("store_settings").select("*").eq("id",1).single()).data||S;
       msg(`✅ Pronto! ${saved} foto(s) otimizada(s), ${Math.round(kb/1024*10)/10} MB a menos. ${skip} já estavam leves ou não deu pra mexer.`);
+    }catch(x){msg("Não deu pra terminar: "+(x.message||x))}finally{b.disabled=false}};
+  // volta as fotos originais: acha, entre os arquivos guardados, a foto original parecida com cada cópia otimizada
+  $("#rst").onclick=async e=>{const b=e.target; b.disabled=true; const msg=t=>$("#optm").textContent=t;
+    try{
+      msg("Procurando as fotos originais…");
+      let files=[],off=0; for(;;){const r=await sb.storage.from("fotos").list("",{limit:1000,offset:off,sortBy:{column:"name",order:"asc"}}); if(r.error)throw r.error; files=files.concat(r.data); if(r.data.length<1000)break; off+=1000}
+      const urlOf=n=>sb.storage.from("fotos").getPublicUrl(n).data.publicUrl, nameOf=u=>decodeURIComponent(String(u||"").split("/fotos/")[1]||"");
+      const [cats,prods]=await Promise.all([q(sb.from("categories").select("id,image_url")),q(sb.from("products").select("id,image_url"))]);
+      const used=[]; if(S.logo_url)used.push({u:S.logo_url,t:"logo"}); if(S.banner_url)used.push({u:S.banner_url,t:"banner"});
+      cats.forEach(c=>c.image_url&&used.push({u:c.image_url,t:"cat",id:c.id})); prods.forEach(p=>p.image_url&&used.push({u:p.image_url,t:"prod",id:p.id}));
+      const usedNames=new Set(used.map(x=>nameOf(x.u)));
+      const opt=[...new Set(used.map(x=>nameOf(x.u)).filter(n=>/\.webp$/i.test(n)))];
+      const orig=files.map(f=>f.name).filter(n=>n&&!usedNames.has(n)&&!/\.webp$/i.test(n));
+      if(!opt.length){msg("Nenhuma foto otimizada pra voltar.");return}
+      const sig=async n=>{try{const r=await fetch(urlOf(n));const bm=await createImageBitmap(await r.blob());const c=document.createElement("canvas");c.width=c.height=16;const x=c.getContext("2d");x.drawImage(bm,0,0,16,16);const d=x.getImageData(0,0,16,16).data;const a=[];for(let i=0;i<d.length;i+=4)a.push((d[i]+d[i+1]+d[i+2])/3);return {a,r:bm.width/bm.height}}catch{return null}};
+      const OS={}; let k=0; for(const n of orig){k++;msg(`Lendo as originais ${k} de ${orig.length}…`);OS[n]=await sig(n)}
+      let fixed=0; k=0;
+      for(const n of opt){k++;msg(`Voltando ${k} de ${opt.length}…`);const s1=await sig(n);if(!s1)continue;
+        let best=null,bd=1e9; for(const [on,s2] of Object.entries(OS)){if(!s2||Math.abs(s2.r-s1.r)>0.03)continue;let d=0;for(let i=0;i<256;i++)d+=Math.abs(s1.a[i]-s2.a[i]);if(d<bd){bd=d;best=on}}
+        if(!best||bd>256*10)continue;
+        const nu=urlOf(best);
+        for(const x of used.filter(x=>nameOf(x.u)===n)){
+          if(x.t==="logo")await sb.from("store_settings").update({logo_url:nu}).eq("id",1);
+          else if(x.t==="banner")await sb.from("store_settings").update({banner_url:nu}).eq("id",1);
+          else if(x.t==="cat")await sb.from("categories").update({image_url:nu}).eq("id",x.id);
+          else await sb.from("products").update({image_url:nu}).eq("id",x.id);
+        }
+        fixed++;}
+      S=(await sb.from("store_settings").select("*").eq("id",1).single()).data||S;
+      msg(`✅ Pronto! ${fixed} foto(s) voltaram pra original. ${opt.length-fixed>0?(opt.length-fixed)+" não encontrei a original.":""}`);
     }catch(x){msg("Não deu pra terminar: "+(x.message||x))}finally{b.disabled=false}};
   $("#cpl").onclick=async()=>{try{await navigator.clipboard.writeText(location.origin+"/");toast("Link copiado")}catch{toast(location.origin+"/")}};
   $("#sv").onclick=async()=>{const v=readForm(F,m);
