@@ -10,7 +10,7 @@ function iconFor(cat){const c=(cat||"").toLowerCase();
   if(c.includes("refri"))return"soda"; if(c.includes("água")||c.includes("agua"))return"drop"; if(c.includes("salgad")||c.includes("gulos"))return"chips";
   if(c.includes("taba")||c.includes("cigar"))return"smoke"; return"bottle";}
 const svg=c=>`<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">${ICON[iconFor(c)]}</svg>`;
-const pic=p=>p.img?`<img src="${esc(p.img)}" alt="" loading="lazy">`:svg(p.c);
+const pic=p=>p.img?`<img src="${esc(p.img)}" alt="" loading="lazy" decoding="async">`:svg(p.c);
 const NAVI={home:'<path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z"/>',promo:'<circle cx="12" cy="12" r="8"/><path d="M9 15l6-6M9.5 9.5h0M14.5 14.5h0"/>',orders:'<path d="M6 7h12l-1 13H7z"/><path d="M9 7a3 3 0 0 1 6 0"/>',me:'<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/>'};
 
 /* ---------- utilidades ---------- */
@@ -30,7 +30,8 @@ const tierTag=p=>(p.tiers||[]).length&&p.s?`<div class="tier">🔥 ${p.tiers.map
 const priceHTML=p=>`<span class="price">${brl(price(p))}</span>${p.promo?`<span class="was">${brl(p.p)}</span><span class="off">-${pct(p)}%</span>`:""}`;
 const byId=id=>PRODS.find(p=>p.id===id);
 
-async function load(){
+const CACHE_KEY="gb_menu_v1";
+async function fetchMenu(){
   const [s,c,p,g,o,pc,z,ps]=await Promise.all([
     sb.from("store_settings").select("*").eq("id",1).single(),
     sb.from("categories").select("*").eq("active",true).order("sort_order").order("name"),
@@ -42,6 +43,10 @@ async function load(){
     sb.from("product_suggestions").select("*")
   ]);
   const err=[s,c,p].find(r=>r.error); if(err) throw err.error;
+  return {s:s.data,c:c.data,p:p.data,g:g.data||[],o:o.data||[],pc:pc.data||[],z:z.data||[],ps:ps.data||[]};
+}
+function applyMenu(D){
+  const s={data:D.s},c={data:D.c},p={data:D.p},g={data:D.g},o={data:D.o},pc={data:D.pc},z={data:D.z},ps={data:D.ps};
   S=s.data; CATS=c.data;
   const catName=Object.fromEntries(CATS.map(x=>[x.id,x.name]));
   PRODS=p.data.filter(x=>catName[x.category_id]).map(x=>({id:x.id,cid:x.category_id,c:catName[x.category_id],n:x.name,d:x.description,p:+x.price,promo:x.promo_price!=null&&+x.promo_price<+x.price?+x.promo_price:null,s:x.status==="ativo",img:x.image_url,feat:x.featured,isNew:x.is_new,tiers:(Array.isArray(x.price_tiers)?x.price_tiers:[]).map(y=>({min_qty:+y.min_qty,price:+y.price})).filter(y=>y.min_qty>1&&y.price>0).sort((a,b)=>a.min_qty-b.min_qty)}));
@@ -98,7 +103,7 @@ function homeView(){
   const term=norm(q), oi=openInfo();
   app.innerHTML=`${oi.open?"":`<div class="closed">${esc(oi.text)} · você pode olhar o cardápio</div>`}
   <div class="cover"${S.banner_url?` style="background:url('${esc(S.banner_url)}') center/cover"`:""}></div><div class="store"><div class="wrap">
-    <div class="logo">${S.logo_url?`<img src="${esc(S.logo_url)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`:esc(initials(S.name))}</div>
+    <div class="logo">${S.logo_url?`<img src="${esc(S.logo_url)}" alt="" fetchpriority="high" decoding="async" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`:esc(initials(S.name))}</div>
     <h1>${esc(S.name)}</h1>${S.address?`<div class="loc">📍 ${esc(S.address)}</div>`:""}
     <div class="open" style="${oi.open?"":"color:var(--red)"}">${esc(oi.text)}</div>
     <button class="fee" id="fee"><span>📍 Calcular taxa e tempo de entrega</span><b>›</b></button></div></div>
@@ -111,7 +116,7 @@ function homeView(){
   feats.forEach(p=>m.querySelector("#rail").append(featCard(p)));
   CATS.forEach(c=>{
     const b=document.createElement("button"); b.className="ct";
-    b.innerHTML=`<div class="tile${c.image_url?" has-img":""}">${c.image_url?`<img src="${esc(c.image_url)}" alt="">`:`<span class="brand">${esc(S.name).replace(" ","<br>")}</span>${svg(c.name)}`}</div><span>${esc(c.name)}</span>`;
+    b.innerHTML=`<div class="tile${c.image_url?" has-img":""}">${c.image_url?`<img src="${esc(c.image_url)}" alt="" loading="lazy" decoding="async">`:`<span class="brand">${esc(S.name).replace(" ","<br>")}</span>${svg(c.name)}`}</div><span>${esc(c.name)}</span>`;
     b.onclick=()=>{cat=c;render();scrollTo(0,0)}; m.querySelector("#cats").append(b);
   });
 }
@@ -484,12 +489,21 @@ function promoPop(){
 }
 
 /* ---------- início ---------- */
+// abre na hora com o cardápio guardado no celular e atualiza por trás
 (async()=>{
-  try{ await load(); }
-  catch(e){ app.innerHTML=`<div class="empty">Não foi possível carregar o cardápio agora. Tente de novo em instantes.</div>`; console.error(e); return; }
-  restoreCart(); render();
+  let cached=null; try{cached=JSON.parse(localStorage.getItem(CACHE_KEY)||"null")}catch{}
+  let shown=false;
+  if(cached&&cached.s){ try{ applyMenu(cached); restoreCart(); render(); shown=true; afterBoot(); }catch(e){ console.error(e) } }
+  let fresh=null;
+  try{ fresh=await fetchMenu(); }
+  catch(e){ if(!shown) app.innerHTML=`<div class="empty">Não foi possível carregar o cardápio agora. Tente de novo em instantes.</div>`; console.error(e); return; }
+  try{ localStorage.setItem(CACHE_KEY,JSON.stringify(fresh)) }catch{}
+  if(!shown){ applyMenu(fresh); restoreCart(); render(); afterBoot(); return; }
+  if(JSON.stringify(fresh)!==JSON.stringify(cached)){ applyMenu(fresh); const y=window.scrollY, ae=document.activeElement; if(!(ae&&ae.id==="q")){ render(); window.scrollTo(0,y); } }
+})();
+function afterBoot(){
   const qs=new URLSearchParams(location.search);
   if(qs.get("avaliar")&&qs.get("tel")){ history.replaceState(null,"",location.pathname); reviewSheet(+qs.get("avaliar"),qs.get("tel")); return; }
   if(qs.get("pedido")&&qs.get("tel")){ history.replaceState(null,"",location.pathname); trackSheet(+qs.get("pedido"),qs.get("tel")); return; }
   if(!sessionStorage.getItem("gb_promo")){ try{sessionStorage.setItem("gb_promo","1")}catch{} promoPop(); }
-})();
+}

@@ -40,15 +40,30 @@ function formHTML(fields,v){
     return `<label class="fld"><span>${f.l}</span><input id="${id}" class="in" ${f.t==="money"||f.t==="int"?'inputmode="decimal"':""} placeholder="${f.ph||ph}" value="${esc(f.t==="money"?money(val):val??"")}"></label>`;
   }).join("");
 }
+/* ---------- diminui a foto antes de enviar (cardápio abre rápido) ---------- */
+async function shrinkImage(blob,max){
+  let bmp; try{bmp=await createImageBitmap(blob)}catch{return null}
+  const sc=Math.min(1,max/Math.max(bmp.width,bmp.height)), w=Math.round(bmp.width*sc), h=Math.round(bmp.height*sc);
+  const c=document.createElement("canvas"); c.width=w; c.height=h; c.getContext("2d").drawImage(bmp,0,0,w,h);
+  const tb=(t,qq)=>new Promise(r=>c.toBlob(r,t,qq));
+  let out=await tb("image/webp",0.82);
+  if(!out||out.type!=="image/webp"){ const png=/png/i.test(blob.type||""); out=await tb(png?"image/png":"image/jpeg",0.85); }
+  return out&&out.size<blob.size?out:(sc<1?out:null);
+}
+const imgMax=id=>/banner/.test(id)?1600:/logo/.test(id)?600:900;
+async function uploadImage(blob,max){
+  const small=await shrinkImage(blob,max)||blob;
+  const ext=(small.type.split("/")[1]||"jpg").replace("jpeg","jpg");
+  const path=`${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
+  await q(sb.storage.from("fotos").upload(path,small,{cacheControl:"31536000",upsert:false,contentType:small.type||undefined}));
+  return sb.storage.from("fotos").getPublicUrl(path).data.publicUrl;
+}
 function wireImgs(el){
   $$("input[type=file]",el).forEach(inp=>inp.onchange=async()=>{
     const file=inp.files[0]; if(!file) return; const id=inp.id.replace(/_file$/,"");
     const pv=$("#"+id+"_pv",el); inp.disabled=true;
     try{
-      const ext=(file.name.split(".").pop()||"jpg").toLowerCase().replace(/[^a-z0-9]/g,"");
-      const path=`${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
-      await q(sb.storage.from("fotos").upload(path,file,{cacheControl:"31536000",upsert:false}));
-      const url=sb.storage.from("fotos").getPublicUrl(path).data.publicUrl;
+      const url=await uploadImage(file,imgMax(id));
       $("#"+id,el).value=url; const img=document.createElement("img"); img.src=url; img.id=id+"_pv"; pv.replaceWith(img); toast("Foto enviada");
     }finally{inp.disabled=false}
   });
@@ -1073,8 +1088,32 @@ PAGES.config=async m=>{
     <div class="card grid"><b>Mensagens do WhatsApp pro cliente</b><p class="muted" style="margin:0;font-size:12px">Use {nome}, {numero}, {total}, {loja}, {link_pedido} (acompanhar pedido) e {link_avaliacao} (página de avaliação com estrelas). Ao mudar o status do pedido, o WhatsApp abre com a mensagem pronta, é só apertar enviar.</p>
       ${Object.entries(WA_LABEL).map(([k,l])=>`<label class="fld"><span>${l}</span><textarea class="in" rows="3" id="wa_${k}">${esc(((S.wa_templates||{})[k])||WA_DEFAULT[k])}</textarea></label>`).join("")}
       <label class="fld"><span>Link de avaliação no Google (opcional). Quem der 4 ou 5 estrelas no nosso link é convidado a avaliar no Google também</span><input class="in" id="rv" value="${esc(S.review_url||"")}"></label></div>
+    <div class="card grid"><b>⚡ Deixar o cardápio mais rápido</b><p class="muted" style="margin:0;font-size:12px">Diminui as fotos que já estão no sistema (logo, capa, categorias e produtos) pra abrirem rápido no celular do cliente. A qualidade continua boa. Pode levar alguns minutos, deixe esta tela aberta.</p><button class="btn o" id="opt">⚡ Otimizar fotos agora</button><div id="optm" class="muted" style="font-size:12.5px"></div></div>
     <div class="card"><b>Link do cardápio pros clientes</b><p style="word-break:break-all"><a href="/" target="_blank" rel="noopener">${location.origin}/</a></p><button class="btn o sm" id="cpl">Copiar link</button></div></div></div>`;
   wireImgs(m);
+  $("#opt").onclick=async e=>{const b=e.target; b.disabled=true; const msg=t=>$("#optm").textContent=t;
+    try{
+      const [cats,prods]=await Promise.all([q(sb.from("categories").select("id,image_url")),q(sb.from("products").select("id,image_url"))]);
+      const jobs=[];
+      if(S.logo_url) jobs.push({url:S.logo_url,max:600,save:u=>sb.from("store_settings").update({logo_url:u}).eq("id",1)});
+      if(S.banner_url) jobs.push({url:S.banner_url,max:1600,save:u=>sb.from("store_settings").update({banner_url:u}).eq("id",1)});
+      const byUrl={}; prods.filter(p=>p.image_url).forEach(p=>(byUrl[p.image_url]=byUrl[p.image_url]||[]).push(p.id));
+      cats.filter(c=>c.image_url).forEach(c=>jobs.push({url:c.image_url,max:900,save:u=>sb.from("categories").update({image_url:u}).eq("id",c.id)}));
+      Object.entries(byUrl).forEach(([u,ids])=>jobs.push({url:u,max:900,save:nu=>sb.from("products").update({image_url:nu}).in("id",ids)}));
+      let done=0,saved=0,kb=0,skip=0;
+      for(const j of jobs){
+        done++; msg(`Otimizando ${done} de ${jobs.length}…`);
+        try{
+          const r=await fetch(j.url,{mode:"cors"}); if(!r.ok) throw 0; const blob=await r.blob();
+          if(blob.size<120*1024){skip++;continue}
+          const small=await shrinkImage(blob,j.max); if(!small||small.size>=blob.size*0.9){skip++;continue}
+          const nu=await uploadImage(small,j.max); const res=await j.save(nu); if(res.error) throw res.error;
+          saved++; kb+=(blob.size-small.size)/1024;
+        }catch{skip++}
+      }
+      S=(await sb.from("store_settings").select("*").eq("id",1).single()).data||S;
+      msg(`✅ Pronto! ${saved} foto(s) otimizada(s), ${Math.round(kb/1024*10)/10} MB a menos. ${skip} já estavam leves ou não deu pra mexer.`);
+    }catch(x){msg("Não deu pra terminar: "+(x.message||x))}finally{b.disabled=false}};
   $("#cpl").onclick=async()=>{try{await navigator.clipboard.writeText(location.origin+"/");toast("Link copiado")}catch{toast(location.origin+"/")}};
   $("#sv").onclick=async()=>{const v=readForm(F,m);
     if(!v.name){toast("Informe o nome da loja");return}
