@@ -96,7 +96,8 @@ main{padding-bottom:110px}
 .x{width:32px;height:32px;border-radius:50%;background:var(--card-2);display:grid;place-items:center;font-size:15px}
 .bigph{width:calc(100% + 32px);max-width:none;aspect-ratio:auto;height:min(100vw,56vh);overflow:hidden}
 .bigph:has(img){background:#fff}
-.bigph img{object-fit:contain!important}
+.bigph{display:grid;place-items:center}
+.bigph img{width:auto!important;height:auto!important;max-width:100%;max-height:100%;object-fit:contain!important}
 .lbl{display:flex;justify-content:space-between;color:var(--muted);font-size:12px;margin:16px 0 6px}
 .in{width:100%;background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:11px 12px;font:inherit}
 .in::placeholder{color:#6f6b62}

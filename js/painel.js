@@ -63,6 +63,8 @@ function wireImgs(el){
     const file=inp.files[0]; if(!file) return; const id=inp.id.replace(/_file$/,"");
     const pv=$("#"+id+"_pv",el); inp.disabled=true;
     try{
+      let small=false; try{const bm=await createImageBitmap(file); small=Math.max(bm.width,bm.height)<600}catch{}
+      if(small&&!confirm("⚠️ Essa foto é pequena (baixa resolução) e vai aparecer borrada no cardápio.\n\nO ideal é uma foto com pelo menos 800 pixels (ex.: baixada do site da marca ou tirada com o celular).\n\nUsar mesmo assim?")) return;
       const url=await uploadImage(file,imgMax(id));
       $("#"+id,el).value=url; const img=document.createElement("img"); img.src=url; img.id=id+"_pv"; pv.replaceWith(img); toast("Foto enviada");
     }finally{inp.disabled=false}
