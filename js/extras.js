@@ -44,16 +44,17 @@ function courierMsg(o,items){
 async function courierDrawer(o,items){
   const list=(await couriers(true)).filter(c=>c.active);
   if(!list.length){toast(OWNER()?"Cadastre os entregadores em Gestão → Entregadores":"Nenhum entregador cadastrado ainda");return}
-  const dr=drawer(`Mandar pedido #${o.number} pro entregador`,`<p class="muted" style="margin:0">Toque no entregador: o WhatsApp abre com o endereço, o mapa, os itens e quanto cobrar. O pedido muda pra <b>Saiu para entrega</b>.</p>
+  const dr=drawer(`Mandar pedido #${o.number} pro entregador`,`<p class="muted" style="margin:0">Toque no entregador: ele recebe no WhatsApp o endereço, o mapa, os itens e quanto cobrar, e o cliente recebe o aviso de <b>Saiu para entrega</b>. Tudo sozinho, pela extensão do WhatsApp.</p>
     ${list.map(c=>`<button class="btn ${o.courier_id===c.id?"":"o"}" data-cr="${c.id}" style="justify-content:space-between"><span>🏍️ ${esc(c.name)}</span><span class="muted" style="font-size:12px">${esc(c.phone||"sem telefone")}</span></button>`).join("")}
     <details><summary class="muted" style="cursor:pointer">Ver a mensagem</summary><pre style="white-space:pre-wrap;font:12.5px/1.4 inherit;background:var(--card-2);padding:10px;border-radius:8px">${esc(courierMsg(o,items))}</pre></details>`);
   $$("[data-cr]",dr).forEach(b=>b.onclick=async()=>{const c=list.find(x=>x.id==b.dataset.cr);
-    const w=c.phone&&digits(c.phone).length>=10?window.open(waURL(c.phone,courierMsg(o,items)),"_blank"):null;
+    let w=null, queued=false;
+    if(c.phone&&digits(c.phone).length>=10){queued=await waQueue(c.phone,courierMsg(o,items),"entregador",o.id); if(!queued) w=window.open(waURL(c.phone,courierMsg(o,items)),"_blank")}
     const up={courier_id:c.id,dispatched_at:new Date().toISOString()}; if(["novo","em_preparo","pronto"].includes(o.status))up.status="saiu_entrega";
     const r=await sb.from("orders").update(up).eq("id",o.id);
     if(r.error){toast(/courier_id|dispatched_at/.test(r.error.message)?"Rode a parte 14 do banco no Supabase":r.error.message);return}
     if(!w&&!c.phone)toast("Esse entregador está sem telefone; cadastre o WhatsApp dele");
-    toast(`Pedido #${o.number} com ${c.name} 🏍️`); if(page==="pedidos")PAGES.pedidos($("#main")); orderDrawer(o.id)});
+    toast(queued?`🏍️ Pedido #${o.number} com ${c.name} · a extensão manda pra ele e avisa o cliente`:`Pedido #${o.number} com ${c.name} 🏍️`); if(page==="pedidos")PAGES.pedidos($("#main")); orderDrawer(o.id)});
 }
 
 async function pageEntregadores(m){
@@ -98,9 +99,15 @@ const BOT_DEFAULT={enabled:false,
   menu_footer:"Responda com o *número* da opção.",
   keywords:[{words:"cardapio, cardápio, menu, preço, precos, preços",reply:"Nosso cardápio com todos os preços 👇\n{link}"},
     {words:"pix",reply:"Aceitamos Pix sim! 😉 O pagamento é feito na entrega ou na retirada."},
+    {words:"horario, horário, que horas, aberto, abre, fecha, funcionando",reply:"🕐 {horario}"},
+    {words:"endereco, endereço, onde fica, localizacao, localização, onde voces ficam",reply:"📍 Estamos em: {endereco}"},
+    {words:"entrega, entregam, delivery, taxa, frete, demora quanto",reply:"🛵 Entregamos sim! A taxa aparece no cardápio quando você coloca o endereço 👇\n{link}"},
+    {words:"cartao, cartão, credito, crédito, debito, débito, maquininha",reply:"💳 Aceitamos cartão de crédito e débito na entrega ou na retirada."},
+    {words:"meu pedido, cade, cadê, demorando, ta chegando, tá chegando",reply:"Vou verificar seu pedido agora! 🙏 Um atendente já te responde.",human:true},
+    {words:"obrigado, obrigada, valeu, vlw, agradeco, agradeço",reply:"Nós que agradecemos! 🍻💛 Qualquer coisa é só chamar."},
     {words:"atendente, humano, pessoa, falar com alguem, falar com alguém",reply:"Certo! Já vou chamar um atendente. 🙋",human:true}],
   cooldown_hours:6,pause_hours:2,save_contacts:true};
-const AUTO_DEFAULT={enabled:false,types:["delivery","retirada"],statuses:["em_preparo","saiu_entrega","pronto","concluido"]};
+const AUTO_DEFAULT={enabled:true,types:["delivery","retirada"],statuses:["em_preparo","saiu_entrega","pronto","concluido"]};
 async function pageChatbot(m){
   const r0=await sb.from("store_settings").select("bot,wa_auto").eq("id",1).single();
   if(r0.error){m.innerHTML=`<div class="top"><h1>Chatbot e avisos</h1></div><p class="alert">Rode a <b>parte 15</b> do banco no Supabase pra configurar o robô.</p>`;return}
@@ -132,7 +139,7 @@ async function pageChatbot(m){
       <div class="card grid" style="align-content:start"><b>🔑 Palavras-chave</b><p class="muted" style="margin:0;font-size:12.5px">Se o cliente escrever uma dessas palavras, o robô responde na hora. Separe as palavras com vírgula.</p>
         ${B.keywords.map((k,i)=>`<div class="card grid" style="gap:6px;background:var(--card-2)"><div class="row" style="flex-wrap:nowrap"><input class="in" data-kw="${i}" value="${esc(k.words)}" placeholder="pix, chave pix"><button class="icb" data-kx="${i}" aria-label="Tirar">✕</button></div>
           <textarea class="in" data-kr="${i}" rows="2" placeholder="Resposta">${esc(k.reply)}</textarea><label class="chk" style="font-size:12.5px"><input type="checkbox" data-kh="${i}" ${k.human?"checked":""}> Chama um atendente</label></div>`).join("")}
-        <button class="btn o sm" id="ka" style="justify-self:start">➕ Adicionar palavra-chave</button></div>
+        <div class="row"><button class="btn o sm" id="ka">➕ Adicionar palavra-chave</button><button class="btn o sm" id="ks">✨ Adicionar respostas sugeridas</button></div></div>
       <div class="card grid" style="align-content:start">
         <label class="chk" style="font-size:16px;font-weight:800"><input type="checkbox" id="ae" ${A.enabled?"checked":""}> 📲 Avisos automáticos de status do pedido</label>
         <p class="muted" style="margin:0;font-size:12.5px">Quando o status do pedido muda (no painel, no caixa ou na extensão), o cliente recebe a mensagem no WhatsApp <b>sozinho</b>. Precisa do WhatsApp Web aberto, o painel lateral da extensão aberto e <b>"Envia os avisos de status sozinho"</b> marcado em um computador.</p>
@@ -147,6 +154,8 @@ async function pageChatbot(m){
       A.enabled=$("#ae").checked;A.types=$$("[data-at]",m).filter(c=>c.checked).map(c=>c.dataset.at);A.statuses=$$("[data-as]",m).filter(c=>c.checked).map(c=>c.dataset.as)};
     $("#ma",m).onclick=()=>{read();B.menu.push({key:"",label:"Nova opção",reply:""});draw()};
     $("#ka",m).onclick=()=>{read();B.keywords.push({words:"",reply:""});draw()};
+    $("#ks",m).onclick=()=>{read();const have=new Set(B.keywords.map(k=>k.words.split(",")[0].trim().toLowerCase()));let n=0;
+      BOT_DEFAULT.keywords.forEach(k=>{if(!have.has(k.words.split(",")[0].trim().toLowerCase())){B.keywords.push({...k});n++}});draw();toast(n?n+" resposta(s) adicionada(s) · confira e clique em Salvar":"Você já tem todas as sugeridas")};
     $$("[data-mx]",m).forEach(b=>b.onclick=()=>{read();B.menu.splice(+b.dataset.mx,1);draw()});
     $$("[data-kx]",m).forEach(b=>b.onclick=()=>{read();B.keywords.splice(+b.dataset.kx,1);draw()});
     $("#gcfg",m).onclick=e=>{e.preventDefault();go("config")};

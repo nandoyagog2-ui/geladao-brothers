@@ -84,7 +84,9 @@ async function saveContact(name,phone){
   if(!r.error){CUSTS=null;toast("📇 Contato salvo: "+nm)}
 }
 let started=false;
-async function onChat(){if(!started)return;cust=await findCust();draft=null;if(view==="home"||view==="novo")home()}
+async function onChat(){if(!started)return;cust=await findCust();
+  if(view==="home"){draft=null;home()}                                   // pedido em andamento continua sendo do cliente dele
+  else if(draft&&draft.chat&&chat.title&&chat.title!==draft.chat.title) toast("O pedido aberto continua sendo de "+(draft.cust?draft.cust.name:draft.chat.title));}
 
 /* ---------- textos do WhatsApp ---------- */
 function waText(o,status){
@@ -112,9 +114,9 @@ function orderMsg(o,items){
 }
 
 /* ---------- avisos automáticos de status ---------- */
-const AUTO_DEF={enabled:false,types:["delivery","retirada"],statuses:["em_preparo","saiu_entrega","pronto","concluido"]};
+const AUTO_DEF={enabled:true,types:["delivery","retirada"],statuses:["em_preparo","saiu_entrega","pronto","concluido"]};
 const auto=()=>Object.assign({},AUTO_DEF,S.wa_auto||{});
-const autoHere=()=>{try{return localStorage.getItem("gb_auto_sender")==="1"}catch{return false}};
+const autoHere=()=>{try{return localStorage.getItem("gb_auto_sender")!=="0"}catch{return true}};   // ligado por padrão
 async function markNotified(o,status){
   const n=Object.assign({},o.notified||{},{[status]:new Date().toISOString()});
   const r=await sb.from("orders").update({notified:n}).eq("id",o.id); if(!r.error) o.notified=n;
@@ -124,6 +126,7 @@ async function autoTick(){
   if(!IN_EXT||!autoHere()||autoBusy||!auto().enabled) return;
   autoBusy=true;
   try{
+    if(!localStorage.getItem("gb_auto_since")) localStorage.setItem("gb_auto_since",String(Date.now()));
     const a=auto(), since=new Date(Math.max(+localStorage.getItem("gb_auto_since")||0,Date.now()-30*60e3)).toISOString();
     const r=await sb.from("orders").select("id,number,status,type,customer_name,customer_phone,total,notified,status_at").gte("status_at",since).in("status",a.statuses).in("type",a.types).order("status_at").limit(10);
     if(r.error) return;
@@ -131,11 +134,32 @@ async function autoTick(){
       const n=o.notified||{};
       if(n.antigo||n[o.status]||digits(o.customer_phone).length<10) continue;
       const t=waText(o,o.status); if(!t) continue;
-      await markNotified(o,o.status);                       // marca antes, pra nunca mandar duas vezes
+      // marca antes (só se ninguém marcou ainda), pra nunca mandar duas vezes
+      const n2=Object.assign({},n,{[o.status]:new Date().toISOString()});
+      const c=await sb.from("orders").update({notified:n2}).eq("id",o.id).is(`notified->>${o.status}`,null).select("id");
+      if(c.error||!c.data.length) continue;
       const ok=await sendTo(o.customer_phone,t);
       toast(ok?`📲 Aviso "${STATUS[o.status]}" enviado · #${o.number}`:`⚠️ Não consegui avisar o pedido #${o.number}`);
     }
   }finally{autoBusy=false}
+}
+
+// fila de mensagens do painel (entregador, reenvios…): a extensão envia sozinha
+let outBusy=false;
+async function outboxTick(){
+  if(!IN_EXT||!autoHere()||outBusy) return;
+  outBusy=true;
+  try{
+    const r=await sb.from("wa_outbox").select("*").eq("status","pendente").gte("created_at",new Date(Date.now()-6*3600e3).toISOString()).order("id").limit(5);
+    if(r.error) return;
+    for(const m of r.data){
+      const c=await sb.from("wa_outbox").update({status:"enviando"}).eq("id",m.id).eq("status","pendente").select();
+      if(c.error||!c.data.length) continue;                 // outro computador pegou
+      const ok=await sendTo(m.phone,m.text);
+      await sb.from("wa_outbox").update(ok?{status:"enviado",sent_at:new Date().toISOString()}:{status:"erro",error:"não enviou"}).eq("id",m.id);
+      toast(ok?(m.kind==="entregador"?"🏍️ Pedido enviado pro entregador":"📲 Mensagem enviada"):"⚠️ Uma mensagem da fila não foi enviada");
+    }
+  }finally{outBusy=false}
 }
 
 /* ---------- moldura ---------- */
@@ -173,7 +197,7 @@ async function home(){
   const b=S.bot||{}, a=auto();
   const robo=IN_EXT?`<div class="box grid" style="gap:8px"><b>🤖 Neste computador</b>
       <label class="chk" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="tb" ${BOT.on?"checked":""}> Robô responde os clientes ${b.enabled?"":'<small style="color:var(--y)">(desligado no painel)</small>'}</label>
-      <label class="chk" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="ta" ${autoHere()?"checked":""}> Envia os avisos de status sozinho ${a.enabled?"":'<small style="color:var(--y)">(desligado no painel)</small>'}</label>
+      <label class="chk" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="ta" ${autoHere()?"checked":""}> Envia sozinho os avisos de status e as mensagens do painel (entregador, reenvios) ${a.enabled?"":'<small style="color:var(--y)">(avisos desligados no painel)</small>'}</label>
       ${BOT.waiting.length?`<div class="hint" style="color:#FF8A00">🟠 Pediram atendente: <b>${BOT.waiting.map(esc).join(", ")}</b></div>`:""}
       <div class="hint">Deixe ligado em <b>um computador só</b>, pra não sair mensagem repetida.</div></div>`:"";
   frame("Olá! 👋",`${st}${robo}
@@ -206,8 +230,9 @@ async function repetir(id){
   novo();
 }
 function custForm(after){
-  const c=cust||{name:chat.title&&!/^[\d\s()+\-]+$/.test(chat.title)?chat.title:"",phone:chat.phone?fmtPhone(chat.phone):""};
-  frame(cust?"Editar cliente":"Cadastrar cliente",`<div class="box grid">
+  const inDraft=!!(after&&draft), C=inDraft?draft.cust:cust, CH=inDraft?(draft.chat||{}):chat;
+  const c=C||{name:CH.title&&!/^[\d\s()+\-]+$/.test(CH.title)?CH.title:"",phone:CH.phone?fmtPhone(CH.phone):""};
+  frame(C?"Editar cliente":"Cadastrar cliente",`<div class="box grid">
     <label class="fld"><span>Nome</span><input class="in" id="cn" value="${esc(c.name||"")}"></label>
     <label class="fld"><span>Telefone (WhatsApp)</span><input class="in" id="cp" inputmode="tel" value="${esc(c.phone||"")}"></label>
     <p class="hint" style="margin:0">Com o telefone salvo, da próxima vez o cliente é reconhecido sozinho nessa conversa.</p><p class="err" id="e" hidden></p></div>`,
@@ -215,12 +240,15 @@ function custForm(after){
   $("#sv").onclick=async()=>{const name=$("#cn").value.trim(),phone=fmtPhone($("#cp").value);
     if(!name||digits(phone).length<10){$("#e").hidden=false;$("#e").textContent="Preencha o nome e o telefone com DDD.";return}
     if(!CUSTS) await loadCusts();
-    let ex=cust||CUSTS.find(x=>same9(x.phone,phone));
+    let ex=C||CUSTS.find(x=>same9(x.phone,phone));
     try{
-      if(ex){await q(sb.from("customers").update({name,phone,wa_name:chat.title||ex.wa_name}).eq("id",ex.id))}
-      else{await q(sb.from("customers").insert({name,phone,wa_name:chat.title||null}))}
+      if(ex){await q(sb.from("customers").update({name,phone,wa_name:CH.title||ex.wa_name}).eq("id",ex.id))}
+      else{await q(sb.from("customers").insert({name,phone,wa_name:CH.title||null}))}
     }catch(e){$("#e").hidden=false;$("#e").textContent=/duplicate|unique/i.test(e.message)?"Esse telefone já é de outro cliente.":e.message;return}
-    await loadCusts(); if(!chat.phone) chat.phone=digits(phone); const keep=draft; cust=await findCust(); draft=keep; toast("Cliente salvo"); (after||home)();
+    await loadCusts();
+    if(inDraft){draft.chat.phone=digits(phone);draft.cust=CUSTS.find(x=>same9(x.phone,phone))||null}
+    else{if(!chat.phone) chat.phone=digits(phone); cust=await findCust()}
+    toast("Cliente salvo"); (after||home)();
   };
 }
 
@@ -234,15 +262,16 @@ const feeT=()=>draft.type==="delivery"?(num(draft.fee)||0):0;
 const totT=()=>Math.max(0,subT()+feeT()-(num(draft.disc)||0));
 function newDraft(){
   const c=cust||{};
+  const bind={cust:cust||null,chat:{title:chat.title,phone:chat.phone}};
   const zone=c.neighborhood?ZONES.find(z=>z.neighborhood.toLowerCase()===String(c.neighborhood).toLowerCase()):null;
-  return {type:S.accepts_delivery===false?"retirada":"delivery",cart:[],disc:"",pay:null,troco:"",obs:"",
+  return {...bind,type:S.accepts_delivery===false?"retirada":"delivery",cart:[],disc:"",pay:null,troco:"",obs:"",
     addr:{cep:c.cep||"",street:c.street||"",num:c.street_number||"",nb:c.neighborhood||"",zone:zone?zone.id:null,comp:c.complement||"",ref:c.reference||"",city:"",uf:""},
     fee:zone&&!KM()?money(zone.fee):""};
 }
 function novo(){
   view="novo"; frameRefresh=novo;
   if(!draft) draft=newDraft();
-  const a=draft.addr, name=cust?cust.name:(chat.title||"Cliente"), phone=cust?cust.phone:(chat.phone?fmtPhone(chat.phone):"");
+  const a=draft.addr, dc=draft.cust, dch=draft.chat||{}, name=dc?dc.name:(dch.title||"Cliente"), phone=dc?dc.phone:(dch.phone?fmtPhone(dch.phone):"");
   const hasAddr=a.street&&a.num;
   frame("Novo pedido",`
     <button class="rowbtn" id="cli"><span>👤</span><span class="t"><b>${esc(name)}</b><small>${phone?esc(phone):"Toque pra informar o telefone"}</small></span><span>✎</span></button>
@@ -264,7 +293,7 @@ function novo(){
   $("#obs").oninput=e=>draft.obs=e.target.value;
   $("#go").onclick=()=>{
     if(draft.type==="delivery"&&!(a.street&&a.num)){$("#e").hidden=false;$("#e").textContent="Informe o endereço de entrega.";return}
-    if(!cust&&digits(chat.phone).length<10){toast("Informe o telefone do cliente pra salvar ele");return custForm(pagamento)}
+    if(!draft.cust&&digits((draft.chat||{}).phone).length<10){toast("Informe o telefone do cliente pra salvar ele");return custForm(pagamento)}
     pagamento();
   };
 }
@@ -339,7 +368,7 @@ function pagamento(){
       ${cash?`<label class="fld"><span>Troco para quanto? (vazio = sem troco)</span><input class="in" id="tr" inputmode="decimal" value="${esc(draft.troco)}" placeholder="0,00"></label>
         <div class="chips">${[20,50,100,200].filter(v=>v>tot).slice(0,3).map(v=>`<button class="chip" data-v="${v}">${brl(v)}</button>`).join("")}</div>
         ${tr>tot?`<p class="ok" style="margin:0;font-size:14px">🔁 Levar <b>${brl(tr-tot)}</b> de troco</p>`:tr?`<p class="err" style="margin:0">O troco precisa ser maior que ${brl(tot)}</p>`:""}`:""}
-      ${draft.pay==="Fiado"&&!(cust||chat.phone)?'<p class="err" style="margin:0">Pra lançar no fiado, cadastre o telefone do cliente.</p>':""}
+      ${draft.pay==="Fiado"&&!(draft.cust||(draft.chat||{}).phone)?'<p class="err" style="margin:0">Pra lançar no fiado, cadastre o telefone do cliente.</p>':""}
       <p class="err" id="e" hidden></p>`,
       `<button class="btn" id="fz"><span>FINALIZAR</span><span>${brl(tot)}</span></button>`,{back:novo});
     $("#ds").onchange=e=>{draft.disc=e.target.value;draw()};
@@ -349,7 +378,7 @@ function pagamento(){
     $("#fz").onclick=()=>{
       const err=t=>{$("#e").hidden=false;$("#e").textContent=t};
       if(cash&&tr&&!(tr>tot)) return err("O troco precisa ser maior que o total.");
-      if(draft.pay==="Fiado"&&!(cust||digits(chat.phone).length>=10)) return err("Cadastre o telefone do cliente pra lançar no fiado.");
+      if(draft.pay==="Fiado"&&!(draft.cust||digits((draft.chat||{}).phone).length>=10)) return err("Cadastre o telefone do cliente pra lançar no fiado.");
       ov.innerHTML=`<div class="confirm"><div class="box"><b style="font-size:16px">Gostaria de confirmar o pedido?</b><p class="muted" style="margin:0">${brl(tot)} · ${esc(draft.pay)}${tr>tot?` · troco ${brl(tr-tot)}`:""}<br>A mensagem do pedido vai ser enviada na conversa.</p>
         <div class="grid2"><button class="btn o" id="cv">Voltar</button><button class="btn" id="ok">Confirmar</button></div></div></div>`;
       $("#cv").onclick=()=>ov.innerHTML=""; $("#ok").onclick=finalizar;
@@ -359,10 +388,11 @@ function pagamento(){
 }
 async function finalizar(){
   $("#ok").disabled=true;
-  const a=draft.addr, name=cust?cust.name:(chat.title&&!/^[\d\s()+\-]+$/.test(chat.title)?chat.title:"Cliente WhatsApp");
-  const phone=cust?cust.phone:(chat.phone?fmtPhone(chat.phone):"");
+  const a=draft.addr, dc=draft.cust, dch=draft.chat||{};
+  const name=dc?dc.name:(dch.title&&!/^[\d\s()+\-]+$/.test(dch.title)?dch.title:"Cliente WhatsApp");
+  const phone=dc?dc.phone:(dch.phone?fmtPhone(dch.phone):"");
   try{
-    const r=await q(sb.rpc("create_order",{p:{customer_name:name,customer_phone:phone,wa_name:chat.title||"",type:draft.type,
+    const r=await q(sb.rpc("create_order",{p:{customer_name:name,customer_phone:phone,wa_name:dch.title||"",type:draft.type,
       fee_override:draft.type==="delivery"?String(feeT()):"",discount_override:num(draft.disc)?String(num(draft.disc)):"",
       neighborhood:draft.type==="delivery"?a.nb:"",cep:a.cep,street:draft.type==="delivery"?a.street:"",street_number:draft.type==="delivery"?a.num:"",complement:a.comp,reference:a.ref,
       payment_method:draft.pay,change_for:/dinheiro/i.test(draft.pay)&&num(draft.troco)?String(num(draft.troco)):"",notes:draft.obs,
@@ -373,7 +403,10 @@ async function finalizar(){
     ov.innerHTML=""; draft=null; await loadCusts(); cust=await findCust(); toast("Pedido #"+o.number+" lançado ✓");
     const items=o.order_items.sort((x,y)=>x.id-y.id);
     await markNotified(o,"em_preparo");
-    if(await sendToChat(orderMsg(o,items))){const t=waText(o,"em_preparo");if(t){await new Promise(z=>setTimeout(z,900));await sendToChat(t)}}
+    // vai pro telefone do cliente do pedido (a extensão abre a conversa certa, mesmo se você trocou de conversa)
+    const to=o.customer_phone||phone;
+    if(digits(to).length>=10){toast("📲 Enviando o pedido pro cliente…");
+      if(await sendTo(to,orderMsg(o,items))){const t=waText(o,"em_preparo");if(t)await sendTo(to,t)}else toast("⚠️ Não consegui mandar no WhatsApp. Use Reenviar.")}
     detalhe(o.id);
   }catch(e){ov.innerHTML="";toast(e.message)}
 }
@@ -403,7 +436,7 @@ async function detalhe(id){
     ${o.notes?`<div class="box">📝 ${esc(o.notes)}</div>`:""}
     <div class="row"><button class="btn o sm" id="rs">📲 Reenviar pedido no chat</button><button class="btn o sm" id="rp">↻ Repetir pedido</button><button class="btn o sm" id="pr">🖨️ Imprimir</button>${!["cancelado","concluido"].includes(o.status)?`<button class="btn o sm" id="cc" style="color:var(--red)">Cancelar</button>`:""}</div>`,
     next?`<button class="btn c" id="nx">${next[1]}</button><p class="hint" style="margin:0;text-align:center">A mensagem pro cliente é enviada na conversa</p>`:"",{back:home});
-  $("#rs").onclick=()=>sendToChat(orderMsg(o,items));
+  $("#rs").onclick=async()=>{toast("📲 Enviando…");toast(await sendTo(o.customer_phone,orderMsg(o,items))?"Pedido reenviado ✓":"⚠️ Não consegui enviar")};
   $("#rp").onclick=()=>repetir(o.id);
   $("#pr").onclick=()=>printOrder(o,items);
   if($("#cc"))$("#cc").onclick=async e=>{if(!e.target.dataset.sure){e.target.dataset.sure=1;e.target.textContent="Confirmar cancelamento";return}
@@ -413,7 +446,7 @@ async function detalhe(id){
     const n=Object.assign({},o.notified||{},{[next[0]]:new Date().toISOString()});
     let u=await sb.from("orders").update({status:next[0],notified:n}).eq("id",o.id);
     if(u.error) await q(sb.from("orders").update({status:next[0]}).eq("id",o.id));
-    const t=waText({...o,status:next[0]},next[0]); if(t&&o.customer_phone) await sendToChat(t);
+    const t=waText({...o,status:next[0]},next[0]); if(t&&digits(o.customer_phone).length>=10) sendTo(o.customer_phone,t).then(ok=>toast(ok?"📲 Cliente avisado":"⚠️ Não consegui avisar o cliente"));
     toast(STATUS[next[0]]); detalhe(o.id);
   };
 }
@@ -434,7 +467,8 @@ async function start(){
   await home();
   post({gb:"ready"});
   sb.channel("whats-orders").on("postgres_changes",{event:"*",schema:"public",table:"orders"},()=>{if(view==="home")home();autoTick()}).subscribe();
-  setInterval(autoTick,10000);
+  setInterval(autoTick,10000); setInterval(outboxTick,6000);
+  sb.channel("whats-outbox").on("postgres_changes",{event:"INSERT",schema:"public",table:"wa_outbox"},()=>outboxTick()).subscribe();
   setInterval(async()=>{const r=await sb.from("store_settings").select("*").eq("id",1).single();if(!r.error){const ch=JSON.stringify(r.data.bot)!==JSON.stringify(S.bot);S=r.data;if(ch)post({gb:"bot-reload"})}},60000);
 }
 (async()=>{const {data:{session}}=await sb.auth.getSession();session?start():loginView()})();

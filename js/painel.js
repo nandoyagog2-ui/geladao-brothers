@@ -212,6 +212,13 @@ function waText(o,status){
     .replace(/\{link_avaliacao\}/g,`${location.origin}/?avaliar=${o.id}&tel=${digits(o.customer_phone)}`);
 }
 function waLink(o,status){const txt=waText(o,status), ph=digits(o.customer_phone); if(!txt||ph.length<10) return null; return waURL(ph,txt)}
+// coloca a mensagem na fila: a extensão do WhatsApp envia sozinha (sem abrir o WhatsApp aqui)
+async function waQueue(phone,text,kind,order_id){
+  if(digits(phone).length<10||!text) return false;
+  const r=await sb.from("wa_outbox").insert({phone:digits(phone),text,kind:kind||null,order_id:order_id||null});
+  return !r.error;
+}
+const waAuto=()=>Object.assign({enabled:true,types:["delivery","retirada"],statuses:["em_preparo","saiu_entrega","pronto","concluido"]},S.wa_auto||{});
 function waURL(phone,txt){const ph=digits(phone).replace(/^55(?=\d{10,11}$)/,"");return `https://api.whatsapp.com/send?phone=55${ph}${txt?"&text="+encodeURIComponent(txt):""}`}
 const NEXT={novo:["em_preparo","✅ Aceitar pedido"],em_preparo:[null,""],saiu_entrega:["concluido","✔️ Entregue / concluir"],pronto:["concluido","✔️ Retirado / concluir"]};
 async function orderDrawer(id){
@@ -224,13 +231,13 @@ async function orderDrawer(id){
   let next=NEXT[o.status]; if(o.status==="em_preparo") next=o.type==="delivery"?["saiu_entrega","🛵 Saiu para entrega"]:["pronto","🏪 Pronto p/ retirada"];
   if(o.status==="em_preparo"&&o.type==="balcao") next=["concluido","✔️ Concluir"];
   const wa=o.customer_phone&&digits(o.customer_phone).length>=10?waURL(o.customer_phone):"";
-  const AUTO=!!(S.wa_auto&&S.wa_auto.enabled&&(S.wa_auto.types||[]).includes(o.type));
+  const AUTO=!!(waAuto().enabled&&waAuto().types.includes(o.type));
   const nextWa=next&&next[0]&&notifyOn()&&!AUTO?waLink(o,next[0]):null, curWa=waLink(o,o.status);
   const dr=drawer(`Pedido #${o.number} ${pill(o.status)}`,`
     ${o.courier_id?`<div class="alert" style="margin:0">🏍️ Com o entregador <b>${esc(((COURIERS||[]).find(c=>c.id===o.courier_id)||{}).name||"…")}</b>${o.dispatched_at?" desde "+hm(o.dispatched_at):""}</div>`:""}
     <div class="muted">${dt(o.created_at)} · ${o.type==="delivery"?"🛵 Entrega"+(o.distance_km!=null?" · "+String(o.distance_km).replace(".",",")+" km":""):o.type==="retirada"?"🏪 Retirada":"🧾 Balcão"}</div>
     ${AUTO?'<div class="muted" style="font-size:12.5px">📲 Aviso automático ligado: a extensão do WhatsApp avisa o cliente sozinha quando o status muda.</div>':o.customer_phone&&o.type!=="balcao"?`<label class="chk"><input type="checkbox" id="nt" ${notifyOn()?"checked":""}> Avisar o cliente no WhatsApp quando eu mudar o status</label>`:""}
-    ${curWa?`<a class="btn o sm" href="${curWa}" target="_blank" rel="noopener" style="justify-self:start">📲 Enviar aviso de "${STATUS[o.status]}" de novo</a>`:""}
+    ${curWa?(AUTO?`<button class="btn o sm" id="rw" style="justify-self:start">📲 Enviar aviso de "${STATUS[o.status]}" de novo</button>`:`<a class="btn o sm" href="${curWa}" target="_blank" rel="noopener" style="justify-self:start">📲 Enviar aviso de "${STATUS[o.status]}" de novo</a>`):""}
     <div class="card"><b>👤 ${esc(o.customer_name||"Cliente balcão")}</b>${o.customer_phone?`<div class="muted">${esc(o.customer_phone)}</div>`:""}
       ${o.type==="delivery"?`<div style="margin-top:8px"><b>📍 ${esc(addr)}</b><div class="muted">${esc(o.neighborhood||"")}${o.complement?" · "+esc(o.complement):""}${o.cep?" · CEP "+esc(o.cep):""}</div>${o.reference?`<div>Ref.: ${esc(o.reference)}</div>`:""}<a href="${maps}" target="_blank" rel="noopener">Abrir no mapa ↗</a></div>`:""}</div>
     <div class="card">${items.map(i=>`<div class="line"><div><b>${i.qty}x</b> ${esc(i.name)}${(i.options||[]).length?`<div class="muted">${i.options.map(x=>x.qty+"x "+esc(x.name)).join(", ")}</div>`:""}${i.notes?`<div class="muted">Obs.: ${esc(i.notes)}</div>`:""}</div><b>${brl(i.total)}</b></div>`).join("")}
@@ -251,6 +258,8 @@ async function orderDrawer(id){
   if($("#cc",dr)) $("#cc",dr).onclick=e=>{if(e.target.dataset.sure){setSt("cancelado")}else{e.target.dataset.sure=1;e.target.textContent="Confirmar cancelamento"}};
   $("#pr",dr).onclick=()=>printOrder(o,items,addr,change);
   if($("#dv",dr)) $("#dv",dr).onclick=()=>courierDrawer(o,items);
+  if($("#rw",dr)) $("#rw",dr).onclick=async e=>{e.target.disabled=true;const ok=await waQueue(o.customer_phone,waText(o,o.status),"reenvio",o.id);
+    if(ok)toast("📲 Na fila: a extensão do WhatsApp envia em instantes");else{toast("Rode a parte 16 do banco pra enviar sem abrir o WhatsApp");window.open(curWa,"_blank")}};
 }
 function printOrder(o,items,addr,change){
   $("#print").innerHTML=`<h2>${esc(S.name)}</h2><div style="text-align:center">Pedido #${o.number} · ${dt(o.created_at)}</div><hr>

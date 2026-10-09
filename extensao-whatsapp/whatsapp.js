@@ -2,7 +2,7 @@
 //  - descobre a conversa aberta e escreve/envia mensagens nela
 //  - robô de respostas automáticas (chatbot) com cores e botão AJUDA
 //  - envia avisos de pedido abrindo a conversa do cliente pelo número
-const VERSION = "2.0";
+const VERSION = "2.1";
 
 /* ================= conversa aberta ================= */
 function headerTitle() {
@@ -186,6 +186,12 @@ const BOT_DEFAULT = {
   keywords: [
     { words: "cardapio, cardápio, menu, preço, precos, preços", reply: "Nosso cardápio com todos os preços 👇\n{link}" },
     { words: "pix", reply: "Aceitamos Pix sim! 😉 O pagamento é feito na entrega ou na retirada." },
+    { words: "horario, horário, que horas, aberto, abre, fecha, funcionando", reply: "🕐 {horario}" },
+    { words: "endereco, endereço, onde fica, localizacao, localização, onde voces ficam", reply: "📍 Estamos em: {endereco}" },
+    { words: "entrega, entregam, delivery, taxa, frete, demora quanto", reply: "🛵 Entregamos sim! A taxa aparece no cardápio quando você coloca o endereço 👇\n{link}" },
+    { words: "cartao, cartão, credito, crédito, debito, débito, maquininha", reply: "💳 Aceitamos cartão de crédito e débito na entrega ou na retirada." },
+    { words: "meu pedido, cade, cadê, demorando, ta chegando, tá chegando", reply: "Vou verificar seu pedido agora! 🙏 Um atendente já te responde." , human: true },
+    { words: "obrigado, obrigada, valeu, vlw, agradeco, agradeço", reply: "Nós que agradecemos! 🍻💛 Qualquer coisa é só chamar." },
     { words: "atendente, humano, pessoa, falar com alguem, falar com alguém", reply: "Certo! Já vou chamar um atendente. 🙋", human: true }
   ],
   cooldown_hours: 6,
@@ -238,14 +244,18 @@ function menuText(b) {
 function decide(text, st, name) {
   const b = bot(), t = norm(text).replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim(), now = Date.now();
   if (!t) return null;
+  const needGreet = !st.greetedAt || now - st.greetedAt > (+b.cooldown_hours || 6) * 3600e3;
   const opt = (b.menu || []).find(i => i.key && (t === norm(i.key) || t.startsWith(norm(i.key) + " ") || t === norm(i.label).replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim()));
   if (opt) return { msgs: [fill(opt.reply, name)], human: !!opt.human };
   for (const k of b.keywords || []) {
     const ws = String(k.words || "").split(",").map(w => norm(w).replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim()).filter(Boolean);
-    if (ws.some(w => (" " + t + " ").includes(" " + w + " ") || (w.length >= 5 && t.includes(w)))) return { msgs: [fill(k.reply, name)], human: !!k.human };
+    if (ws.some(w => (" " + t + " ").includes(" " + w + " ") || (w.length >= 5 && t.includes(w)))) {
+      // primeiro contato: manda a boas-vindas (sem o menu) e logo depois a resposta da palavra-chave
+      if (needGreet) return { msgs: [fill(openInfo().open ? b.greet_open : b.greet_closed, name), fill(k.reply, name)], human: !!k.human, greet: true };
+      return { msgs: [fill(k.reply, name)], human: !!k.human };
+    }
   }
-  const cool = (+b.cooldown_hours || 6) * 3600e3;
-  if (!st.greetedAt || now - st.greetedAt > cool) {
+  if (needGreet) {
     const oi = openInfo();
     const greet = fill(oi.open ? b.greet_open : b.greet_closed, name);
     const menu = menuText(b);
