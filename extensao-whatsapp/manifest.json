@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Geladão Brothers no WhatsApp",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Painel do Geladão Brothers ao lado do WhatsApp Web: pedidos, robô de respostas automáticas e avisos de status.",
   "icons": {
     "16": "icon-16.png",

@@ -128,7 +128,7 @@ async function shell(){
   if(!(await loadMe())){root.innerHTML=`<div class="login"><div class="card grid" style="max-width:380px">${ME.block==="fora_horario"?`<h1>Fora do seu horário</h1><p>Oi, ${esc(ME.name)}! Seu horário de trabalho é <b>${esc(schedTxt(ME.schedule))}</b>. Você pode entrar até 30 minutos antes de começar.</p>`:ME.block==="bloqueado"?`<h1>Acesso bloqueado</h1><p>O seu acesso foi bloqueado pelo dono da loja.</p>`:`<h1>Acesso bloqueado</h1><p>O login <b>${esc(ME.email)}</b> ainda não foi liberado. Peça pro dono da loja liberar em <b>Equipe e acessos</b>.</p>`}<button class="btn" id="lo">Sair</button></div></div>`;$("#lo").onclick=async()=>{await sb.auth.signOut();location.reload()};return}
   root.innerHTML=`<div class="mobilebar"><button class="x" id="mb" aria-label="Menu">☰</button><b>${esc(S.name)}</b></div>
   <div class="shell"><aside class="side" id="side"><div class="brand"><div class="lg">${S.logo_url?`<img src="${esc(S.logo_url)}" alt="">`:"GB"}</div><div><b>${esc(S.name)}</b><small>${esc(ME.name)} · ${OWNER()?"Dono":"Funcionário"}</small></div></div>
-    <button class="openbtn" id="ob"></button><button class="openbtn off" id="snd"></button><nav class="menu" id="menu"></nav>
+    <button class="openbtn" id="ob"></button><button class="openbtn off" id="snd"></button><button class="openbtn off" id="wab"></button><nav class="menu" id="menu"></nav>
     <a class="btn o sm" href="/" target="_blank" rel="noopener" style="margin:14px 10px 0;display:flex">Ver cardápio ↗</a>
     <button class="out" id="lo">Sair</button></aside><main class="main" id="main"></main></div>`;
   $("#mb").onclick=()=>$("#side").classList.toggle("open");
@@ -145,6 +145,8 @@ async function shell(){
   $("#snd").oncontextmenu=e=>{e.preventDefault();soundOn=!soundOn;try{localStorage.setItem("gb_sound",soundOn?"on":"off")}catch{};soundBtn()};
   if(!OWNER()) setInterval(async()=>{const a=await sb.rpc("my_access");if(!a.error&&a.data&&!a.data.ok){ME.block=a.data.reason;ME.schedule=a.data.schedule;shell()}},300000);
   if(!canSee("pedidos")){$("#snd").hidden=true}
+  $("#wab").onclick=()=>{refreshWa();toast(waOnline()?"✅ A extensão do WhatsApp está ligada: as mensagens vão sozinhas":"A extensão do WhatsApp não está aberta. Abra o WhatsApp Web com o painel da extensão no computador da loja.")};
+  refreshWa(); setInterval(refreshWa,30000);
   openBtn(); soundBtn(); menu(); if(canSee("pedidos"))listenOrders(); go(location.hash.slice(1)||home());
 }
 function openBtn(){const b=$("#ob");b.className="openbtn"+(S.is_open?"":" off");b.innerHTML=`<i></i>${S.is_open?"Loja aberta · clique p/ fechar":"Loja fechada · clique p/ abrir"}`}
@@ -219,6 +221,11 @@ async function waQueue(phone,text,kind,order_id){
   return !r.error;
 }
 const waAuto=()=>Object.assign({enabled:true,types:["delivery","retirada"],statuses:["em_preparo","saiu_entrega","pronto","concluido"]},S.wa_auto||{});
+// a extensão do WhatsApp deu sinal de vida nos últimos 2 minutos?
+const waOnline=()=>!!(S.wa_seen_at&&Date.now()-new Date(S.wa_seen_at).getTime()<120000);
+async function refreshWa(){const r=await sb.from("store_settings").select("wa_seen_at,wa_auto").eq("id",1).single();if(!r.error){S.wa_seen_at=r.data.wa_seen_at;S.wa_auto=r.data.wa_auto}waBadge()}
+function waBadge(){const b=$("#wab");if(!b)return;const on=waOnline()&&waAuto().enabled;b.className="openbtn"+(on?"":" off");
+  b.innerHTML=`<i></i>${on?"📲 WhatsApp automático ligado":"📲 WhatsApp automático desligado"}`;b.title=on?"A extensão está aberta: os avisos vão sozinhos pro cliente":"A extensão do WhatsApp não está aberta em nenhum computador: o painel abre o WhatsApp pra você enviar"}
 function waURL(phone,txt){const ph=digits(phone).replace(/^55(?=\d{10,11}$)/,"");return `https://api.whatsapp.com/send?phone=55${ph}${txt?"&text="+encodeURIComponent(txt):""}`}
 const NEXT={novo:["em_preparo","✅ Aceitar pedido"],em_preparo:[null,""],saiu_entrega:["concluido","✔️ Entregue / concluir"],pronto:["concluido","✔️ Retirado / concluir"]};
 async function orderDrawer(id){
@@ -231,7 +238,8 @@ async function orderDrawer(id){
   let next=NEXT[o.status]; if(o.status==="em_preparo") next=o.type==="delivery"?["saiu_entrega","🛵 Saiu para entrega"]:["pronto","🏪 Pronto p/ retirada"];
   if(o.status==="em_preparo"&&o.type==="balcao") next=["concluido","✔️ Concluir"];
   const wa=o.customer_phone&&digits(o.customer_phone).length>=10?waURL(o.customer_phone):"";
-  const AUTO=!!(waAuto().enabled&&waAuto().types.includes(o.type));
+  await refreshWa();
+  const AUTO=!!(waOnline()&&waAuto().enabled&&waAuto().types.includes(o.type));
   const nextWa=next&&next[0]&&notifyOn()&&!AUTO?waLink(o,next[0]):null, curWa=waLink(o,o.status);
   const dr=drawer(`Pedido #${o.number} ${pill(o.status)}`,`
     ${o.courier_id?`<div class="alert" style="margin:0">🏍️ Com o entregador <b>${esc(((COURIERS||[]).find(c=>c.id===o.courier_id)||{}).name||"…")}</b>${o.dispatched_at?" desde "+hm(o.dispatched_at):""}</div>`:""}

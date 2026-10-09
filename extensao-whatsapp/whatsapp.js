@@ -2,7 +2,7 @@
 //  - descobre a conversa aberta e escreve/envia mensagens nela
 //  - robô de respostas automáticas (chatbot) com cores e botão AJUDA
 //  - envia avisos de pedido abrindo a conversa do cliente pelo número
-const VERSION = "2.1";
+const VERSION = "2.2";
 
 /* ================= conversa aberta ================= */
 function headerTitle() {
@@ -112,7 +112,7 @@ async function send(text, auto, expect) {
 
 /* ================= lista de conversas ================= */
 function rows() {
-  const all = [...document.querySelectorAll("#pane-side [role='listitem'], #pane-side [role='row']")];
+  const all = [...document.querySelectorAll("#side [role='listitem'], #side [role='row'], #pane-side [role='listitem'], #pane-side [role='row']")];
   return all.filter(r => r.querySelector("span[title]") && !all.some(o => o !== r && o.contains(r)));
 }
 function rowInfo(r) {
@@ -344,55 +344,85 @@ document.addEventListener("click", e => {
   const b = sendButton(); if (b && (b === e.target || b.contains(e.target))) humanSent();
 }, true);
 
-/* ================= cores nas conversas + botão AJUDA ================= */
+/* ================= cores nas conversas + botão AJUDA =================
+   Tudo desenhado numa camada POR CIMA do WhatsApp (não mexe na tela dele). */
 const css = document.createElement("style");
-css.textContent = `.gb-ui{font:600 11px system-ui,sans-serif}
-.gb-dot{position:absolute;right:6px;top:6px;z-index:5;display:flex;gap:4px;align-items:center;pointer-events:auto}
-.gb-dot i{width:10px;height:10px;border-radius:50%;display:inline-block;box-shadow:0 0 0 2px rgba(0,0,0,.25)}
-.gb-help{background:#FF8A00;color:#111;border:0;border-radius:6px;padding:2px 7px;cursor:pointer;font:800 11px system-ui,sans-serif}
-.gb-hd{margin-left:8px;border:1px solid #FFC400;background:transparent;color:#FFC400;border-radius:14px;padding:4px 10px;cursor:pointer;font:700 12px system-ui,sans-serif;white-space:nowrap}
-.gb-hd.on{background:#FFC400;color:#111}`;
+css.textContent = `#gb-layer{position:fixed;inset:0;pointer-events:none;z-index:2147483000}
+#gb-layer .gb-dot{position:fixed;display:flex;gap:4px;align-items:center;pointer-events:auto;font:600 11px system-ui,sans-serif}
+#gb-layer .gb-dot i{width:10px;height:10px;border-radius:50%;display:inline-block;box-shadow:0 0 0 2px rgba(0,0,0,.35)}
+#gb-layer .gb-help{background:#FF8A00;color:#111;border:0;border-radius:6px;padding:2px 7px;cursor:pointer;font:800 11px system-ui,sans-serif}
+#gb-layer .gb-hd{position:fixed;pointer-events:auto;border:1px solid #FFC400;background:#111;color:#FFC400;border-radius:14px;padding:3px 10px;cursor:pointer;font:700 12px system-ui,sans-serif;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.3)}
+#gb-layer .gb-hd.on{background:#FFC400;color:#111}`;
 document.documentElement.appendChild(css);
+const layer = document.createElement("div"); layer.id = "gb-layer"; layer.className = "gb-ui";
+(document.body || document.documentElement).appendChild(layer);
 const COLOR = { bot: "#25D366", wait: "#FF8A00", paused: "#3B82F6" };
 const LABEL = { bot: "Robô respondendo", wait: "Cliente pediu atendente", paused: "Robô pausado" };
+const dots = new Map();          // nome da conversa -> elemento na camada
+let hdBtn = null;
 function paint() {
-  const on = BOT_ON && bot().enabled;
-  for (const x of rows().map(rowInfo)) {
-    let el = x.r.querySelector(":scope > .gb-dot");
-    const mode = on && STATE[x.name] && !STATE[x.name].group ? modeOf(x.name) : null;
-    if (!mode) { if (el) el.remove(); continue; }
-    if (getComputedStyle(x.r).position === "static") x.r.style.position = "relative";
-    if (!el) { el = document.createElement("div"); el.className = "gb-dot gb-ui"; x.r.appendChild(el); }
-    const key = mode + "|" + x.name;
-    if (el.dataset.k === key) continue;
-    el.dataset.k = key;
-    el.innerHTML = (mode === "wait" ? `<button class="gb-help">AJUDA</button>` : "") + `<i title="${LABEL[mode]}" style="background:${COLOR[mode]}"></i>`;
-    const hb = el.querySelector(".gb-help");
-    if (hb) hb.addEventListener("click", ev => { ev.stopPropagation(); ev.preventDefault(); const s = st(x.name); s.mode = "paused"; s.until = Date.now() + (+bot().pause_hours || 2) * 3600e3; saveState(); paint(); openRow(x.name); }, true);
+  if (!layer.isConnected) (document.body || document.documentElement).appendChild(layer);
+  const on = BOT_ON && bot().enabled, used = new Set();
+  const side = document.querySelector("#pane-side"), sr = side ? side.getBoundingClientRect() : null;
+  if (on) for (const x of rows().map(rowInfo)) {
+    const mode = STATE[x.name] && !STATE[x.name].group ? modeOf(x.name) : null;
+    if (!mode) continue;
+    const r = x.r.getBoundingClientRect();
+    if (!r.height || (sr && (r.bottom < sr.top || r.top > sr.bottom))) continue;
+    used.add(x.name);
+    let el = dots.get(x.name);
+    if (!el) { el = document.createElement("div"); el.className = "gb-dot"; layer.appendChild(el); dots.set(x.name, el); }
+    const key = mode;
+    if (el.dataset.k !== key) {
+      el.dataset.k = key;
+      el.innerHTML = (mode === "wait" ? `<button class="gb-help">AJUDA</button>` : "") + `<i title="${LABEL[mode]}" style="background:${COLOR[mode]}"></i>`;
+      const hb = el.querySelector(".gb-help");
+      if (hb) hb.onclick = ev => { ev.stopPropagation(); const s = st(x.name); s.mode = "paused"; s.until = Date.now() + (+bot().pause_hours || 2) * 3600e3; saveState(); paint(); openRow(x.name); };
+    }
+    el.style.top = (r.top + 6) + "px"; el.style.left = "auto"; el.style.right = (window.innerWidth - r.right + 8) + "px";
   }
-  // botão no topo da conversa aberta
-  const header = document.querySelector("#main header");
-  if (!header) return;
-  let hb = header.querySelector(".gb-hd");
-  const name = headerTitle();
-  if (!on || !name || (STATE[name] && STATE[name].group)) { if (hb) hb.remove(); return; }
-  if (!hb) { hb = document.createElement("button"); hb.className = "gb-hd gb-ui"; header.appendChild(hb); hb.addEventListener("click", ev => {
-    ev.stopPropagation(); const n = headerTitle(), s = st(n), m = modeOf(n);
-    if (m === "paused" || m === "wait") { s.mode = "bot"; delete s.until; } else { s.mode = "paused"; s.until = Date.now() + 24 * 3600e3; }
-    saveState(); hb.dataset.k = ""; paint();
-  }, true); }
+  for (const [n, el] of dots) if (!used.has(n)) { el.remove(); dots.delete(n); }
+  // botão da conversa aberta (fica logo abaixo do topo da conversa)
+  const header = document.querySelector("#main header"), name = headerTitle();
+  if (!on || !header || !name || (STATE[name] && STATE[name].group)) { if (hdBtn) { hdBtn.remove(); hdBtn = null; } return; }
+  if (!hdBtn) {
+    hdBtn = document.createElement("button"); hdBtn.className = "gb-hd"; layer.appendChild(hdBtn);
+    hdBtn.onclick = ev => { ev.stopPropagation(); const n = headerTitle(), s = st(n), m = modeOf(n);
+      if (m === "paused" || m === "wait") { s.mode = "bot"; delete s.until; } else { s.mode = "paused"; s.until = Date.now() + 24 * 3600e3; }
+      saveState(); hdBtn.dataset.k = ""; paint(); };
+  }
+  const hr = header.getBoundingClientRect();
+  hdBtn.style.top = (hr.bottom + 8) + "px"; hdBtn.style.right = (window.innerWidth - hr.right + 16) + "px";
   const m = modeOf(name) || "bot", key = m + "|" + name;
-  if (hb.dataset.k !== key) { hb.dataset.k = key; hb.className = "gb-hd gb-ui" + (m === "bot" ? "" : " on"); hb.textContent = m === "bot" ? "🤖 Pausar robô" : "▶ Ligar robô aqui"; }
+  if (hdBtn.dataset.k !== key) { hdBtn.dataset.k = key; hdBtn.className = "gb-hd" + (m === "bot" ? "" : " on"); hdBtn.textContent = m === "bot" ? "🤖 Pausar robô nesta conversa" : "▶ Ligar robô nesta conversa"; }
 }
+setInterval(paint, 400);
+document.addEventListener("scroll", () => paint(), true);
+window.addEventListener("resize", () => paint());
 
 /* ================= abrir conversa pelo número (avisos de pedido) ================= */
 const jobs = [];
+function searchBox() {
+  const side = document.querySelector("#side") || document;
+  return side.querySelector("input[type='text'], input[role='textbox'], input:not([type])") ||
+    side.querySelector("[contenteditable='true'][role='textbox']") || side.querySelector("[contenteditable='true']");
+}
+function typeSearch(box, text) {
+  box.focus();
+  if (box.tagName === "INPUT") {
+    const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+    set.call(box, text); box.dispatchEvent(new Event("input", { bubbles: true }));
+  } else {
+    document.execCommand("selectAll", false);
+    if (text) document.execCommand("insertText", false, text); else document.execCommand("delete", false);
+  }
+}
 async function openByPhone(phone) {
   const d = digits(phone), local = d.length >= 12 && d.startsWith("55") ? d.slice(2) : d;
   if (same9(chatPhone(headerTitle()), d) || same9(headerTitle(), d)) return true;
-  const box = document.querySelector("#side [contenteditable='true']");
+  const box = searchBox();
   if (!box) return false;
-  box.focus(); document.execCommand("selectAll", false); document.execCommand("insertText", false, local);
+  typeSearch(box, local);
   let ok = false;
   for (let i = 0; i < 16 && !ok; i++) {
     await wait(250);
@@ -406,7 +436,7 @@ async function openByPhone(phone) {
     ok = same9(chatPhone(headerTitle()), d) || same9(headerTitle(), d) || (!!exact || found.length === 1);
   }
   // limpa a busca
-  box.focus(); document.execCommand("selectAll", false); document.execCommand("delete", false);
+  typeSearch(box, "");
   return ok && !!composeBox();
 }
 async function runJob(j) {

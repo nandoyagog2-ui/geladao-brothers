@@ -468,6 +468,7 @@ async function start(){
   post({gb:"ready"});
   sb.channel("whats-orders").on("postgres_changes",{event:"*",schema:"public",table:"orders"},()=>{if(view==="home")home();autoTick()}).subscribe();
   setInterval(autoTick,10000); setInterval(outboxTick,6000);
+  const beat=()=>{if(autoHere()&&link.ok!==false)sb.rpc("wa_heartbeat").then(()=>{})}; beat(); setInterval(beat,45000);
   sb.channel("whats-outbox").on("postgres_changes",{event:"INSERT",schema:"public",table:"wa_outbox"},()=>outboxTick()).subscribe();
   setInterval(async()=>{const r=await sb.from("store_settings").select("*").eq("id",1).single();if(!r.error){const ch=JSON.stringify(r.data.bot)!==JSON.stringify(S.bot);S=r.data;if(ch)post({gb:"bot-reload"})}},60000);
 }

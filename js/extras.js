@@ -49,7 +49,10 @@ async function courierDrawer(o,items){
     <details><summary class="muted" style="cursor:pointer">Ver a mensagem</summary><pre style="white-space:pre-wrap;font:12.5px/1.4 inherit;background:var(--card-2);padding:10px;border-radius:8px">${esc(courierMsg(o,items))}</pre></details>`);
   $$("[data-cr]",dr).forEach(b=>b.onclick=async()=>{const c=list.find(x=>x.id==b.dataset.cr);
     let w=null, queued=false;
-    if(c.phone&&digits(c.phone).length>=10){queued=await waQueue(c.phone,courierMsg(o,items),"entregador",o.id); if(!queued) w=window.open(waURL(c.phone,courierMsg(o,items)),"_blank")}
+    if(c.phone&&digits(c.phone).length>=10){
+      if(waOnline()) queued=await waQueue(c.phone,courierMsg(o,items),"entregador",o.id);   // extensão ligada: vai sozinho
+      else w=window.open(waURL(c.phone,courierMsg(o,items)),"_blank");                     // desligada: abre o WhatsApp
+      if(!queued&&!w) w=window.open(waURL(c.phone,courierMsg(o,items)),"_blank")}
     const up={courier_id:c.id,dispatched_at:new Date().toISOString()}; if(["novo","em_preparo","pronto"].includes(o.status))up.status="saiu_entrega";
     const r=await sb.from("orders").update(up).eq("id",o.id);
     if(r.error){toast(/courier_id|dispatched_at/.test(r.error.message)?"Rode a parte 14 do banco no Supabase":r.error.message);return}
