@@ -1,5 +1,6 @@
 // Cardápio do cliente — Geladão Brothers
-const sb = supabase.createClient(GB_CONFIG.SUPABASE_URL, GB_CONFIG.SUPABASE_KEY);
+// cardápio é sempre "visitante": não usa nem renova o login do painel (deixava tudo mais lento)
+const sb = supabase.createClient(GB_CONFIG.SUPABASE_URL, GB_CONFIG.SUPABASE_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: "gb-cardapio" } });
 
 /* ---------- ícones (usados quando não tem foto) ---------- */
 const ICON={can:'<rect x="16" y="8" width="32" height="48" rx="6"/><path d="M16 18h32M16 46h32M26 4h12"/>',long:'<path d="M28 4h8v10c0 4 6 8 6 16v26a4 4 0 0 1-4 4H26a4 4 0 0 1-4-4V30c0-8 6-12 6-16z"/><path d="M22 36h20"/>',small:'<path d="M27 6h10v8c6 3 9 9 9 16v24a4 4 0 0 1-4 4H22a4 4 0 0 1-4-4V30c0-7 3-13 9-16z"/><path d="M18 38h28"/>',bolt:'<rect x="16" y="6" width="32" height="52" rx="6"/><path d="M34 16l-8 16h8l-4 14 10-18h-8l4-12z"/>',ice:'<path d="M12 22l20-10 20 10v22L32 54 12 44z"/><path d="M12 22l20 10 20-10M32 32v22"/>',whisky:'<path d="M14 18h36l-4 36H18z"/><path d="M16 34h32"/><rect x="24" y="36" width="10" height="10" rx="2"/>',bottle:'<path d="M27 4h10v12l6 6v32a4 4 0 0 1-4 4H25a4 4 0 0 1-4-4V22l6-6z"/><rect x="24" y="30" width="16" height="14"/>',gin:'<path d="M16 10h32L34 34v16h8v4H22v-4h8V34z"/><circle cx="46" cy="14" r="6"/>',cocktail:'<path d="M12 10h40L32 34z"/><path d="M32 34v18M22 54h20M44 4l-6 14"/>',wine:'<path d="M20 6h24c0 16-4 26-12 26S20 22 20 6z"/><path d="M32 32v18M22 54h20M21 16h22"/>',soda:'<path d="M26 4h12v6l4 6v38a4 4 0 0 1-4 4H26a4 4 0 0 1-4-4V16l4-6z"/><path d="M22 28h20v12H22z"/>',drop:'<path d="M32 6c10 14 16 23 16 32a16 16 0 0 1-32 0c0-9 6-18 16-32z"/>',chips:'<path d="M16 8h32l-3 8 3 8-3 8 3 8-3 8 3 8H16l3-8-3-8 3-8-3-8 3-8z"/>',smoke:'<rect x="8" y="34" width="48" height="10" rx="2"/><path d="M44 34v10M48 26c0-6 6-6 6-12M40 26c0-6 6-6 6-12"/>',combo:'<rect x="10" y="22" width="44" height="32" rx="3"/><path d="M10 32h44M32 22v32M32 22c-4-10-14-10-12-2s12 2 12 2c4-10 14-10 12-2s-12 2-12 2"/>'};
@@ -32,6 +33,12 @@ const byId=id=>PRODS.find(p=>p.id===id);
 
 const CACHE_KEY="gb_menu_v1";
 async function fetchMenu(){
+  // 1º jeito: tudo num pedido só, que já começou quando a página abriu
+  try{ const pre=window.GB_PRE?await window.GB_PRE:null; window.GB_PRE=null;
+    if(pre&&pre.s&&Array.isArray(pre.p)) return {s:pre.s,c:pre.c||[],p:pre.p,g:pre.g||[],o:pre.o||[],pc:pre.pc||[],z:pre.z||[],ps:pre.ps||[]};
+    const r=await sb.rpc("get_menu"); if(!r.error&&r.data&&r.data.s) return {s:r.data.s,c:r.data.c||[],p:r.data.p||[],g:r.data.g||[],o:r.data.o||[],pc:r.data.pc||[],z:r.data.z||[],ps:r.data.ps||[]};
+  }catch(e){}
+  // jeito antigo (se a parte 18 do banco ainda não foi rodada)
   const [s,c,p,g,o,pc,z,ps]=await Promise.all([
     sb.from("store_settings").select("*").eq("id",1).single(),
     sb.from("categories").select("*").eq("active",true).order("sort_order").order("name"),
