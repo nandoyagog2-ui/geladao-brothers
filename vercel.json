@@ -10,6 +10,14 @@
         {
           "key": "Cache-Control",
           "value": "no-store, max-age=0"
+        },
+        {
+          "key": "Cross-Origin-Embedder-Policy",
+          "value": "credentialless"
+        },
+        {
+          "key": "Cross-Origin-Resource-Policy",
+          "value": "cross-origin"
         }
       ]
     },
@@ -19,6 +27,10 @@
         {
           "key": "Content-Security-Policy",
           "value": "frame-ancestors 'self' chrome-extension: https://web.whatsapp.com"
+        },
+        {
+          "key": "Cross-Origin-Resource-Policy",
+          "value": "cross-origin"
         }
       ]
     },
@@ -28,6 +40,15 @@
         {
           "key": "Content-Security-Policy",
           "value": "frame-ancestors 'self' chrome-extension: https://web.whatsapp.com"
+        }
+      ]
+    },
+    {
+      "source": "/(js|css|img)/(.*)",
+      "headers": [
+        {
+          "key": "Cross-Origin-Resource-Policy",
+          "value": "cross-origin"
         }
       ]
     }
