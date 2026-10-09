@@ -91,7 +91,7 @@ let S={}, page="pedidos", newCount=0;
 const MENU=[["Operação",[["pedidos","🧾","Pedidos"],["novo","➕","Novo pedido (telefone)"],["historico","📋","Histórico"],["caixa","💰","Caixa / venda balcão"]]],
   ["Cardápio",[["catalogo","🍺","Catálogo"],["complementos","🧊","Complementos"],["destaques","🔥","Destaques e promoções"]]],
   ["Clientes",[["clientes","👥","Clientes e fiado"],["avaliacoes","⭐","Avaliações"],["cupons","🎟️","Cupons"],["fidelidade","🏆","Fidelidade"]]],
-  ["Gestão",[["desempenho","📈","Financeiro e lucro"],["estoque","📦","Estoque"],["financeiro","💸","Despesas e contas"],["delivery","🛵","Delivery e bairros"],["entregadores","🏍️","Entregadores"],["equipe","🪪","Equipe e acessos"],["config","⚙️","Configurações"]]]];
+  ["Gestão",[["desempenho","📈","Financeiro e lucro"],["estoque","📦","Estoque"],["financeiro","💸","Despesas e contas"],["delivery","🛵","Delivery e bairros"],["entregadores","🏍️","Entregadores"],["chatbot","🤖","Chatbot e avisos"],["equipe","🪪","Equipe e acessos"],["config","⚙️","Configurações"]]]];
 /* ---------- quem está logado: dono pode tudo, funcionário só o básico ---------- */
 let ME={role:"dono",name:"",email:"",id:null};
 const OWNER=()=>ME.role==="dono";
@@ -154,6 +154,7 @@ function menu(){
 }
 const PAGES={};
 PAGES.entregadores=m=>pageEntregadores(m);
+PAGES.chatbot=m=>pageChatbot(m);
 // leitor de código de barras (USB): no caixa, se nada estiver selecionado, os números vão direto pra busca
 document.addEventListener("keydown",e=>{if(page!=="caixa"||ov.innerHTML)return;const t=document.activeElement;if(t&&/INPUT|TEXTAREA|SELECT/.test(t.tagName))return;
   const ps=$("#ps");if(ps&&/^[0-9]$/.test(e.key)){ps.focus();}});
@@ -223,11 +224,12 @@ async function orderDrawer(id){
   let next=NEXT[o.status]; if(o.status==="em_preparo") next=o.type==="delivery"?["saiu_entrega","🛵 Saiu para entrega"]:["pronto","🏪 Pronto p/ retirada"];
   if(o.status==="em_preparo"&&o.type==="balcao") next=["concluido","✔️ Concluir"];
   const wa=o.customer_phone&&digits(o.customer_phone).length>=10?waURL(o.customer_phone):"";
-  const nextWa=next&&next[0]&&notifyOn()?waLink(o,next[0]):null, curWa=waLink(o,o.status);
+  const AUTO=!!(S.wa_auto&&S.wa_auto.enabled&&(S.wa_auto.types||[]).includes(o.type));
+  const nextWa=next&&next[0]&&notifyOn()&&!AUTO?waLink(o,next[0]):null, curWa=waLink(o,o.status);
   const dr=drawer(`Pedido #${o.number} ${pill(o.status)}`,`
     ${o.courier_id?`<div class="alert" style="margin:0">🏍️ Com o entregador <b>${esc(((COURIERS||[]).find(c=>c.id===o.courier_id)||{}).name||"…")}</b>${o.dispatched_at?" desde "+hm(o.dispatched_at):""}</div>`:""}
     <div class="muted">${dt(o.created_at)} · ${o.type==="delivery"?"🛵 Entrega"+(o.distance_km!=null?" · "+String(o.distance_km).replace(".",",")+" km":""):o.type==="retirada"?"🏪 Retirada":"🧾 Balcão"}</div>
-    ${o.customer_phone&&o.type!=="balcao"?`<label class="chk"><input type="checkbox" id="nt" ${notifyOn()?"checked":""}> Avisar o cliente no WhatsApp quando eu mudar o status</label>`:""}
+    ${AUTO?'<div class="muted" style="font-size:12.5px">📲 Aviso automático ligado: a extensão do WhatsApp avisa o cliente sozinha quando o status muda.</div>':o.customer_phone&&o.type!=="balcao"?`<label class="chk"><input type="checkbox" id="nt" ${notifyOn()?"checked":""}> Avisar o cliente no WhatsApp quando eu mudar o status</label>`:""}
     ${curWa?`<a class="btn o sm" href="${curWa}" target="_blank" rel="noopener" style="justify-self:start">📲 Enviar aviso de "${STATUS[o.status]}" de novo</a>`:""}
     <div class="card"><b>👤 ${esc(o.customer_name||"Cliente balcão")}</b>${o.customer_phone?`<div class="muted">${esc(o.customer_phone)}</div>`:""}
       ${o.type==="delivery"?`<div style="margin-top:8px"><b>📍 ${esc(addr)}</b><div class="muted">${esc(o.neighborhood||"")}${o.complement?" · "+esc(o.complement):""}${o.cep?" · CEP "+esc(o.cep):""}</div>${o.reference?`<div>Ref.: ${esc(o.reference)}</div>`:""}<a href="${maps}" target="_blank" rel="noopener">Abrir no mapa ↗</a></div>`:""}</div>
@@ -242,7 +244,7 @@ async function orderDrawer(id){
     `${o.type==="delivery"&&o.status!=="cancelado"&&o.status!=="concluido"&&can("entregas")?`<button class="btn o" id="dv">🏍️ ${o.courier_id?"Trocar entregador":"Mandar pro entregador"}</button>`:""}${wa?`<a class="btn o" href="${wa}" target="_blank" rel="noopener">WhatsApp do cliente</a>`:""}<button class="btn o" id="pr">🖨️ Imprimir</button>
      ${o.status!=="cancelado"&&o.status!=="concluido"&&can("cancelar")?`<button class="btn r" id="cc">Cancelar</button>`:""}${next&&next[0]?(nextWa?`<a class="btn" id="nx" href="${nextWa}" target="_blank" rel="noopener">${next[1]} + 📲</a>`:`<button class="btn" id="nx">${next[1]}</button>`):""}`);
   const setSt=async(s,reopen)=>{await q(sb.from("orders").update({status:s}).eq("id",o.id));toast(STATUS[s]);countNew();if(page==="pedidos")PAGES.pedidos($("#main"));
-    if(reopen&&notifyOn()&&waLink({...o,status:s},s)) orderDrawer(o.id); else closeDr()};
+    if(reopen&&!AUTO&&notifyOn()&&waLink({...o,status:s},s)) orderDrawer(o.id); else closeDr()};
   if($("#nt",dr)) $("#nt",dr).onchange=e=>{try{localStorage.setItem("gb_notify",e.target.checked?"on":"off")}catch{};orderDrawer(o.id)};
   if($("#nx",dr)) $("#nx",dr).onclick=()=>setSt(next[0]);
   if($("#st",dr)) $("#st",dr).onchange=e=>setSt(e.target.value,true);

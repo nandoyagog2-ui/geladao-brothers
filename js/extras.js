@@ -87,3 +87,71 @@ async function pageEntregadores(m){
   $$("[data-k]",m).forEach(b=>b.onclick=()=>{key=b.dataset.k;$$("[data-k]",m).forEach(x=>x.setAttribute("aria-current",x===b));acerto()});
   acerto();
 }
+
+/* ---------- CHATBOT E AVISOS AUTOMÁTICOS ---------- */
+const BOT_DEFAULT={enabled:false,
+  greet_open:"Olá, {nome}! 👋 Bem-vindo ao *{loja}* 🍻\nComo posso te ajudar?",
+  greet_closed:"Olá, {nome}! 👋 No momento o *{loja}* está fechado. 😴\n{horario}\n\nMas você já pode olhar o cardápio:\n{link}",
+  menu:[{key:"1",label:"Ver o cardápio e fazer pedido",reply:"É só tocar no link, escolher e finalizar por lá 👇\n{link}"},
+    {key:"2",label:"Horário e endereço",reply:"🕐 {horario}\n📍 {endereco}"},
+    {key:"3",label:"Falar com um atendente",reply:"Certo! Já vou chamar um atendente pra falar com você. 🙋 Só um instante.",human:true}],
+  menu_footer:"Responda com o *número* da opção.",
+  keywords:[{words:"cardapio, cardápio, menu, preço, precos, preços",reply:"Nosso cardápio com todos os preços 👇\n{link}"},
+    {words:"pix",reply:"Aceitamos Pix sim! 😉 O pagamento é feito na entrega ou na retirada."},
+    {words:"atendente, humano, pessoa, falar com alguem, falar com alguém",reply:"Certo! Já vou chamar um atendente. 🙋",human:true}],
+  cooldown_hours:6,pause_hours:2,save_contacts:true};
+const AUTO_DEFAULT={enabled:false,types:["delivery","retirada"],statuses:["em_preparo","saiu_entrega","pronto","concluido"]};
+async function pageChatbot(m){
+  const r0=await sb.from("store_settings").select("bot,wa_auto").eq("id",1).single();
+  if(r0.error){m.innerHTML=`<div class="top"><h1>Chatbot e avisos</h1></div><p class="alert">Rode a <b>parte 15</b> do banco no Supabase pra configurar o robô.</p>`;return}
+  const B=JSON.parse(JSON.stringify(Object.assign({},BOT_DEFAULT,r0.data.bot||{}))), A=Object.assign({},AUTO_DEFAULT,r0.data.wa_auto||{});
+  const VARS='<span class="muted" style="font-size:12px">Pode usar: <b>{nome}</b> nome do cliente · <b>{loja}</b> · <b>{link}</b> link do cardápio · <b>{horario}</b> horário de funcionamento · <b>{endereco}</b></span>';
+  const ST={em_preparo:"Pedido aceito / em preparo",saiu_entrega:"Saiu para entrega",pronto:"Pronto para retirada",concluido:"Concluído (obrigado + avaliação)",cancelado:"Cancelado"};
+  const draw=()=>{
+    m.innerHTML=`<div class="top"><h1>Chatbot e avisos</h1><button class="btn" id="sv">💾 Salvar</button></div>
+    <div class="grid g2">
+      <div class="card grid" style="align-content:start">
+        <label class="chk" style="font-size:16px;font-weight:800"><input type="checkbox" id="be" ${B.enabled?"checked":""}> 🤖 Robô de respostas automáticas ligado</label>
+        <p class="muted" style="margin:0;font-size:12.5px">Responde sozinho quem manda mensagem no WhatsApp da loja. Funciona com o <b>WhatsApp Web aberto</b> no computador e a extensão com <b>"Robô responde os clientes"</b> marcado.</p>
+        <div class="row" style="font-size:12.5px;gap:14px"><span><i style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#25D366"></i> robô respondendo</span><span><i style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#FF8A00"></i> pediu atendente (toca som + botão AJUDA)</span><span><i style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#3B82F6"></i> robô pausado</span></div>
+        <label class="fld"><span>Mensagem de boas-vindas (loja aberta)</span><textarea class="in" id="go" rows="3">${esc(B.greet_open)}</textarea></label>
+        <label class="fld"><span>Mensagem quando a loja está fechada</span><textarea class="in" id="gc" rows="4">${esc(B.greet_closed)}</textarea></label>${VARS}
+        <div class="grid g2"><label class="fld"><span>Cumprimentar de novo depois de (horas)</span><input class="in" id="ch" inputmode="numeric" value="${B.cooldown_hours}"></label>
+          <label class="fld"><span>Quando você responde na mão, pausar o robô por (horas)</span><input class="in" id="ph" inputmode="numeric" value="${B.pause_hours}"></label></div>
+        <label class="chk"><input type="checkbox" id="scc" ${B.save_contacts!==false?"checked":""}> 📇 Salvar automaticamente os contatos novos em Clientes</label>
+      </div>
+      <div class="card grid" style="align-content:start"><b>📋 Menu de opções (vai junto com a boas-vindas)</b>
+        ${B.menu.map((i,k)=>`<div class="card grid" style="gap:6px;background:var(--card-2)"><div class="row" style="flex-wrap:nowrap"><b style="width:28px">${k+1}</b><input class="in" data-ml="${k}" value="${esc(i.label)}" placeholder="Texto da opção"><button class="icb" data-mx="${k}" aria-label="Tirar">✕</button></div>
+          <textarea class="in" data-mr="${k}" rows="2" placeholder="Resposta quando o cliente digitar ${k+1}">${esc(i.reply)}</textarea>
+          <label class="chk" style="font-size:12.5px"><input type="checkbox" data-mh="${k}" ${i.human?"checked":""}> Essa opção chama um atendente (fica laranja e toca o som)</label></div>`).join("")}
+        <button class="btn o sm" id="ma" style="justify-self:start">➕ Adicionar opção</button>
+        <label class="fld"><span>Frase no fim do menu</span><input class="in" id="mf" value="${esc(B.menu_footer||"")}"></label>
+      </div>
+    </div>
+    <div class="grid g2" style="margin-top:12px">
+      <div class="card grid" style="align-content:start"><b>🔑 Palavras-chave</b><p class="muted" style="margin:0;font-size:12.5px">Se o cliente escrever uma dessas palavras, o robô responde na hora. Separe as palavras com vírgula.</p>
+        ${B.keywords.map((k,i)=>`<div class="card grid" style="gap:6px;background:var(--card-2)"><div class="row" style="flex-wrap:nowrap"><input class="in" data-kw="${i}" value="${esc(k.words)}" placeholder="pix, chave pix"><button class="icb" data-kx="${i}" aria-label="Tirar">✕</button></div>
+          <textarea class="in" data-kr="${i}" rows="2" placeholder="Resposta">${esc(k.reply)}</textarea><label class="chk" style="font-size:12.5px"><input type="checkbox" data-kh="${i}" ${k.human?"checked":""}> Chama um atendente</label></div>`).join("")}
+        <button class="btn o sm" id="ka" style="justify-self:start">➕ Adicionar palavra-chave</button></div>
+      <div class="card grid" style="align-content:start">
+        <label class="chk" style="font-size:16px;font-weight:800"><input type="checkbox" id="ae" ${A.enabled?"checked":""}> 📲 Avisos automáticos de status do pedido</label>
+        <p class="muted" style="margin:0;font-size:12.5px">Quando o status do pedido muda (no painel, no caixa ou na extensão), o cliente recebe a mensagem no WhatsApp <b>sozinho</b>. Precisa do WhatsApp Web aberto, o painel lateral da extensão aberto e <b>"Envia os avisos de status sozinho"</b> marcado em um computador.</p>
+        <b style="font-size:13px">Pra quais pedidos</b><div class="row">${[["delivery","🛵 Entrega"],["retirada","🏪 Retirada"],["balcao","🧾 Balcão"]].map(([k,l])=>`<label class="chk"><input type="checkbox" data-at="${k}" ${A.types.includes(k)?"checked":""}> ${l}</label>`).join("")}</div>
+        <b style="font-size:13px">Quais avisos</b>${Object.entries(ST).map(([k,l])=>`<label class="chk"><input type="checkbox" data-as="${k}" ${A.statuses.includes(k)?"checked":""}> ${l}</label>`).join("")}
+        <p class="muted" style="margin:0;font-size:12.5px">O texto de cada aviso você edita em <a href="#config" id="gcfg">Configurações → Mensagens do WhatsApp</a>.</p></div>
+    </div>`;
+    const read=()=>{B.enabled=$("#be").checked;B.greet_open=$("#go").value;B.greet_closed=$("#gc").value;B.cooldown_hours=+$("#ch").value||6;B.pause_hours=+$("#ph").value||2;B.save_contacts=$("#scc").checked;B.menu_footer=$("#mf").value;
+      B.menu=B.menu.map((i,k)=>({key:String(k+1),label:$(`[data-ml="${k}"]`).value.trim(),reply:$(`[data-mr="${k}"]`).value,human:$(`[data-mh="${k}"]`).checked})).filter(i=>i.label);
+      B.menu.forEach((i,k)=>i.key=String(k+1));
+      B.keywords=B.keywords.map((x,i)=>({words:$(`[data-kw="${i}"]`).value,reply:$(`[data-kr="${i}"]`).value,human:$(`[data-kh="${i}"]`).checked})).filter(x=>x.words.trim()&&x.reply.trim());
+      A.enabled=$("#ae").checked;A.types=$$("[data-at]",m).filter(c=>c.checked).map(c=>c.dataset.at);A.statuses=$$("[data-as]",m).filter(c=>c.checked).map(c=>c.dataset.as)};
+    $("#ma",m).onclick=()=>{read();B.menu.push({key:"",label:"Nova opção",reply:""});draw()};
+    $("#ka",m).onclick=()=>{read();B.keywords.push({words:"",reply:""});draw()};
+    $$("[data-mx]",m).forEach(b=>b.onclick=()=>{read();B.menu.splice(+b.dataset.mx,1);draw()});
+    $$("[data-kx]",m).forEach(b=>b.onclick=()=>{read();B.keywords.splice(+b.dataset.kx,1);draw()});
+    $("#gcfg",m).onclick=e=>{e.preventDefault();go("config")};
+    $("#sv",m).onclick=async()=>{read();const r=await sb.from("store_settings").update({bot:B,wa_auto:A}).eq("id",1);
+      if(r.error){toast(r.error.message);return} S.bot=B;S.wa_auto=A;toast("Salvo · a extensão atualiza em até 1 minuto");draw()};
+  };
+  draw();
+}

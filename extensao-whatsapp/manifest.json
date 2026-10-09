@@ -1,15 +1,45 @@
 {
   "manifest_version": 3,
   "name": "Geladão Brothers no WhatsApp",
-  "version": "1.2.0",
-  "description": "Abre o cardápio e o painel do Geladão Brothers ao lado do WhatsApp Web pra lançar pedidos e colar o resumo na conversa.",
-  "icons": { "16": "icon-16.png", "32": "icon-32.png", "48": "icon-48.png", "128": "icon-128.png" },
-  "action": { "default_title": "Abrir o painel do Geladão", "default_icon": { "16": "icon-16.png", "32": "icon-32.png" } },
-  "side_panel": { "default_path": "panel.html" },
-  "background": { "service_worker": "background.js" },
-  "permissions": ["sidePanel", "tabs"],
-  "host_permissions": ["https://web.whatsapp.com/*"],
+  "version": "2.0.0",
+  "description": "Painel do Geladão Brothers ao lado do WhatsApp Web: pedidos, robô de respostas automáticas e avisos de status.",
+  "icons": {
+    "16": "icon-16.png",
+    "32": "icon-32.png",
+    "48": "icon-48.png",
+    "128": "icon-128.png"
+  },
+  "action": {
+    "default_title": "Abrir o painel do Geladão",
+    "default_icon": {
+      "16": "icon-16.png",
+      "32": "icon-32.png"
+    }
+  },
+  "side_panel": {
+    "default_path": "panel.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": [
+    "sidePanel",
+    "tabs",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://web.whatsapp.com/*",
+    "https://qjhhewvwptjnswaxofkn.supabase.co/*"
+  ],
   "content_scripts": [
-    { "matches": ["https://web.whatsapp.com/*"], "js": ["whatsapp.js"], "run_at": "document_idle" }
+    {
+      "matches": [
+        "https://web.whatsapp.com/*"
+      ],
+      "js": [
+        "whatsapp.js"
+      ],
+      "run_at": "document_idle"
+    }
   ]
 }
