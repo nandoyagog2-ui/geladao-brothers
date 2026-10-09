@@ -489,16 +489,30 @@ function promoPop(){
 }
 
 /* ---------- início ---------- */
-// abre na hora com o cardápio guardado no celular e atualiza por trás
+// medidor de velocidade: abra o cardápio com ?teste=1 no fim do link
+const T0=performance.now(), TM={};
+const mark=k=>{if(!TM[k])TM[k]=Math.round(performance.now())};
+function speedReport(){
+  if(!/teste=1/.test(location.search)) return;
+  const res=performance.getEntriesByType("resource").map(r=>({n:r.name.split("?")[0].split("/").pop().slice(0,28),h:new URL(r.name).host.split(".")[0],kb:Math.round((r.transferSize||r.encodedBodySize||0)/1024),ms:Math.round(r.duration)}));
+  const nav=performance.getEntriesByType("navigation")[0]||{};
+  const top=res.slice().sort((a,b)=>b.ms-a.ms).slice(0,8);
+  const box=document.createElement("div");
+  box.style.cssText="position:fixed;left:8px;right:8px;bottom:80px;z-index:99999;background:#fff;color:#111;font:12px/1.35 monospace;padding:10px;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,.5);max-height:55vh;overflow:auto";
+  box.innerHTML=`<b>MEDIDOR (tire um print)</b><br>Página: ${Math.round(nav.responseEnd||0)} ms · Scripts prontos: ${TM.js} ms<br>Tela com cache: ${TM.cache||"-"} ms · Dados do servidor: ${TM.dados||"-"} ms · Tela final: ${TM.tela||"-"} ms<br>Total baixado: ${res.reduce((s,r)=>s+r.kb,0)} KB em ${res.length} arquivos<br><br><b>Mais demorados:</b><br>${top.map(r=>`${r.ms} ms · ${r.kb} KB · ${r.h} · ${r.n}`).join("<br>")}<br><button onclick="this.parentNode.remove()" style="margin-top:6px;padding:6px 10px">fechar</button>`;
+  document.body.appendChild(box);
+}
+mark("js");
 (async()=>{
   let cached=null; try{cached=JSON.parse(localStorage.getItem(CACHE_KEY)||"null")}catch{}
   let shown=false;
-  if(cached&&cached.s){ try{ applyMenu(cached); restoreCart(); render(); shown=true; afterBoot(); }catch(e){ console.error(e) } }
+  if(cached&&cached.s){ try{ applyMenu(cached); restoreCart(); render(); shown=true; mark("cache"); afterBoot(); }catch(e){ console.error(e) } }
   let fresh=null;
-  try{ fresh=await fetchMenu(); }
+  try{ fresh=await fetchMenu(); mark("dados"); }
   catch(e){ if(!shown) app.innerHTML=`<div class="empty">Não foi possível carregar o cardápio agora. Tente de novo em instantes.</div>`; console.error(e); return; }
   try{ localStorage.setItem(CACHE_KEY,JSON.stringify(fresh)) }catch{}
-  if(!shown){ applyMenu(fresh); restoreCart(); render(); afterBoot(); return; }
+  if(!shown){ applyMenu(fresh); restoreCart(); render(); mark("tela"); afterBoot(); setTimeout(speedReport,4000); return; }
+  mark("tela"); setTimeout(speedReport,4000);
   if(JSON.stringify(fresh)!==JSON.stringify(cached)){ applyMenu(fresh); const y=window.scrollY, ae=document.activeElement; if(!(ae&&ae.id==="q")){ render(); window.scrollTo(0,y); } }
 })();
 function afterBoot(){
