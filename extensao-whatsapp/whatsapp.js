@@ -2,7 +2,7 @@
 //  - descobre a conversa aberta e escreve/envia mensagens nela
 //  - robô de respostas automáticas (chatbot) com cores e botão AJUDA
 //  - envia avisos de pedido abrindo a conversa do cliente pelo número
-const VERSION = "3.0";
+const VERSION = "3.1";
 
 /* ================= conversa aberta ================= */
 function headerTitle() {
@@ -439,21 +439,38 @@ async function openByPhone(phone) {
   typeSearch(box, "");
   return ok && !!composeBox();
 }
+// ponte com as funções internas do WhatsApp (arquivo wabridge.js, roda na página)
+const bridgeWait = {};
+window.addEventListener("message", e => {
+  if (e.source !== window) return;
+  const d = e.data || {};
+  if (d.gbwa === "res" && bridgeWait[d.id]) { bridgeWait[d.id](d); delete bridgeWait[d.id]; }
+});
+function bridge(cmd, args, timeout = 20000) {
+  return new Promise(res => {
+    const id = Math.random().toString(36).slice(2);
+    bridgeWait[id] = res;
+    window.postMessage({ gbwa: "req", id, cmd, ...(args || {}) }, "*");
+    setTimeout(() => { if (bridgeWait[id]) { delete bridgeWait[id]; res({ ok: false, err: "tempo" }); } }, timeout);
+  });
+}
 async function runJob(j) {
-  for (let i = 0; i < 40 && (working || busy()); i++) await wait(1500);     // espera a pessoa parar de digitar (até 1 min)
+  // 1º jeito (igual Cardápio Web): manda direto pelo WhatsApp, sem abrir conversa e sem recarregar
+  const r1 = await bridge("send", { phone: j.phone, text: j.text });
+  if (r1.ok) return { ok: true, sent: true, via: "direto" };
+  if (r1.err === "sem_whatsapp") return { ok: false, reason: "sem_whatsapp" };
+  // 2º jeito: abre a conversa do cliente por dentro do WhatsApp e escreve a mensagem
+  for (let i = 0; i < 40 && (working || busy()); i++) await wait(1500);
   working = true;
   const prev = headerTitle();
   try {
-    if (!(await openByPhone(j.phone))) {
-      // não achou pela busca: abre pelo link do WhatsApp (a página recarrega e o envio continua sozinho)
-      await chrome.storage.local.set({ gb_job: { ...j, ts: Date.now() } });
-      location.href = "https://web.whatsapp.com/send?phone=" + (digits(j.phone).length <= 11 ? "55" : "") + digits(j.phone);
-      return { ok: true, pending: true };
-    }
-    await wait(600);
-    const r = await send(j.text, true, {});
-    const s = st(headerTitle()); s.mode = s.mode === "wait" ? "wait" : s.mode; saveState();
-    return r;
+    let opened = false;
+    const r2 = await bridge("open", { phone: j.phone });
+    if (r2.ok) { for (let k = 0; k < 30; k++) { await wait(150); if (composeBox() && headerTitle() && headerTitle() !== prev) break; } opened = !!composeBox(); }
+    if (!opened) opened = await openByPhone(j.phone);           // 3º jeito: pela busca
+    if (!opened) return { ok: false, reason: "chat" };          // não recarrega mais a página
+    await wait(500);
+    return await send(j.text, true, {});
   } finally {
     if (prev && headerTitle() !== prev) await openRow(prev);
     working = false;
