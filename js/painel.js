@@ -193,6 +193,7 @@ async function countNew(){
   const {count,error}=await sb.from("orders").select("id",{count:"exact",head:true}).eq("status","novo"); if(error) return;
   const n=count||0;
   if(lastNew!==null&&n>lastNew){beep();toast("🔔 Pedido novo chegou!");if(page==="pedidos"&&!ov.innerHTML)PAGES.pedidos($("#main"),true)}
+  if(window.PRN) PRN.tick(sb,S,addrOf);
   lastNew=n; newCount=n; menu(); document.title=(newCount?`(${newCount}) 🔔 `:"")+"Painel · "+S.name;
 }
 function listenOrders(){
@@ -212,7 +213,7 @@ PAGES.pedidos=async(m,soft)=>{
   const today=rows.filter(o=>new Date(o.created_at)>=startOfDay()&&o.status!=="cancelado");
   const cols=[["novo","Novos"],["em_preparo","Em preparo"],["saida","Saiu / Pronto"],["concluido","Concluídos hoje"]];
   const inCol=(o,c)=>c==="saida"?["saiu_entrega","pronto"].includes(o.status):c==="concluido"?o.status==="concluido"&&new Date(o.created_at)>=startOfDay():o.status===c;
-  m.innerHTML=`<div class="top"><h1>Pedidos</h1><div class="row"><button class="btn" id="np">➕ Novo pedido</button></div></div>
+  m.innerHTML=`<div class="top"><h1>Pedidos</h1><div class="row"><button class="btn o" id="prnb">${PRN.badge()}</button><button class="btn" id="np">➕ Novo pedido</button></div></div>
     <div class="stats"><div class="stat"><small>Pedidos hoje</small><b>${today.length}</b></div><div class="stat"><small>Vendido hoje</small><b>${brl(today.reduce((s,o)=>s+ +o.total,0))}</b></div>
     <div class="stat"><small>Ticket médio</small><b>${brl(today.length?today.reduce((s,o)=>s+ +o.total,0)/today.length:0)}</b></div><div class="stat"><small>Aguardando aceitar</small><b style="color:${newCount?"var(--y)":"inherit"}">${rows.filter(o=>o.status==="novo").length}</b></div></div>
     ${audioCtx&&audioCtx.state==="running"?"":`<p class="alert" style="margin:0 0 12px">🔔 O navegador só libera o som depois de um clique. <b>Clique em qualquer lugar desta tela</b> (ou no botão "Ativar o som" do menu) toda vez que abrir o painel.</p>`}
@@ -286,7 +287,19 @@ async function orderDrawer(id){
   if($("#rw",dr)) $("#rw",dr).onclick=async e=>{e.target.disabled=true;const ok=await waQueue(o.customer_phone,waText(o,o.status),"reenvio",o.id);
     if(ok)toast("📲 Na fila: a extensão do WhatsApp envia em instantes");else{toast("Rode a parte 16 do banco pra enviar sem abrir o WhatsApp");window.open(curWa,"_blank")}};
 }
+const addrOf=o=>o.type==="delivery"?`${o.street||o.address||""}${o.street_number?", "+o.street_number:""}`:"";
+function openPrinter(){
+  drawer("🖨️ Impressora deste aparelho",PRN.panelHTML());
+  PRN.wire(ov,S,toast);
+}
 function printOrder(o,items,addr,change){
+  if(window.PRN&&PRN.cfg().mode!=="janela"){
+    PRN.printOrder(o,items,addr,change,S).then(()=>toast("🧾 Cupom impresso")).catch(e=>{toast("Impressora: "+(e.message||e)+" · abrindo a janela de impressão");htmlOrder(o,items,addr,change)});
+    return;
+  }
+  htmlOrder(o,items,addr,change);
+}
+function htmlOrder(o,items,addr,change){
   $("#print").innerHTML=`<h2>${esc(S.name)}</h2><div style="text-align:center">Pedido #${o.number} · ${dt(o.created_at)}</div><hr>
     <div>${o.type==="delivery"?"ENTREGA":o.type==="retirada"?"RETIRADA":"BALCÃO"}</div><div><b>${esc(o.customer_name||"")}</b> ${esc(o.customer_phone||"")}</div>
     ${o.type==="delivery"?`<div>${esc(addr)} - ${esc(o.neighborhood||"")}</div>${o.complement?`<div>${esc(o.complement)}</div>`:""}${o.reference?`<div>Ref: ${esc(o.reference)}</div>`:""}`:""}<hr>
@@ -812,7 +825,7 @@ PAGES.caixa=async m=>{
   const SEE=can("resumo");   // funcionário sem essa permissão fecha o caixa "às cegas" (não vê o valor esperado)
   const PM=[...new Set(["Pix","Dinheiro","Cartão de crédito","Cartão de débito"].concat(S.payment_methods||[]))].concat(can("fiado_vender")?["Fiado"]:[]);
   const ico=x=>/pix/i.test(x)?"⚡":/dinheiro/i.test(x)?"💵":/fiado/i.test(x)?"📒":"💳";
-  let cart=[], term="", cat="", pay="Dinheiro", troco="", disc="", cli=null, printIt=false, split=false, parts=[];
+  let cart=[], term="", cat="", pay="Dinheiro", troco="", disc="", cli=null, printIt=!!(window.PRN&&PRN.cfg().autoBalcao), split=false, parts=[];
   const r2=v=>Math.round(v*100)/100;
   const paid=()=>r2(parts.reduce((s,x)=>s+(num(x.v)||0),0));
   const cashPart=()=>r2(parts.filter(x=>/dinheiro/i.test(x.m)).reduce((s,x)=>s+(num(x.v)||0),0));
@@ -837,7 +850,7 @@ PAGES.caixa=async m=>{
     const list=prods.filter(p=>(!cat||String(p.category_id)===cat)&&(!term||p.name.toLowerCase().includes(term)||(p.barcode&&String(p.barcode).includes(term)))).slice(0,120);
     const t=tot(), isCash=/dinheiro/i.test(pay), tr=num(troco);
     m.innerHTML=`<div class="top"><div><h1>Caixa · venda no balcão</h1><div class="muted">🟢 Aberto por <b>${esc(open.operator||"—")}</b> desde ${dt(open.opened_at)} · ${SM.done.length} venda(s)${SEE?` · <b style="color:var(--y)">${brl(SM.done.reduce((s,o)=>s+ +o.total,0))}</b>`:""}</div></div>
-      <div class="row"><button class="btn o" id="mvb">💸 Sangria / suprimento</button><button class="btn r" id="fc">🔒 Fechar caixa</button></div></div>
+      <div class="row"><button class="btn o" id="prnb">${PRN.badge()}</button><button class="btn o" id="mvb">💸 Sangria / suprimento</button><button class="btn r" id="fc">🔒 Fechar caixa</button></div></div>
     <div class="cat2" style="grid-template-columns:minmax(0,1fr) 380px">
       <div class="grid" style="align-content:start;gap:10px">
         <div class="row" style="flex-wrap:nowrap"><input class="in" id="ps" placeholder="🔍 Buscar produto ou passar o código de barras…" value="${esc(term)}" autocomplete="off"><button class="btn o" id="cam" title="Ler código com a câmera">📷</button></div>
@@ -964,7 +977,7 @@ PAGES.caixa=async m=>{
       ${rows.map(([l,v])=>`<div class="line"><span class="muted">${l}</span><b>${v}</b></div>`).join("")}
       ${sess.notes?`<p class="muted" style="margin:0">Obs.: ${esc(sess.notes)}</p>`:""}
       <div class="row"><button class="btn o" id="pf">🖨️ Imprimir fechamento</button><button class="btn" id="sx">🚪 Sair (próximo funcionário entra)</button><button class="btn o" id="nv">Abrir outro caixa</button></div></div>`;
-    $("#pf").onclick=()=>{$("#print").innerHTML=`<h2>${esc(S.name)}</h2><div style="text-align:center">FECHAMENTO DE CAIXA</div><hr>${rows.map(([l,v])=>`<div>${l.replace(/&nbsp;/g," ")} <span style="float:right">${v}</span></div>`).join("")}<hr>${sess.notes?`<div>Obs.: ${esc(sess.notes)}</div>`:""}<br><div>Assinatura: ____________________</div>`;window.print()};
+    $("#pf").onclick=()=>{if(window.PRN&&PRN.cfg().mode!=="janela"){PRN.textDoc("FECHAMENTO DE CAIXA",rows,sess.notes).catch(e=>toast("Impressora: "+(e.message||e)));return}$("#print").innerHTML=`<h2>${esc(S.name)}</h2><div style="text-align:center">FECHAMENTO DE CAIXA</div><hr>${rows.map(([l,v])=>`<div>${l.replace(/&nbsp;/g," ")} <span style="float:right">${v}</span></div>`).join("")}<hr>${sess.notes?`<div>Obs.: ${esc(sess.notes)}</div>`:""}<br><div>Assinatura: ____________________</div>`;window.print()};
     $("#sx").onclick=async()=>{await sb.auth.signOut();location.reload()};
     $("#nv").onclick=()=>PAGES.caixa(m);
   }
@@ -1090,6 +1103,7 @@ PAGES.config=async m=>{
     <div class="card grid"><b>Mensagens do WhatsApp pro cliente</b><p class="muted" style="margin:0;font-size:12px">Use {nome}, {numero}, {total}, {loja}, {link_pedido} (acompanhar pedido) e {link_avaliacao} (página de avaliação com estrelas). Ao mudar o status do pedido, o WhatsApp abre com a mensagem pronta, é só apertar enviar.</p>
       ${Object.entries(WA_LABEL).map(([k,l])=>`<label class="fld"><span>${l}</span><textarea class="in" rows="3" id="wa_${k}">${esc(((S.wa_templates||{})[k])||WA_DEFAULT[k])}</textarea></label>`).join("")}
       <label class="fld"><span>Link de avaliação no Google (opcional). Quem der 4 ou 5 estrelas no nosso link é convidado a avaliar no Google também</span><input class="in" id="rv" value="${esc(S.review_url||"")}"></label></div>
+    <div class="card grid"><b>🖨️ Impressora térmica</b><p class="muted" style="margin:0;font-size:12px">Conecte a impressora Bluetooth ou USB deste aparelho e escolha se imprime sozinho no balcão e nos pedidos novos.</p><button class="btn o" id="prnb">${PRN.badge()}</button></div>
     <div class="card grid"><b>⚡ Deixar o cardápio mais rápido</b><p class="muted" style="margin:0;font-size:12px">Diminui as fotos que já estão no sistema (logo, capa, categorias e produtos) pra abrirem rápido no celular do cliente. A qualidade continua boa. Pode levar alguns minutos, deixe esta tela aberta.</p><button class="btn o" id="opt">⚡ Otimizar fotos agora</button><button class="btn o" id="rst">↩ Voltar as fotos originais (qualidade máxima)</button><div id="optm" class="muted" style="font-size:12.5px"></div></div>
     <div class="card"><b>Link do cardápio pros clientes</b><p style="word-break:break-all"><a href="/" target="_blank" rel="noopener">${location.origin}/</a></p><button class="btn o sm" id="cpl">Copiar link</button></div></div></div>`;
   wireImgs(m);
@@ -1159,3 +1173,4 @@ PAGES.config=async m=>{
 };
 
 boot();
+document.addEventListener("click",e=>{if(e.target.closest&&e.target.closest("#prnb"))openPrinter()});
