@@ -46,7 +46,9 @@ const PRN=(()=>{
     }catch{}
     ui(); return ready();
   }
-  const ready=()=>C.mode==="bluetooth"?!!ch:C.mode==="usb"?!!port:false;
+  const ready=()=>C.mode==="sistema"?true:C.mode==="bluetooth"?!!ch:C.mode==="usb"?!!port:false;
+  const direct=()=>C.mode==="bluetooth"||C.mode==="usb";
+  let htmlFn=null;
 
   /* ---------- envio ---------- */
   async function write(bytes){
@@ -109,6 +111,7 @@ const PRN=(()=>{
     return d.bytes();
   }
   async function printOrder(o,items,addr,change,store){
+    if(C.mode==="sistema"){ if(htmlFn) htmlFn(o,items,addr,change); markDone(o.id); await new Promise(r=>setTimeout(r,1500)); return; }
     const bytes=orderDoc(o,items,addr,change,store);
     for(let i=0;i<Math.max(1,C.copies|0);i++) await send(bytes);
     markDone(o.id);
@@ -120,6 +123,7 @@ const PRN=(()=>{
     d.feed(2).text("Assinatura: ____________________").cut(); return send(d.bytes());
   }
   async function test(store){
+    if(C.mode==="sistema"){ if(htmlFn) htmlFn({id:0,number:0,type:"balcao",created_at:new Date().toISOString(),customer_name:"TESTE DA IMPRESSORA",subtotal:10,discount:0,total:10,payment_method:"Dinheiro"},[{qty:1,name:"Produto exemplo",total:10,options:[]}],"",0); return; }
     const d=Doc(); d.center(1).bold(1).big(1).text(store&&store.name||"Teste").big(0).text("Impressora funcionando!").bold(0)
       .text(new Date().toLocaleString("pt-BR")).center(0).line().lr("1x Produto exemplo","R$ 10,00").lr("TOTAL","R$ 10,00").cut();
     await send(d.bytes());
@@ -150,13 +154,15 @@ const PRN=(()=>{
     const iphone=/iPhone|iPad/i.test(navigator.userAgent);
     return `<div class="grid" id="prnp">
       ${iphone?`<div class="card" style="border-color:var(--red)">⚠️ No iPhone/iPad o navegador <b>não conecta</b> em impressora Bluetooth. Use um computador ou celular Android com o Chrome. Aqui ele usa a janela de impressão normal.</div>`:""}
-      <div class="card grid"><b>Status: ${C.mode==="janela"?"usando a janela de impressão normal":ready()?"✅ conectada em "+esc2(C.name):"⚠️ desconectada"}</b>
+      <div class="card grid"><b>Status: ${C.mode==="janela"?"usando a janela de impressão normal":C.mode==="sistema"?"✅ impressora instalada no computador (driver)":ready()?"✅ conectada em "+esc2(C.name):"⚠️ desconectada"}</b>
         <div class="row" style="flex-wrap:wrap">
-          ${hasBT?`<button class="btn" id="pbt">🔵 Conectar impressora Bluetooth</button>`:""}
+          ${!iphone?`<button class="btn${C.mode==="sistema"?"":" o"}" id="psy">🖥️ Impressora com cabo USB (instalada no Windows)</button>`:""}
+          ${hasBT?`<button class="btn o" id="pbt">🔵 Conectar impressora Bluetooth</button>`:""}
           ${hasSerial?`<button class="btn o" id="pus">🔌 Impressora USB / porta COM</button>`:""}
-          ${C.mode!=="janela"&&!ready()?`<button class="btn o" id="prc">🔄 Reconectar</button>`:""}
+          ${direct()&&!ready()?`<button class="btn o" id="prc">🔄 Reconectar</button>`:""}
           ${C.mode!=="janela"?`<button class="btn o" id="pts">🧾 Imprimir teste</button><button class="btn o sm" id="pjn">Desligar (usar janela normal)</button>`:""}
         </div>
+        ${C.mode==="sistema"?`<p class="muted" style="margin:0;font-size:12px">Pra sair <b>sem abrir a janela</b> de impressão, abra o painel pelo atalho do Chrome com <b>--kiosk-printing</b> e deixe a impressora como <b>padrão</b> no Windows.</p>`:""}
         ${!hasBT&&!hasSerial?`<p class="muted" style="margin:0">Este navegador não conecta direto na impressora. Use o <b>Google Chrome</b> no computador ou no Android.</p>`:""}
         <div id="pmsg" class="muted" style="font-size:12.5px"></div></div>
       <div class="card grid"><b>Imprimir sozinho</b>
@@ -174,6 +180,7 @@ const PRN=(()=>{
     const redo=()=>{ const p=$("#prnp"); if(p){ p.outerHTML=panelHTML(); wire(root,store,toast) } };
     const go=fn=>async e=>{ e.target.disabled=true; msg("Conectando…"); try{ await fn(); redo(); toast&&toast("Impressora conectada") }catch(x){ msg(/cancel|chosen/i.test(x.message||"")?"Nenhuma impressora escolhida.":"Não conectou: "+(x.message||x)); e.target.disabled=false } };
     if($("#pbt")) $("#pbt").onclick=go(pickBT);
+    if($("#psy")) $("#psy").onclick=()=>{ C.mode="sistema"; C.name="Impressora do computador"; if(C.cols==32) C.cols=48; save(); redo(); ui(); toast&&toast("Usando a impressora instalada no computador") };
     if($("#pus")) $("#pus").onclick=go(pickSerial);
     if($("#prc")) $("#prc").onclick=async()=>{ msg("Reconectando…"); if(await reconnect()) redo(); else if(C.mode==="bluetooth"&&hasBT) { try{await pickBT();redo()}catch(x){msg("Não conectou: "+(x.message||x))} } else msg("Não achei a impressora. Ligue ela e tente de novo.") };
     if($("#pts")) $("#pts").onclick=async()=>{ msg("Imprimindo teste…"); try{await test(store);msg("✅ Teste enviado. Saiu o papel?")}catch(x){msg("Não imprimiu: "+(x.message||x))} };
@@ -185,7 +192,7 @@ const PRN=(()=>{
     $("#pac").onchange=e=>{C.acc=e.target.checked;save()};
   }
 
-  if(C.mode!=="janela") setTimeout(reconnect,800);
-  return { cfg:()=>C, ready, reconnect, printOrder, textDoc, tick, panelHTML, wire, badge, hasBT, hasSerial, markDone, onUi:f=>uiCb=f };
+  if(direct()) setTimeout(reconnect,800);
+  return { cfg:()=>C, ready, reconnect, printOrder, textDoc, tick, panelHTML, wire, badge, hasBT, hasSerial, markDone, direct, setHtml:f=>htmlFn=f, onUi:f=>uiCb=f };
 })();
 window.PRN=PRN;

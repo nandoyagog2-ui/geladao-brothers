@@ -293,7 +293,7 @@ function openPrinter(){
   PRN.wire(ov,S,toast);
 }
 function printOrder(o,items,addr,change){
-  if(window.PRN&&PRN.cfg().mode!=="janela"){
+  if(window.PRN&&PRN.direct()){
     PRN.printOrder(o,items,addr,change,S).then(()=>toast("🧾 Cupom impresso")).catch(e=>{toast("Impressora: "+(e.message||e)+" · abrindo a janela de impressão");htmlOrder(o,items,addr,change)});
     return;
   }
@@ -977,7 +977,7 @@ PAGES.caixa=async m=>{
       ${rows.map(([l,v])=>`<div class="line"><span class="muted">${l}</span><b>${v}</b></div>`).join("")}
       ${sess.notes?`<p class="muted" style="margin:0">Obs.: ${esc(sess.notes)}</p>`:""}
       <div class="row"><button class="btn o" id="pf">🖨️ Imprimir fechamento</button><button class="btn" id="sx">🚪 Sair (próximo funcionário entra)</button><button class="btn o" id="nv">Abrir outro caixa</button></div></div>`;
-    $("#pf").onclick=()=>{if(window.PRN&&PRN.cfg().mode!=="janela"){PRN.textDoc("FECHAMENTO DE CAIXA",rows,sess.notes).catch(e=>toast("Impressora: "+(e.message||e)));return}$("#print").innerHTML=`<h2>${esc(S.name)}</h2><div style="text-align:center">FECHAMENTO DE CAIXA</div><hr>${rows.map(([l,v])=>`<div>${l.replace(/&nbsp;/g," ")} <span style="float:right">${v}</span></div>`).join("")}<hr>${sess.notes?`<div>Obs.: ${esc(sess.notes)}</div>`:""}<br><div>Assinatura: ____________________</div>`;window.print()};
+    $("#pf").onclick=()=>{if(window.PRN&&PRN.direct()){PRN.textDoc("FECHAMENTO DE CAIXA",rows,sess.notes).catch(e=>toast("Impressora: "+(e.message||e)));return}$("#print").innerHTML=`<h2>${esc(S.name)}</h2><div style="text-align:center">FECHAMENTO DE CAIXA</div><hr>${rows.map(([l,v])=>`<div>${l.replace(/&nbsp;/g," ")} <span style="float:right">${v}</span></div>`).join("")}<hr>${sess.notes?`<div>Obs.: ${esc(sess.notes)}</div>`:""}<br><div>Assinatura: ____________________</div>`;window.print()};
     $("#sx").onclick=async()=>{await sb.auth.signOut();location.reload()};
     $("#nv").onclick=()=>PAGES.caixa(m);
   }
@@ -1174,3 +1174,4 @@ PAGES.config=async m=>{
 
 boot();
 document.addEventListener("click",e=>{if(e.target.closest&&e.target.closest("#prnb"))openPrinter()});
+if(window.PRN) PRN.setHtml((o,items,addr,change)=>htmlOrder(o,items,addr,change));
