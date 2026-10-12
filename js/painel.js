@@ -861,7 +861,7 @@ PAGES.caixa=async m=>{
           <span class="muted" style="font-size:11px">${st!=null?`Estoque: <b style="color:${st<=0?"var(--red)":"inherit"}">${st}</b>`:""}${inC?` · <b style="color:var(--y)">${inC.n} na venda</b>`:""}</span></button>`}).join("")||'<p class="muted">Nada encontrado.</p>'}</div></div>
       <div class="card grid" style="align-content:start;position:sticky;top:12px">
         <b style="font-size:16px">🧾 Venda atual</b>
-        ${cart.map((i,k)=>`<div class="line"><div style="min-width:0"><b>${esc(i.p.name)}</b><div class="muted" style="font-size:12px">${brl(pr(i.p))} cada${pr(i.p)<base(i.p)?' · <span style="color:var(--green)">atacado</span>':""}</div></div><div class="row" style="flex-wrap:nowrap"><button class="icb" data-m="${k}" aria-label="Menos">−</button><b>${i.n}</b><button class="icb" data-p="${k}" aria-label="Mais">+</button><span style="width:74px;text-align:right">${brl(pr(i.p)*i.n)}</span></div></div>`).join("")||'<p class="muted" style="margin:0">Toque nos produtos pra adicionar.</p>'}
+        ${cart.map((i,k)=>`<div class="line"><div style="min-width:0"><b>${esc(i.p.name)}</b><div class="muted" style="font-size:12px">${brl(pr(i.p))} cada${pr(i.p)<base(i.p)?' · <span style="color:var(--green)">atacado</span>':""}</div></div><div class="row" style="flex-wrap:nowrap"><button class="icb" data-m="${k}" aria-label="Menos">−</button><input class="in" data-q="${k}" inputmode="numeric" value="${i.n}" title="Clique e digite a quantidade" style="width:52px;text-align:center;padding:6px 4px;font-weight:800"><button class="icb" data-p="${k}" aria-label="Mais">+</button><button class="icb" data-rm="${k}" aria-label="Tirar da venda" title="Tirar da venda">🗑</button><span style="width:74px;text-align:right">${brl(pr(i.p)*i.n)}</span></div></div>`).join("")||'<p class="muted" style="margin:0">Toque nos produtos pra adicionar.</p>'}
         <div class="line"><span class="muted">Subtotal</span><span>${brl(sub())}</span></div>
         ${can("desconto")?`<label class="row" style="flex-wrap:nowrap"><span class="muted" style="flex:1">Desconto (R$)</span><input class="in" id="ds" inputmode="decimal" style="width:110px" value="${esc(disc)}" placeholder="0,00"></label>`:""}
         <div class="line big"><span>Total</span><span class="price">${brl(t)}</span></div>
@@ -896,6 +896,10 @@ PAGES.caixa=async m=>{
     $$("[data-a]",m).forEach(b=>b.onclick=()=>{add(prods.find(x=>x.id==b.dataset.a));draw()});
     $$("[data-m]",m).forEach(b=>b.onclick=()=>{const i=cart[+b.dataset.m];i.n--;if(!i.n)cart.splice(+b.dataset.m,1);draw()});
     $$("[data-p]",m).forEach(b=>b.onclick=()=>{cart[+b.dataset.p].n++;draw()});
+    $$("[data-q]",m).forEach(inp=>{inp.onfocus=()=>inp.select();
+      const set=()=>{const k=+inp.dataset.q,v=parseInt(inp.value,10);if(!cart[k])return;if(v>0)cart[k].n=v;else if(v===0)cart.splice(k,1);draw();const f=$("#ps");if(f)f.focus()};
+      inp.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();set()}};inp.onchange=set});
+    $$("[data-rm]",m).forEach(b=>b.onclick=()=>{cart.splice(+b.dataset.rm,1);draw()});
     if($("#ds"))$("#ds").onchange=e=>{disc=e.target.value;draw()};
     $$("[data-pay]",m).forEach(b=>b.onclick=()=>{const x=b.dataset.pay;
       if(split){const rest=r2(t-paid());parts.push({m:x,v:rest>0?money(rest):""});draw();const ins=$$("[data-pv]",m);const last=ins[ins.length-1];if(last){last.focus();last.select()}return}
