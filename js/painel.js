@@ -853,7 +853,7 @@ PAGES.caixa=async m=>{
       <div class="row"><button class="btn o" id="prnb">${PRN.badge()}</button><button class="btn o" id="mvb">💸 Sangria / suprimento</button><button class="btn r" id="fc">🔒 Fechar caixa</button></div></div>
     <div class="cat2" style="grid-template-columns:minmax(0,1fr) 380px">
       <div class="grid" style="align-content:start;gap:10px">
-        <div class="row" style="flex-wrap:nowrap"><input class="in" id="ps" placeholder="🔍 Buscar produto ou passar o código de barras…" value="${esc(term)}" autocomplete="off"><button class="btn o" id="cam" title="Ler código com a câmera">📷</button></div>
+        <div class="row" style="flex-wrap:nowrap"><input class="in" id="ps" placeholder="🔍 Buscar produto ou passar o código de barras…" value="${esc(term)}" autocomplete="off">${matchMedia("(pointer:coarse)").matches?`<button class="btn o" id="cam" title="Ler código com a câmera">📷</button>`:""}</div>
         <div class="tabs" style="margin:0"><button data-c="" aria-current="${!cat}">Todos</button>${cats.map(c=>`<button data-c="${c.id}" aria-current="${String(c.id)===cat}">${esc(c.name)}</button>`).join("")}</div>
         <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px">${list.map(p=>{const st=stockOf(p),inC=cart.find(i=>i.p===p);return `<button class="card" data-a="${p.id}" style="text-align:left;padding:8px;display:grid;gap:4px;${inC?"border-color:var(--y)":""}">
           ${p.image_url?`<img src="${esc(p.image_url)}" alt="" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;max-width:100%">`:`<div style="aspect-ratio:1;border-radius:8px;background:var(--card-2);display:grid;place-items:center;color:var(--y);font-weight:900">GB</div>`}
@@ -886,13 +886,12 @@ PAGES.caixa=async m=>{
         <div class="line"><span class="muted">Abertura (troco)</span><span>${brl(open.opening_amount)}</span></div><div class="line big"><span>💵 Dinheiro esperado na gaveta</span><span class="price">${brl(SM.expected)}</span></div>
         ${SM.pending.length?`<p class="muted" style="font-size:12px;margin:6px 0 0">${SM.pending.length} pedido(s) de entrega ainda não concluído(s) não entram na conta.</p>`:""}</div></div>`;
     const ps=$("#ps");
+    window.__gbScan=onCode;
     ps.oninput=e=>{term=e.target.value.toLowerCase();const pos=e.target.selectionStart;draw();$("#ps").focus();$("#ps").setSelectionRange(pos,pos)};
     ps.onkeydown=e=>{if(e.key!=="Enter")return;const code=e.target.value.trim();
-      const hit=code&&prods.find(p=>p.barcode&&String(p.barcode)===code);
-      if(hit){add(hit);term="";draw();$("#ps").focus();return}
-      if(/^\d{6,}$/.test(code)){toast("Código "+code+" não cadastrado em nenhum produto");term="";draw();$("#ps").focus();return}
+      if(/^\d{6,}$/.test(code)||prods.some(p=>p.barcode&&String(p.barcode)===code)){term="";draw();onCode(code);return}
       if(list[0]){add(list[0]);term="";draw();$("#ps").focus()}};
-    if($("#cam"))$("#cam").onclick=async()=>{const code=await scanBarcode();if(!code)return;const hit=prods.find(p=>p.barcode&&String(p.barcode)===code);if(hit){add(hit);draw();toast("➕ "+hit.name)}else toast("Código "+code+" não cadastrado")};
+    if($("#cam"))$("#cam").onclick=async()=>{const code=await scanBarcode();if(code)onCode(code)};
     $$("[data-c]",m).forEach(b=>b.onclick=()=>{cat=b.dataset.c;draw()});
     $$("[data-a]",m).forEach(b=>b.onclick=()=>{add(prods.find(x=>x.id==b.dataset.a));draw()});
     $$("[data-m]",m).forEach(b=>b.onclick=()=>{const i=cart[+b.dataset.m];i.n--;if(!i.n)cart.splice(+b.dataset.m,1);draw()});
@@ -914,6 +913,26 @@ PAGES.caixa=async m=>{
     $("#fz").onclick=finish;
   };
   function add(p){if(!p)return;const i=cart.find(x=>x.p===p);i?i.n++:cart.push({p,n:1})}
+  function onCode(code){
+    code=String(code||"").trim(); if(!code) return;
+    const hit=prods.find(p=>p.barcode&&String(p.barcode)===code);
+    if(hit){add(hit);draw();toast("➕ "+hit.name);const f=$("#ps");if(f)f.focus();return}
+    linkCode(code);
+  }
+  // código que ainda não está em nenhum produto: escolhe o produto uma vez e o código fica ligado pra sempre
+  function linkCode(code){
+    drawer("🔎 Código não cadastrado",`<p style="margin-top:0">O código <b>${esc(code)}</b> ainda não está em nenhum produto.<br>Escolha qual produto é esse (só precisa fazer <b>uma vez</b>, depois é só passar o leitor):</p>
+      <input class="in" id="lk" placeholder="🔍 Digite o nome do produto" autocomplete="off"><div id="lkl" class="grid" style="gap:6px;margin-top:10px"></div>`);
+    const list2=()=>{const t=$("#lk").value.toLowerCase().trim();
+      $("#lkl").innerHTML=prods.filter(p=>!t||p.name.toLowerCase().includes(t)).slice(0,40).map(p=>`<button class="btn o" style="display:flex;justify-content:space-between;gap:8px;text-align:left" data-lk="${p.id}"><span>${esc(p.name)}${p.barcode?` <small class="muted">(trocar código ${esc(p.barcode)})</small>`:""}</span><b>${brl(p.price)}</b></button>`).join("")||'<p class="muted">Nada encontrado.</p>';
+      $$("[data-lk]",ov).forEach(b=>b.onclick=async()=>{b.disabled=true;const p=prods.find(x=>x.id==b.dataset.lk);
+        const r=await sb.from("products").update({barcode:code}).eq("id",p.id).select("id");
+        if(r.error||!r.data||!r.data.length) toast("Não deu pra guardar o código (peça pro dono ligar no Catálogo). Produto adicionado na venda.");
+        else {p.barcode=code;toast("✅ Código ligado a "+p.name)}
+        closeDr(); add(p); draw(); const f=$("#ps"); if(f) f.focus();
+      });};
+    $("#lk").oninput=list2; $("#lk").onkeydown=e=>{if(e.key==="Enter"){const b=$("[data-lk]",ov);if(b)b.click()}}; list2(); setTimeout(()=>$("#lk").focus(),60);
+  }
   async function finish(){
     const err=x=>{$("#e").hidden=false;$("#e").textContent=x};
     if(!isMine&&!OWNER()) return err("Esse caixa é de "+(open.operator||"outra pessoa")+". Feche ele e abra o seu.");
@@ -1175,3 +1194,13 @@ PAGES.config=async m=>{
 boot();
 document.addEventListener("click",e=>{if(e.target.closest&&e.target.closest("#prnb"))openPrinter()});
 if(window.PRN) PRN.setHtml((o,items,addr,change)=>htmlOrder(o,items,addr,change));
+// leitor de código de barras USB no caixa: funciona mesmo se o cursor não estiver no campo de busca
+(()=>{let buf="",last=0;
+  document.addEventListener("keydown",e=>{
+    if(page!=="caixa"||!window.__gbScan||ov.innerHTML) return;
+    const a=document.activeElement; if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;
+    const now=Date.now(); if(now-last>80) buf=""; last=now;
+    if(e.key==="Enter"){ if(buf.length>=6){ e.preventDefault(); const c=buf; buf=""; window.__gbScan(c) } return }
+    if(e.key.length===1&&/[0-9A-Za-z]/.test(e.key)) buf+=e.key;
+  },true);
+})();
