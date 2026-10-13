@@ -156,9 +156,7 @@ async function shell(){
     if(mine&&!confirm("Seu caixa ainda está ABERTO. O certo é fechar o caixa antes de sair.\n\nSair mesmo assim?")){go("caixa");return}
     await sb.auth.signOut();location.reload()};
   $("#ob").onclick=async()=>{S.is_open=!S.is_open;await setOpen(S.is_open);openBtn();toast(S.is_open?"Loja aberta":"Loja fechada")};
-  $("#snd").onclick=e=>{e.stopPropagation();unlockAudio();const ready=audioCtx&&audioCtx.state==="running";
-    if(!soundOn){soundOn=true}else if(ready){beep();toast("Esse é o som de pedido novo")}
-    try{localStorage.setItem("gb_sound",soundOn?"on":"off")}catch{};soundBtn()};
+  $("#snd").onclick=e=>{e.stopPropagation();unlockAudio();soundDrawer()};
   $("#snd").oncontextmenu=e=>{e.preventDefault();soundOn=!soundOn;try{localStorage.setItem("gb_sound",soundOn?"on":"off")}catch{};soundBtn()};
   if(!OWNER()) setInterval(async()=>{const a=await sb.rpc("my_access");if(!a.error&&a.data&&!a.data.ok){ME.block=a.data.reason;ME.schedule=a.data.schedule;shell()}},300000);
   if(!canSee("pedidos")){$("#snd").hidden=true}
@@ -183,12 +181,39 @@ function go(p){if(!PAGES[p]||!canSee(p))p=home();page=p;location.hash=p;menu();c
 let audioCtx=null, soundOn=(()=>{try{return localStorage.getItem("gb_sound")!=="off"}catch{return true}})(), lastNew=null;
 function unlockAudio(){if(!audioCtx){try{audioCtx=new (window.AudioContext||window.webkitAudioContext)()}catch{}}if(audioCtx&&audioCtx.state==="suspended")audioCtx.resume();soundBtn()}
 document.addEventListener("click",unlockAudio);
-function beep(){
-  if(!soundOn||!audioCtx||audioCtx.state!=="running")return;
-  [[0,880],[0.18,1175],[0.36,880],[0.54,1175],[0.9,880],[1.08,1175]].forEach(([t,f])=>{const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type="square";o.frequency.value=f;o.connect(g);g.connect(audioCtx.destination);const s=audioCtx.currentTime+t;g.gain.setValueAtTime(0.0001,s);g.gain.exponentialRampToValueAtTime(0.35,s+0.02);g.gain.exponentialRampToValueAtTime(0.0001,s+0.16);o.start(s);o.stop(s+0.17)});
+/* ---------- sons de pedido novo (feitos no próprio navegador, não precisa baixar nada) ---------- */
+const SOUNDS={campainha:"🛎️ Campainha (dim-dom)",sino:"🔔 Sino de balcão",celular:"📱 Toque de celular",caixa:"💰 Caixa registradora",alerta:"🚨 Alerta forte",bipe:"📟 Bipe (o antigo)"};
+let soundType=(()=>{try{return localStorage.getItem("gb_sound_type")||"campainha"}catch{return "campainha"}})();
+let soundVol=(()=>{try{return +(localStorage.getItem("gb_sound_vol")||"0.9")}catch{return 0.9}})();
+function tone(f,t,dur,type="sine",vol=0.5,attack=0.01){const A=audioCtx,o=A.createOscillator(),g=A.createGain();o.type=type;o.frequency.value=f;o.connect(g);g.connect(A.destination);
+  const s=A.currentTime+t,v=Math.max(0.0002,vol*soundVol);g.gain.setValueAtTime(0.0001,s);g.gain.exponentialRampToValueAtTime(v,s+attack);g.gain.exponentialRampToValueAtTime(0.0001,s+dur);o.start(s);o.stop(s+dur+0.05)}
+function bell(f,t,dur,vol){[[1,1],[2.01,0.45],[3.02,0.25],[4.2,0.12]].forEach(([m,a])=>tone(f*m,t,dur*(1.1-m*0.12),"sine",vol*a,0.005))}
+const PLAY={
+  campainha:()=>{bell(659,0,1.4,0.55);bell(523,0.45,1.8,0.55)},
+  sino:()=>{bell(1318,0,1.2,0.4);bell(1318,0.25,1.4,0.4)},
+  celular:()=>{for(let r=0;r<2;r++)for(let i=0;i<10;i++){const t=r*1.1+i*0.08;tone(i%2?1320:1046,t,0.07,"triangle",0.35,0.004)}},
+  caixa:()=>{for(let i=0;i<6;i++)tone(300+Math.random()*900,i*0.025,0.05,"square",0.12,0.002);bell(2093,0.18,1.0,0.35);bell(2637,0.26,1.2,0.3)},
+  alerta:()=>{for(let i=0;i<4;i++){tone(988,i*0.36,0.16,"sawtooth",0.28);tone(740,i*0.36+0.18,0.16,"sawtooth",0.28)}},
+  bipe:()=>{[[0,880],[0.18,1175],[0.36,880],[0.54,1175],[0.9,880],[1.08,1175]].forEach(([t,f])=>tone(f,t,0.16,"square",0.35,0.02))}
+};
+function beep(kind,force){
+  if((!soundOn&&!force)||!audioCtx||audioCtx.state!=="running")return;
+  try{(PLAY[kind||soundType]||PLAY.campainha)()}catch{}
+}
+function soundDrawer(){
+  unlockAudio();
+  drawer("🔔 Som de pedido novo",`<p class="muted" style="margin-top:0">O som <b>toca sem parar</b> (a cada 4 segundos) enquanto tiver pedido <b>novo</b> esperando. Para quando você <b>aceita</b> o pedido.</p>
+    <div class="grid" style="gap:8px">${Object.entries(SOUNDS).map(([k,l])=>`<div class="row" style="flex-wrap:nowrap;gap:8px"><button class="btn ${k===soundType?"":"o"}" data-st="${k}" style="flex:1;justify-content:flex-start">${k===soundType?"✅ ":""}${l}</button><button class="btn o" data-pl="${k}" title="Ouvir">▶ Ouvir</button></div>`).join("")}</div>
+    <label class="fld" style="margin-top:12px"><span>Volume</span><input type="range" id="vol" min="0.2" max="1" step="0.1" value="${soundVol}"></label>
+    <button class="btn ${soundOn?"r":""}" id="sonf" style="margin-top:8px">${soundOn?"🔕 Desligar o som":"🔔 Ligar o som"}</button>`);
+  $$("[data-pl]",ov).forEach(b=>b.onclick=()=>beep(b.dataset.pl,true));
+  $$("[data-st]",ov).forEach(b=>b.onclick=()=>{soundType=b.dataset.st;try{localStorage.setItem("gb_sound_type",soundType)}catch{};beep(soundType,true);soundDrawer();toast("Som escolhido: "+SOUNDS[soundType])});
+  $("#vol",ov).oninput=e=>{soundVol=+e.target.value;try{localStorage.setItem("gb_sound_vol",soundVol)}catch{}};
+  $("#vol",ov).onchange=()=>beep(soundType,true);
+  $("#sonf",ov).onclick=()=>{soundOn=!soundOn;try{localStorage.setItem("gb_sound",soundOn?"on":"off")}catch{};soundBtn();soundDrawer()};
 }
 function soundBtn(){const b=$("#snd");if(!b)return;const ready=audioCtx&&audioCtx.state==="running";
-  b.className="openbtn"+(soundOn&&ready?"":" off");b.innerHTML=`<i></i>${!soundOn?"🔕 Som desligado · clique p/ ligar":ready?"🔔 Som ligado · clique p/ testar":"🔔 Clique aqui p/ ativar o som"}`}
+  b.className="openbtn"+(soundOn&&ready?"":" off");b.innerHTML=`<i></i>${!soundOn?"🔕 Som desligado · clique p/ ligar":ready?"🔔 Som ligado · clique p/ escolher":"🔔 Clique aqui p/ ativar o som"}`}
 async function countNew(){
   const {count,error}=await sb.from("orders").select("id",{count:"exact",head:true}).eq("status","novo"); if(error) return;
   const n=count||0;
@@ -202,7 +227,7 @@ function listenOrders(){
     countNew(); if(page==="pedidos"&&!ov.innerHTML) PAGES.pedidos($("#main"),true);
   }).subscribe();
   setInterval(countNew,15000);                                   // confere a cada 15 s, mesmo sem conexão ao vivo
-  setInterval(()=>{if(newCount>0)beep()},20000);                 // repete o alarme enquanto tiver pedido sem aceitar
+  setInterval(()=>{if(newCount>0)beep()},4000);                  // toca sem parar enquanto tiver pedido sem aceitar
   setInterval(()=>{if(page==="pedidos"&&!ov.innerHTML)PAGES.pedidos($("#main"),true)},60000);
 }
 
@@ -443,6 +468,14 @@ PAGES.historico=async m=>{
 PAGES.desempenho=m=>finDash(m);
 
 /* ================= CATÁLOGO ================= */
+function askPrint(number,total,doPrint){
+  drawer("✔ Venda #"+number+" finalizada",`<p style="font-size:17px;margin:4px 0 14px">Total <b class="price">${brl(total)}</b></p><p style="font-size:18px;margin:0 0 6px"><b>Imprimir cupom?</b></p><p class="muted" style="margin:0;font-size:12.5px">Enter = Sim · Esc = Não</p>`,
+    `<button class="btn o" id="apn">Não</button><button class="btn" id="apy">🖨️ Sim, imprimir</button>`);
+  const done=()=>{document.removeEventListener("keydown",key,true);closeDr();const f=$("#ps");if(f)f.focus()};
+  const key=e=>{if(!$("#apy"))return document.removeEventListener("keydown",key,true);if(e.key==="Enter"){e.preventDefault();e.stopPropagation();done();doPrint()}else if(e.key==="Escape"){e.preventDefault();e.stopPropagation();done()}};
+  document.addEventListener("keydown",key,true);
+  $("#apy").onclick=()=>{done();doPrint()}; $("#apn").onclick=done; setTimeout(()=>{const b=$("#apy");if(b)b.focus()},30);
+}
 let catSel=null, priceCalc=()=>{};
 function lucroCell(p){const c=+p.cost_price,pr=+p.price;if(!(c>0)||!(pr>0))return'<span class="muted" title="Sem preço de custo">—</span>';
   const mu=(pr-c)/c*100,col=pr<c?"var(--red)":(pr-c)/pr<0.15?"#f39c12":"var(--green)";
@@ -846,7 +879,7 @@ PAGES.caixa=async m=>{
   const SEE=can("resumo");   // funcionário sem essa permissão fecha o caixa "às cegas" (não vê o valor esperado)
   const PM=[...new Set(["Pix","Dinheiro","Cartão de crédito","Cartão de débito"].concat(S.payment_methods||[]))].concat(can("fiado_vender")?["Fiado"]:[]);
   const ico=x=>/pix/i.test(x)?"⚡":/dinheiro/i.test(x)?"💵":/fiado/i.test(x)?"📒":"💳";
-  let cart=[], term="", cat="", pay="Dinheiro", troco="", disc="", cli=null, printIt=!!(window.PRN&&PRN.cfg().autoBalcao), split=false, parts=[];
+  let cart=[], term="", cat="", pay="Dinheiro", troco="", disc="", cli=null, printIt=!!(window.PRN&&PRN.cfg().balcao!=="nunca"), split=false, parts=[];
   const r2=v=>Math.round(v*100)/100;
   const paid=()=>r2(parts.reduce((s,x)=>s+(num(x.v)||0),0));
   const cashPart=()=>r2(parts.filter(x=>/dinheiro/i.test(x.m)).reduce((s,x)=>s+(num(x.v)||0),0));
@@ -895,7 +928,7 @@ PAGES.caixa=async m=>{
           <div class="row">${[10,20,50,100].filter(v=>v>=t).slice(0,4).map(v=>`<button class="btn o sm" data-v="${v}">${brl(v)}</button>`).join("")}</div>
           ${tr>t?`<div class="line big" style="color:var(--green)"><span>Troco</span><span>${brl(tr-t)}</span></div>`:tr&&tr<t?`<p class="err" style="margin:0">Faltam ${brl(t-tr)}</p>`:""}`:""}
         <div class="fld"><span>Cliente (opcional${hasFiado()?", obrigatório no fiado":""})</span><input class="in" id="cs" list="cl" placeholder="Nome ou telefone" value="${cli?esc(cli.name+" · "+(cli.phone||"")):""}"><datalist id="cl">${custs.map(c=>`<option value="${esc(c.name+" · "+(c.phone||""))}">`).join("")}</datalist></div>
-        <label class="chk"><input type="checkbox" id="pi" ${printIt?"checked":""}> Imprimir cupom</label>
+        ${window.PRN&&PRN.cfg().balcao==="perguntar"?"":`<label class="chk"><input type="checkbox" id="pi" ${printIt?"checked":""}> Imprimir cupom</label>`}
         <p class="err" id="e" hidden></p>
         <button class="btn" id="fz" style="padding:14px;font-size:15px;justify-content:space-between" ${cart.length?"":"disabled"}><span>✔ FINALIZAR VENDA</span><span>${brl(t)}</span></button>
         ${cart.length?'<button class="btn o sm" id="cx">Limpar venda</button>':""}
@@ -931,7 +964,7 @@ PAGES.caixa=async m=>{
     if($("#tr"))$("#tr").oninput=e=>{troco=e.target.value;const pos=e.target.selectionStart;draw();const n=$("#tr");n.focus();n.setSelectionRange(pos,pos)};
     $$("[data-v]",m).forEach(b=>b.onclick=()=>{troco=b.dataset.v;draw()});
     $("#cs").onchange=e=>{const v=e.target.value;cli=custs.find(c=>(c.name+" · "+(c.phone||""))===v)||(v.trim()?{name:v.trim(),phone:/\d{8,}/.test(digits(v))?v.trim():""}:null)};
-    $("#pi").onchange=e=>printIt=e.target.checked;
+    if($("#pi"))$("#pi").onchange=e=>printIt=e.target.checked;
     if($("#cx"))$("#cx").onclick=()=>{cart=[];disc="";troco="";cli=null;draw()};
     $$("[data-o]",m).forEach(r=>r.onclick=()=>orderDrawer(+r.dataset.o));
     $("#mvb").onclick=movDrawer; $("#fc").onclick=closeDrawer;
@@ -986,7 +1019,9 @@ PAGES.caixa=async m=>{
       const fiadoAmt=ps?ps.filter(x=>/fiado/i.test(x.method)).reduce((s,x)=>s+x.amount,0):(pay==="Fiado"?+r.total:0);
       if(fiadoAmt>0){const o=await q(sb.from("orders").select("customer_id").eq("id",r.id).single());if(o.customer_id)await q(sb.from("credit_entries").insert({customer_id:o.customer_id,kind:"compra",amount:fiadoAmt,description:"Balcão #"+r.number,order_id:r.id}))}
       toast(`✔ Venda #${r.number} · ${brl(r.total)}${r.change?` · troco ${brl(r.change)}`:""}`);
-      if(printIt){const o=await q(sb.from("orders").select("*,order_items(*)").eq("id",r.id).single());printOrder(o,o.order_items.sort((a,b)=>a.id-b.id),"",o.change_for?o.change_for-o.total:0)}
+      const ask=window.PRN&&PRN.cfg().balcao==="perguntar";
+      if(printIt||ask){const doPrint=async()=>{const o=await q(sb.from("orders").select("*,order_items(*)").eq("id",r.id).single());printOrder(o,o.order_items.sort((a,b)=>a.id-b.id),"",o.change_for?o.change_for-o.total:0)};
+        if(ask) setTimeout(()=>askPrint(r.number,r.total,doPrint),0); else await doPrint()}
       cart.forEach(i=>{const tgt=i.p.stock_parent_id?allP.find(x=>x.id===i.p.stock_parent_id):allP.find(x=>x.id===i.p.id);if(tgt&&tgt.track_stock)tgt.stock_qty=+tgt.stock_qty-i.n*(i.p.stock_parent_id?(+i.p.stock_factor||1):1)});
       cart=[];disc="";troco="";cli=null;parts=[];split=false; SM=await summary(); draw(); $("#ps").focus();
     }catch(x){$("#fz").disabled=false;err(x.message)}

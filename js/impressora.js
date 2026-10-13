@@ -12,8 +12,9 @@ const PRN=(()=>{
     "0000ff00-0000-1000-8000-00805f9b34fb","0000fee7-0000-1000-8000-00805f9b34fb","0000ae30-0000-1000-8000-00805f9b34fb",
     "0000ffe0-0000-1000-8000-00805f9b34fb","0000ff12-0000-1000-8000-00805f9b34fb","0000af30-0000-1000-8000-00805f9b34fb",
     "0000fff0-0000-1000-8000-00805f9b34fb","0000ae00-0000-1000-8000-00805f9b34fb","0000ffb0-0000-1000-8000-00805f9b34fb"];
-  const def={mode:"janela",cols:32,autoBalcao:true,autoDelivery:false,since:0,copies:1,acc:false,name:""};
+  const def={mode:"janela",cols:32,autoBalcao:true,balcao:"",autoDelivery:false,since:0,copies:1,acc:false,name:""};
   let C; try{C={...def,...JSON.parse(localStorage.getItem(KEY)||"{}")}}catch{C={...def}}
+  if(!C.balcao) C.balcao=C.autoBalcao===false?"nunca":"auto";
   const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(C))}catch{}};
   let ch=null, dev=null, port=null, busy=Promise.resolve();
   const hasBT=!!(navigator.bluetooth), hasSerial=!!(navigator.serial);
@@ -166,7 +167,10 @@ const PRN=(()=>{
         ${!hasBT&&!hasSerial?`<p class="muted" style="margin:0">Este navegador não conecta direto na impressora. Use o <b>Google Chrome</b> no computador ou no Android.</p>`:""}
         <div id="pmsg" class="muted" style="font-size:12.5px"></div></div>
       <div class="card grid"><b>Imprimir sozinho</b>
-        <label class="chk"><input type="checkbox" id="pab" ${C.autoBalcao?"checked":""}> Ao finalizar venda no <b>balcão</b></label>
+        <label class="fld"><span>Ao finalizar venda no <b>balcão</b></span><select class="in" id="pab">
+          <option value="auto" ${C.balcao==="auto"?"selected":""}>Imprimir sozinho</option>
+          <option value="perguntar" ${C.balcao==="perguntar"?"selected":""}>Perguntar "Imprimir cupom?" (Sim / Não)</option>
+          <option value="nunca" ${C.balcao==="nunca"?"selected":""}>Não imprimir</option></select></label>
         <label class="chk"><input type="checkbox" id="pad" ${C.autoDelivery?"checked":""}> Quando cair <b>pedido novo</b> do cardápio (entrega e retirada)</label>
         <p class="muted" style="margin:0;font-size:12px">Deixe o painel aberto neste aparelho. Marque o pedido novo em <b>só um</b> aparelho, senão sai duas vezes.</p></div>
       <div class="card grid"><b>Papel</b>
@@ -185,7 +189,7 @@ const PRN=(()=>{
     if($("#prc")) $("#prc").onclick=async()=>{ msg("Reconectando…"); if(await reconnect()) redo(); else if(C.mode==="bluetooth"&&hasBT) { try{await pickBT();redo()}catch(x){msg("Não conectou: "+(x.message||x))} } else msg("Não achei a impressora. Ligue ela e tente de novo.") };
     if($("#pts")) $("#pts").onclick=async()=>{ msg("Imprimindo teste…"); try{await test(store);msg("✅ Teste enviado. Saiu o papel?")}catch(x){msg("Não imprimiu: "+(x.message||x))} };
     if($("#pjn")) $("#pjn").onclick=()=>{ C.mode="janela"; ch=null; try{dev&&dev.gatt.disconnect()}catch{} save(); redo() };
-    $("#pab").onchange=e=>{C.autoBalcao=e.target.checked;save()};
+    $("#pab").onchange=e=>{C.balcao=e.target.value;C.autoBalcao=C.balcao!=="nunca";save()};
     $("#pad").onchange=e=>{C.autoDelivery=e.target.checked; if(C.autoDelivery) C.since=Date.now(); save()};
     root.querySelectorAll("[name=pcw]").forEach(r=>r.onchange=()=>{C.cols=+r.value;save()});
     $("#pcp").onchange=e=>{C.copies=+e.target.value;save()};
