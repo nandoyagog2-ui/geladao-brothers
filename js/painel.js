@@ -443,7 +443,10 @@ PAGES.historico=async m=>{
 PAGES.desempenho=m=>finDash(m);
 
 /* ================= CATÁLOGO ================= */
-let catSel=null;
+let catSel=null, priceCalc=()=>{};
+function lucroCell(p){const c=+p.cost_price,pr=+p.price;if(!(c>0)||!(pr>0))return'<span class="muted" title="Sem preço de custo">—</span>';
+  const mu=(pr-c)/c*100,col=pr<c?"var(--red)":(pr-c)/pr<0.15?"#f39c12":"var(--green)";
+  return `<b style="color:${col}">${mu.toFixed(0)}%</b><div class="muted" style="font-size:11.5px">${brl(pr-c)}/un</div>`}
 PAGES.catalogo=async m=>{
   const [cats,prods,groups,pcs]=await Promise.all([q(sb.from("categories").select("*").order("sort_order").order("name")),q(sb.from("products").select("*").order("sort_order").order("name")),q(sb.from("complement_groups").select("*").order("name")),q(sb.from("product_complements").select("*"))]);
   if(!catSel||!cats.find(c=>c.id===catSel)) catSel=cats[0]?.id||null;
@@ -456,10 +459,10 @@ PAGES.catalogo=async m=>{
       ${cats.map((c,i)=>`<div class="ci ${c.id===catSel&&!term?"on":""}"><button class="nm" data-c="${c.id}" style="${c.active?"":"opacity:.45"}">${esc(c.name)} <span class="ct">${prods.filter(p=>p.category_id===c.id).length}</span></button>
         <button class="icb" data-up="${i}" aria-label="Subir">↑</button><button class="icb" data-dn="${i}" aria-label="Descer">↓</button><button class="icb" data-ec="${c.id}" aria-label="Editar">✎</button></div>`).join("")}</div>
       <div><div class="row" style="justify-content:space-between;margin-bottom:10px"><b>${term?"Resultados da busca":esc(cat?.name||"")}</b><span class="muted">${list.length} produtos</span></div>
-      <div class="tw"><table><thead><tr><th></th><th>Produto</th><th class="num">Preço</th><th class="num">Promoção</th><th>Status</th><th></th></tr></thead><tbody>
+      <div class="tw"><table><thead><tr><th></th><th>Produto</th><th class="num">Preço</th><th class="num">Promoção</th>${OWNER()?'<th class="num">Lucro</th>':""}<th>Status</th><th></th></tr></thead><tbody>
       ${list.map(p=>`<tr><td>${p.image_url?`<img class="thumb" src="${esc(p.image_url)}" alt="">`:'<div class="thumb"></div>'}</td><td><b>${esc(p.name)}</b>${p.featured?' <span class="pill p-novo">Destaque</span>':""}${p.is_new?' <span class="pill p-novo">Novidade</span>':""}${(p.price_tiers||[]).length?` <span class="pill p-concluido" title="${p.price_tiers.map(x=>x.min_qty+"+ un: "+brl(x.price)).join(" · ")}">🔥 Atacado</span>`:""}${term?`<div class="muted" style="font-size:12px">${esc((cats.find(c=>c.id===p.category_id)||{}).name||"")}</div>`:""}</td>
-        <td class="num">${brl(p.price)}</td><td class="num">${p.promo_price!=null?`<span class="price">${brl(p.promo_price)}</span>`:"—"}</td>
-        <td><button data-tg="${p.id}" title="Clique pra alternar entre ativo e em falta">${pill(p.status)}</button></td><td class="num"><button class="btn o sm" data-ep="${p.id}">Editar</button></td></tr>`).join("")||'<tr><td colspan="6" class="empty">Nenhum produto aqui.</td></tr>'}</tbody></table></div></div></div>`;
+        <td class="num">${brl(p.price)}</td><td class="num">${p.promo_price!=null?`<span class="price">${brl(p.promo_price)}</span>`:"—"}</td>${OWNER()?`<td class="num">${lucroCell(p)}</td>`:""}
+        <td><button data-tg="${p.id}" title="Clique pra alternar entre ativo e em falta">${pill(p.status)}</button></td><td class="num"><button class="btn o sm" data-ep="${p.id}">Editar</button></td></tr>`).join("")||'<tr><td colspan="7" class="empty">Nenhum produto aqui.</td></tr>'}</tbody></table></div></div></div>`;
     let tm; $("#cq").oninput=e=>{clearTimeout(tm);tm=setTimeout(()=>{term=e.target.value.trim().toLowerCase();draw();const i=$("#cq");i.focus();i.setSelectionRange(i.value.length,i.value.length)},250)};
     $$("[data-c]",m).forEach(b=>b.onclick=()=>{catSel=+b.dataset.c;term="";draw()});
     $$("[data-ec]",m).forEach(b=>b.onclick=()=>catForm(cats.find(c=>c.id==b.dataset.ec)));
@@ -497,6 +500,24 @@ PAGES.catalogo=async m=>{
       (groups.length?`<div class="fld"><span>Complementos que o cliente pode escolher</span>${groups.map(g=>`<label class="chk"><input type="checkbox" data-gr="${g.id}" ${linked.has(g.id)?"checked":""}> ${esc(g.name)}</label>`).join("")}</div>`:"")+'<p class="err" id="e" hidden></p>',
       `${p?'<button class="btn r" id="del">Excluir</button>':""}<button class="btn" id="sv">Salvar</button>`);
     wireImgs(dr);
+    priceCalc=()=>{const c=$("#f_cost_price",dr),pv=$("#f_price",dr);if(!c||!pv||$("#pcalc",dr))return;
+      const box=document.createElement("div");box.className="card grid";box.id="pcalc";box.style.gap="8px";
+      box.innerHTML=`<b>📊 Lucro e porcentagem</b>
+        <label class="fld"><span>Quero ganhar quantos % em cima do custo? (preenche o preço sozinho)</span><div class="row" style="flex-wrap:nowrap"><input class="in" id="mk" inputmode="decimal" placeholder="Ex.: 40" style="width:110px"><b>%</b></div></label>
+        <div class="row" style="flex-wrap:wrap;gap:6px">${[20,30,40,50,60,80,100].map(n=>`<button type="button" class="btn o sm" data-mk="${n}">${n}%</button>`).join("")}</div>
+        <div id="pres" class="grid" style="gap:4px"></div>`;
+      c.closest(".fld").after(box);
+      const out=()=>{const cost=num(c.value),price=num(pv.value),promo=$("#f_promo_price",dr)?num($("#f_promo_price",dr).value):null;
+        const line=(lbl,pr)=>{if(!(cost>0)||!(pr>0))return"";const l=pr-cost,mg=l/pr*100,mu=l/cost*100,col=l<0?"var(--red)":mg<15?"#f39c12":"var(--green)";
+          return `<div class="line"><span>${lbl} ${brl(pr)}</span><b style="color:${col}">${l<0?"PREJUÍZO ":"Lucro "}${brl(l)} por unidade</b></div>
+          <div class="muted" style="font-size:12.5px;margin:-2px 0 4px">É <b style="color:${col}">${mu.toFixed(1).replace(".",",")}%</b> em cima do custo · margem de <b style="color:${col}">${mg.toFixed(1).replace(".",",")}%</b> do preço de venda</div>`};
+        $("#pres",dr).innerHTML=!(cost>0)?'<p class="muted" style="margin:0;font-size:12.5px">Preencha o <b>preço de custo</b> pra ver o lucro e a porcentagem.</p>':(line("Vendendo a",price)||'<p class="muted" style="margin:0">Coloque o preço de venda.</p>')+line("Na promoção a",promo);
+        if(document.activeElement!==$("#mk",dr)) $("#mk",dr).value=cost>0&&price>0?((price-cost)/cost*100).toFixed(1).replace(".",",").replace(",0",""):"";};
+      const setMk=v=>{const cost=num(c.value);if(!(cost>0)){toast("Coloque primeiro o preço de custo");return}if(v==null)return;pv.value=money(Math.round(cost*(1+v/100)*100)/100);out()};
+      $("#mk",dr).oninput=e=>setMk(num(e.target.value));
+      $$("[data-mk]",dr).forEach(b=>b.onclick=()=>{$("#mk",dr).value=b.dataset.mk;setMk(+b.dataset.mk)});
+      [c,pv,$("#f_promo_price",dr)].forEach(x=>x&&x.addEventListener("input",out)); out();};
+    priceCalc();
     {const bc=$("#f_barcode",dr);if(bc){bc.inputMode="numeric";bc.onkeydown=e=>{if(e.key==="Enter")e.preventDefault()};const cb=document.createElement("button");cb.type="button";cb.className="btn o sm";cb.textContent="📷 Ler código com a câmera";cb.style.justifySelf="start";cb.style.marginTop="6px";
       cb.onclick=async()=>{const c=await scanBarcode();if(c){bc.value=c;toast("Código lido: "+c)}};bc.after(cb)}}
     const tierRow=(x={})=>{const r=document.createElement("div");r.className="row";r.style.flexWrap="nowrap";
