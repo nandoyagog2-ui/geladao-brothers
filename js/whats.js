@@ -21,6 +21,9 @@ const WA_DEFAULT={em_preparo:"Olá, {nome}! 😃 Recebemos seu pedido *#{numero}
 
 /* ---------- ponte com a extensão ---------- */
 const IN_EXT=window.parent!==window;
+let lastErr="", AUTOLOG=[];
+const WHY={sem_whatsapp:"esse número não tem WhatsApp",chat:"não consegui abrir a conversa do cliente",box:"não achei a caixa de mensagem",write:"não consegui escrever a mensagem",busy:"tinha texto digitado na conversa aberta",nowa:"a aba do WhatsApp não respondeu (aperte F5 no WhatsApp)",tempo:"o WhatsApp demorou demais pra responder",modulos:"o WhatsApp mudou por dentro (atualização)",carregando:"o WhatsApp ainda estava carregando",erro:"erro desconhecido"};
+const why=r=>WHY[r]||r||"não respondeu";
 let chat={title:"",phone:""}, pending={}, pendingTo={}, link={ok:null,box:false,v:""}, BOT={on:false,waiting:[]};
 // manda mensagem pra um número (a extensão abre a conversa do cliente sozinha)
 function sendTo(phone,text){
@@ -28,7 +31,7 @@ function sendTo(phone,text){
     if(!IN_EXT) return res(false);
     const id=Math.random().toString(36).slice(2); pendingTo[id]=res;
     post({gb:"sendto",id,phone:digits(phone),text});
-    setTimeout(()=>{if(pendingTo[id]){delete pendingTo[id];res(false)}},120000);
+    setTimeout(()=>{if(pendingTo[id]){delete pendingTo[id];lastErr="tempo";res(false)}},120000);
   });
 }
 function post(m){if(IN_EXT)parent.postMessage(m,"*")}
@@ -51,7 +54,7 @@ window.addEventListener("message",e=>{
   if(d.gb==="bot-local"){BOT={on:!!d.on,waiting:d.waiting||[]};if(view==="home"&&started)home()}
   if(d.gb==="bot-help"){toast("🙋 "+d.name+" pediu atendente");}
   if(d.gb==="bot-contact")saveContact(d.name,d.phone);
-  if(d.gb==="sent-to"&&pendingTo[d.id]){const r=pendingTo[d.id];delete pendingTo[d.id];r(!!d.ok)}
+  if(d.gb==="sent-to"&&pendingTo[d.id]){const r=pendingTo[d.id];delete pendingTo[d.id];lastErr=d.ok?"":(d.reason||"erro");r(!!d.ok)}
   if(d.gb==="pong"){link={ok:d.ok,box:!!d.box,v:d.v||""};if(d.ok){chat={title:d.title||"",phone:digits(d.phone)};onChat()}else if(view==="home")home()}
 });
 
@@ -131,15 +134,23 @@ async function autoTick(){
     const r=await sb.from("orders").select("id,number,status,type,customer_name,customer_phone,total,notified,status_at").gte("status_at",since).in("status",a.statuses).in("type",a.types).order("status_at").limit(10);
     if(r.error) return;
     for(const o of r.data){
-      const n=o.notified||{};
-      if(n.antigo||n[o.status]||digits(o.customer_phone).length<10) continue;
-      const t=waText(o,o.status); if(!t) continue;
+      const n=o.notified||{}, st=o.status;
+      if(n.antigo||n[st]||digits(o.customer_phone).length<10) continue;
+      if(n["_a_"+st]&&Date.now()-new Date(n["_a_"+st]).getTime()<20000) continue;   // espera 20 s antes de tentar de novo
+      const t=waText(o,st); if(!t) continue;
       // marca antes (só se ninguém marcou ainda), pra nunca mandar duas vezes
-      const n2=Object.assign({},n,{[o.status]:new Date().toISOString()});
-      const c=await sb.from("orders").update({notified:n2}).eq("id",o.id).is(`notified->>${o.status}`,null).select("id");
+      const n2=Object.assign({},n,{[st]:new Date().toISOString()});
+      const c=await sb.from("orders").update({notified:n2}).eq("id",o.id).is(`notified->>${st}`,null).select("id");
       if(c.error||!c.data.length) continue;
-      const ok=await sendTo(o.customer_phone,t);
-      toast(ok?`📲 Aviso "${STATUS[o.status]}" enviado · #${o.number}`:`⚠️ Não consegui avisar o pedido #${o.number}`);
+      lastErr=""; const ok=await sendTo(o.customer_phone,t);
+      const tries=(+n["_t_"+st]||0)+1;
+      if(ok){ const n3=Object.assign({},n2); delete n3["_e_"+st]; await sb.from("orders").update({notified:n3}).eq("id",o.id); }
+      else { const n3=Object.assign({},n2,{["_t_"+st]:tries,["_e_"+st]:why(lastErr),["_a_"+st]:new Date().toISOString()});
+        if(tries<3) delete n3[st];                       // libera pra tentar de novo (até 3 vezes)
+        await sb.from("orders").update({notified:n3}).eq("id",o.id); }
+      AUTOLOG.unshift({ok,n:o.number,st,at:new Date(),why:ok?"":why(lastErr),tries}); AUTOLOG=AUTOLOG.slice(0,8);
+      toast(ok?`📲 Aviso "${STATUS[st]}" enviado · #${o.number}`:`⚠️ Pedido #${o.number}: ${why(lastErr)}${tries<3?" · vou tentar de novo":""}`);
+      if(view==="home"&&started) home();
     }
   }finally{autoBusy=false}
 }
@@ -199,7 +210,9 @@ async function home(){
       <label class="chk" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="tb" ${BOT.on?"checked":""}> Robô responde os clientes ${b.enabled?"":'<small style="color:var(--y)">(desligado no painel)</small>'}</label>
       <label class="chk" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="ta" ${autoHere()?"checked":""}> Envia sozinho os avisos de status e as mensagens do painel (entregador, reenvios) ${a.enabled?"":'<small style="color:var(--y)">(avisos desligados no painel)</small>'}</label>
       ${BOT.waiting.length?`<div class="hint" style="color:#FF8A00">🟠 Pediram atendente: <b>${BOT.waiting.map(esc).join(", ")}</b></div>`:""}
-      <div class="hint">Deixe ligado em <b>um computador só</b>, pra não sair mensagem repetida.</div></div>`:"";
+      <div class="hint">Deixe ligado em <b>um computador só</b>, pra não sair mensagem repetida.</div>
+      ${AUTOLOG.length?`<div class="hint"><b>Últimos avisos:</b>${AUTOLOG.map(x=>`<div>${x.ok?"✅":"⚠️"} #${x.n} ${esc(STATUS[x.st]||x.st)} · ${String(x.at.getHours()).padStart(2,"0")}:${String(x.at.getMinutes()).padStart(2,"0")}${x.ok?"":` · <span style="color:#FF8A00">${esc(x.why)}</span>`}</div>`).join("")}</div>`:""}
+      <button class="btn o sm" id="tst" style="justify-self:start">🔧 Testar envio automático</button></div>`:"";
   frame("Olá! 👋",`${st}${robo}
     <div class="box"><div class="sec" style="margin:0"><div><b>Link do cardápio</b><small>${esc(link.replace("https://",""))}</small></div>
       <div class="iconrow"><button id="sl" title="Enviar no chat">➤</button><button id="cl" title="Copiar">⧉</button></div></div></div>
@@ -209,6 +222,11 @@ async function home(){
     :`<div class="box empty" style="padding:28px 12px">💬 Abra a conversa de um cliente no WhatsApp.<br><br>O cliente aparece aqui sozinho, com os pedidos dele.</div>
       <button class="btn o" id="np">➕ Novo pedido sem conversa</button>`}`);
   if($("#pg"))$("#pg").onclick=()=>{post({gb:"ping"});toast("Verificando…")};
+  if($("#tst"))$("#tst").onclick=async e=>{const to=digits(S.whatsapp||"");if(to.length<10){toast("Coloque o WhatsApp da loja nas Configurações do painel");return}
+    e.target.disabled=true;e.target.textContent="⏳ Testando… (manda pro número da loja)";lastErr="";
+    const ok=await sendTo(to,"✅ Teste do Geladão: o envio automático está funcionando ("+new Date().toLocaleTimeString("pt-BR")+")");
+    AUTOLOG.unshift({ok,n:"teste",st:"teste",at:new Date(),why:ok?"":why(lastErr)});AUTOLOG=AUTOLOG.slice(0,8);
+    toast(ok?"✅ Envio automático funcionando":"⚠️ Não enviou: "+why(lastErr));home()};
   if($("#tb"))$("#tb").onchange=e=>{post({gb:"bot-set",on:e.target.checked});toast(e.target.checked?"🤖 Robô ligado neste computador":"Robô desligado neste computador")};
   if($("#ta"))$("#ta").onchange=e=>{try{localStorage.setItem("gb_auto_sender",e.target.checked?"1":"0");if(e.target.checked)localStorage.setItem("gb_auto_since",String(Date.now()))}catch{};toast(e.target.checked?"📲 Avisos automáticos ligados neste computador":"Avisos automáticos desligados")};
   $("#sl").onclick=async()=>{if(await sendToChat(`Faça seu pedido pelo nosso cardápio online 🍻👇\n${link}`))toast("Link enviado")};

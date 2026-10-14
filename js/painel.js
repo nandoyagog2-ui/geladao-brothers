@@ -288,6 +288,7 @@ async function orderDrawer(id){
     ${o.courier_id?`<div class="alert" style="margin:0">🏍️ Com o entregador <b>${esc(((COURIERS||[]).find(c=>c.id===o.courier_id)||{}).name||"…")}</b>${o.dispatched_at?" desde "+hm(o.dispatched_at):""}</div>`:""}
     <div class="muted">${dt(o.created_at)} · ${o.type==="delivery"?"🛵 Entrega"+(o.distance_km!=null?" · "+String(o.distance_km).replace(".",",")+" km":""):o.type==="retirada"?"🏪 Retirada":"🧾 Balcão"}</div>
     ${AUTO?'<div class="muted" style="font-size:12.5px">📲 Aviso automático ligado: a extensão do WhatsApp avisa o cliente sozinha quando o status muda.</div>':o.customer_phone&&o.type!=="balcao"?`<label class="chk"><input type="checkbox" id="nt" ${notifyOn()?"checked":""}> Avisar o cliente no WhatsApp quando eu mudar o status</label>`:""}
+    ${noticeLog(o)}
     ${curWa?(AUTO?`<button class="btn o sm" id="rw" style="justify-self:start">📲 Enviar aviso de "${STATUS[o.status]}" de novo</button>`:`<a class="btn o sm" href="${curWa}" target="_blank" rel="noopener" style="justify-self:start">📲 Enviar aviso de "${STATUS[o.status]}" de novo</a>`):""}
     <div class="card"><b>👤 ${esc(o.customer_name||"Cliente balcão")}</b>${o.customer_phone?`<div class="muted">${esc(o.customer_phone)}</div>`:""}
       ${o.type==="delivery"?`<div style="margin-top:8px"><b>📍 ${esc(addr)}</b><div class="muted">${esc(o.neighborhood||"")}${o.complement?" · "+esc(o.complement):""}${o.cep?" · CEP "+esc(o.cep):""}</div>${o.reference?`<div>Ref.: ${esc(o.reference)}</div>`:""}<a href="${maps}" target="_blank" rel="noopener">Abrir no mapa ↗</a></div>`:""}</div>
@@ -468,6 +469,9 @@ PAGES.historico=async m=>{
 PAGES.desempenho=m=>finDash(m);
 
 /* ================= CATÁLOGO ================= */
+function noticeLog(o){const n=o.notified||{};if(n.antigo)return"";
+  const rows=Object.keys(STATUS).map(k=>n["_e_"+k]&&!n[k]?`<div style="color:#FF8A00">⚠️ Aviso "${STATUS[k]}" não foi: ${esc(n["_e_"+k])}${(+n["_t_"+k]||0)<3?" · tentando de novo…":""}</div>`:n[k]&&n["_e_"+k]?`<div style="color:#FF8A00">⚠️ Aviso "${STATUS[k]}" não foi: ${esc(n["_e_"+k])} (tentei 3 vezes · use o botão abaixo)</div>`:n[k]?`<div>✅ Avisado: ${STATUS[k]} às ${hm(n[k])}</div>`:"").filter(Boolean);
+  return rows.length?`<div class="muted" style="font-size:12.5px;display:grid;gap:2px">${rows.join("")}</div>`:""}
 function askPrint(number,total,doPrint){
   drawer("✔ Venda #"+number+" finalizada",`<p style="font-size:17px;margin:4px 0 14px">Total <b class="price">${brl(total)}</b></p><p style="font-size:18px;margin:0 0 6px"><b>Imprimir cupom?</b></p><p class="muted" style="margin:0;font-size:12.5px">Enter = Sim · Esc = Não</p>`,
     `<button class="btn o" id="apn">Não</button><button class="btn" id="apy">🖨️ Sim, imprimir</button>`);
