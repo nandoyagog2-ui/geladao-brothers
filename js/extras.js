@@ -94,7 +94,7 @@ async function pageEntregadores(m){
 
 /* ---------- CHATBOT E AVISOS AUTOMÁTICOS ---------- */
 const BOT_DEFAULT={enabled:false,
-  greet_open:"Olá, {nome}! 👋 Bem-vindo ao *{loja}* 🍻\nComo posso te ajudar?",
+  greet_open:"Olá, {nome}! 👋 Bem-vindo ao *{loja}* 🍻\n\nFaça seu pedido pelo nosso cardápio 👇\n{link}",
   greet_closed:"Olá, {nome}! 👋 No momento o *{loja}* está fechado. 😴\n{horario}\n\nMas você já pode olhar o cardápio:\n{link}",
   menu:[{key:"1",label:"Ver o cardápio e fazer pedido",reply:"É só tocar no link, escolher e finalizar por lá 👇\n{link}"},
     {key:"2",label:"Horário e endereço",reply:"🕐 {horario}\n📍 {endereco}"},
@@ -109,7 +109,7 @@ const BOT_DEFAULT={enabled:false,
     {words:"meu pedido, cade, cadê, demorando, ta chegando, tá chegando",reply:"Vou verificar seu pedido agora! 🙏 Um atendente já te responde.",human:true},
     {words:"obrigado, obrigada, valeu, vlw, agradeco, agradeço",reply:"Nós que agradecemos! 🍻💛 Qualquer coisa é só chamar."},
     {words:"atendente, humano, pessoa, falar com alguem, falar com alguém",reply:"Certo! Já vou chamar um atendente. 🙋",human:true}],
-  cooldown_hours:6,pause_hours:2,save_contacts:true};
+  cooldown_hours:6,pause_hours:2,wait_seconds:0,only_greet:true,save_contacts:true};
 const AUTO_DEFAULT={enabled:true,types:["delivery","retirada"],statuses:["em_preparo","saiu_entrega","pronto","concluido"]};
 async function pageChatbot(m){
   const r0=await sb.from("store_settings").select("bot,wa_auto").eq("id",1).single();
@@ -124,10 +124,15 @@ async function pageChatbot(m){
         <label class="chk" style="font-size:16px;font-weight:800"><input type="checkbox" id="be" ${B.enabled?"checked":""}> 🤖 Robô de respostas automáticas ligado</label>
         <p class="muted" style="margin:0;font-size:12.5px">Responde sozinho quem manda mensagem no WhatsApp da loja. Funciona com o <b>WhatsApp Web aberto</b> no computador e a extensão com <b>"Robô responde os clientes"</b> marcado.</p>
         <div class="row" style="font-size:12.5px;gap:14px"><span><i style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#25D366"></i> robô respondendo</span><span><i style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#FF8A00"></i> pediu atendente (toca som + botão AJUDA)</span><span><i style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#3B82F6"></i> robô pausado</span></div>
+        <label class="fld"><span>Como o robô responde</span><select class="in" id="og">
+          <option value="1" ${B.only_greet!==false?"selected":""}>Só a 1ª mensagem: boas-vindas com o cardápio (ou "estamos fechados")</option>
+          <option value="0" ${B.only_greet===false?"selected":""}>Completo: boas-vindas + menu de opções + palavras-chave</option></select></label>
+        <p class="muted" style="margin:-4px 0 0;font-size:12px">No modo "Só a 1ª mensagem", o robô cumprimenta uma vez e depois fica quieto pra você atender. Ele só cumprimenta de novo depois do tempo de "Cumprimentar de novo".</p>
         <label class="fld"><span>Mensagem de boas-vindas (loja aberta)</span><textarea class="in" id="go" rows="3">${esc(B.greet_open)}</textarea></label>
         <label class="fld"><span>Mensagem quando a loja está fechada</span><textarea class="in" id="gc" rows="4">${esc(B.greet_closed)}</textarea></label>${VARS}
         <div class="grid g2"><label class="fld"><span>Cumprimentar de novo depois de (horas)</span><input class="in" id="ch" inputmode="numeric" value="${B.cooldown_hours}"></label>
           <label class="fld"><span>Quando você responde na mão, pausar o robô por (horas)</span><input class="in" id="ph" inputmode="numeric" value="${B.pause_hours}"></label></div>
+        <label class="fld"><span>⏳ Esperar quantos segundos antes do robô responder? Dá tempo de você ou o funcionário responder primeiro. Se alguém responder, o robô fica quieto. (0 = responde na hora)</span><input class="in" id="ws" inputmode="numeric" value="${B.wait_seconds??0}"></label>
         <label class="chk"><input type="checkbox" id="scc" ${B.save_contacts!==false?"checked":""}> 📇 Salvar automaticamente os contatos novos em Clientes</label>
       </div>
       <div class="card grid" style="align-content:start"><b>📋 Menu de opções (vai junto com a boas-vindas)</b>
@@ -150,7 +155,7 @@ async function pageChatbot(m){
         <b style="font-size:13px">Quais avisos</b>${Object.entries(ST).map(([k,l])=>`<label class="chk"><input type="checkbox" data-as="${k}" ${A.statuses.includes(k)?"checked":""}> ${l}</label>`).join("")}
         <p class="muted" style="margin:0;font-size:12.5px">O texto de cada aviso você edita em <a href="#config" id="gcfg">Configurações → Mensagens do WhatsApp</a>.</p></div>
     </div>`;
-    const read=()=>{B.enabled=$("#be").checked;B.greet_open=$("#go").value;B.greet_closed=$("#gc").value;B.cooldown_hours=+$("#ch").value||6;B.pause_hours=+$("#ph").value||2;B.save_contacts=$("#scc").checked;B.menu_footer=$("#mf").value;
+    const read=()=>{B.enabled=$("#be").checked;B.greet_open=$("#go").value;B.greet_closed=$("#gc").value;B.cooldown_hours=+$("#ch").value||6;B.pause_hours=+$("#ph").value||2;B.wait_seconds=Math.max(0,parseInt($("#ws").value,10)||0);B.save_contacts=$("#scc").checked;B.only_greet=$("#og").value!=="0";B.menu_footer=$("#mf").value;
       B.menu=B.menu.map((i,k)=>({key:String(k+1),label:$(`[data-ml="${k}"]`).value.trim(),reply:$(`[data-mr="${k}"]`).value,human:$(`[data-mh="${k}"]`).checked})).filter(i=>i.label);
       B.menu.forEach((i,k)=>i.key=String(k+1));
       B.keywords=B.keywords.map((x,i)=>({words:$(`[data-kw="${i}"]`).value,reply:$(`[data-kr="${i}"]`).value,human:$(`[data-kh="${i}"]`).checked})).filter(x=>x.words.trim()&&x.reply.trim());

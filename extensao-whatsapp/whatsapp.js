@@ -2,7 +2,7 @@
 //  - descobre a conversa aberta e escreve/envia mensagens nela
 //  - robô de respostas automáticas (chatbot) com cores e botão AJUDA
 //  - envia avisos de pedido abrindo a conversa do cliente pelo número
-const VERSION = "3.1";
+const VERSION = "3.2";
 
 /* ================= conversa aberta ================= */
 function headerTitle() {
@@ -245,6 +245,13 @@ function decide(text, st, name) {
   const b = bot(), t = norm(text).replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim(), now = Date.now();
   if (!t) return null;
   const needGreet = !st.greetedAt || now - st.greetedAt > (+b.cooldown_hours || 6) * 3600e3;
+  if (b.only_greet !== false) {                       // modo simples: só a 1ª mensagem (boas-vindas com o cardápio ou "estamos fechados")
+    if (!needGreet) return null;
+    const oi = openInfo();
+    let g = oi.open ? (b.greet_open || "") : (b.greet_closed || "");
+    if (!/\{link\}/.test(g)) g = g.trimEnd() + "\n\nFaça seu pedido pelo nosso cardápio 👇\n{link}";
+    return { msgs: [fill(g, name)], greet: true };
+  }
   const opt = (b.menu || []).find(i => i.key && (t === norm(i.key) || t.startsWith(norm(i.key) + " ") || t === norm(i.label).replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim()));
   if (opt) return { msgs: [fill(opt.reply, name)], human: !!opt.human };
   for (const k of b.keywords || []) {
@@ -265,7 +272,7 @@ function decide(text, st, name) {
 }
 
 /* ================= laço do robô ================= */
-let recent = [], seenOpen = {};      // limite: no máximo 15 respostas a cada 10 minutos
+let recent = [], seenOpen = {}, QUEUE = {};   // QUEUE: respostas esperando alguém da loja responder primeiro      // limite: no máximo 15 respostas a cada 10 minutos
 const st = name => (STATE[name] = STATE[name] || { mode: "bot" });
 function modeOf(name) {
   const s = STATE[name]; if (!s) return null;
@@ -277,6 +284,16 @@ async function botTick() {
   if (!BOT_ON || !bot().enabled || working || jobs.length || busy()) return;
   recent = recent.filter(t => Date.now() - t < 600e3);
   if (recent.length >= 15) return;
+  const waitMs = Math.max(0, +(bot().wait_seconds ?? 0) || 0) * 1000;
+  const later = (name, d) => { if (!waitMs) return false; if (!QUEUE[name]) QUEUE[name] = { at: Date.now(), d }; else QUEUE[name].d = d; return true; };
+  // respostas que já esperaram o tempo: se ninguém da loja respondeu, o robô responde
+  for (const [name, q] of Object.entries(QUEUE)) {
+    if (modeOf(name) !== "bot") { delete QUEUE[name]; continue; }
+    if (Date.now() - q.at < waitMs) continue;
+    delete QUEUE[name];
+    await reply(name, q.d);          // reply() confere: se a última mensagem já é da loja, não manda nada
+    return;
+  }
   // conversa que já está aberta (mensagem nova não fica "não lida")
   const cur = headerTitle();
   if (cur && composeBox()) {
@@ -287,7 +304,7 @@ async function botTick() {
       seenOpen[cur] = txt;
       const d = decide(txt, s, cur);
       s.lastIn = txt; s.lastSeen = txt; s.lastSeenAt = Date.now(); saveState();
-      if (d) { await reply(cur, d); return; }
+      if (d) { if (!later(cur, d)) await reply(cur, d); return; }
     } else if (txt !== seenOpen[cur]) seenOpen[cur] = txt;
   }
   for (const x of rows().map(rowInfo)) {
@@ -300,6 +317,7 @@ async function botTick() {
     const d = decide(x.preview, s, x.name);
     s.lastSeen = x.preview; s.lastSeenAt = Date.now(); saveState();
     if (!d) continue;
+    if (later(x.name, d)) continue;
     await reply(x.name, d);
     return;      // uma conversa por vez
   }
@@ -333,6 +351,7 @@ setInterval(() => { botTick().catch(() => { working = false; }); }, 2500);
 // a pessoa respondeu na mão → pausa o robô nessa conversa
 function humanSent() {
   const name = headerTitle(); if (!name || working) return;
+  delete QUEUE[name];
   const s = st(name); s.mode = "paused"; s.until = Date.now() + (+bot().pause_hours || 2) * 3600e3; saveState(); paint();
 }
 document.addEventListener("keydown", e => {
