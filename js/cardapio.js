@@ -539,6 +539,7 @@ function storeManifest(){ if(!LOJA||!S) return; try{
   if(S.logo_url){const a=document.querySelector('link[rel="apple-touch-icon"]'); if(a) a.href=S.logo_url}
 }catch{} }
 function afterBoot(){ storeManifest();
+  if(!document.getElementById("vyn")){const f=document.createElement("div");f.id="vyn";f.style.cssText="text-align:center;font-size:11.5px;opacity:.55;padding:18px 0 120px";f.innerHTML='Cardápio digital por <b>VYNTRA</b>';document.body.appendChild(f)}
   const qs=new URLSearchParams(location.search);
   if(qs.get("avaliar")&&qs.get("tel")){ history.replaceState(null,"",location.pathname); reviewSheet(+qs.get("avaliar"),qs.get("tel")); return; }
   if(qs.get("pedido")&&qs.get("tel")){ history.replaceState(null,"",location.pathname); trackSheet(+qs.get("pedido"),qs.get("tel")); return; }

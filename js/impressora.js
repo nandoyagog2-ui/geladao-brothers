@@ -133,7 +133,7 @@ const PRN=(()=>{
     pays.forEach(p=>d.lr(String(p.method).toUpperCase(),num2(p.amount)));
     if(o.change_for&&+o.change_for>+o.total) d.lr("Paga com",num2(o.change_for)).bold(1).lr("TROCO R$",num2(change)).bold(0); else d.lr("Troco R$","0,00");
     if(o.notes) d.line().wrap("OBS: "+o.notes);
-    d.line().center(1).text("Obrigado pela preferencia!").text("Documento sem valor fiscal").center(0).cut();
+    d.line().center(1).text("Obrigado pela preferencia!").text("Documento sem valor fiscal").text("Sistema VYNTRA").center(0).cut();
     return d.bytes();
   }
   async function printOrder(o,items,addr,change,store){

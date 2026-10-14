@@ -93,7 +93,7 @@ async function boot(){
   session?shell():loginView();
 }
 function loginView(msg){
-  root.innerHTML=`<div class="login"><form id="lf"><h1>Painel</h1><p>Entre com o seu usuário (ex.: <b>joao</b>) ou e-mail e a sua senha.</p>
+  root.innerHTML=`<div class="login"><form id="lf"><div style="display:flex;align-items:center;gap:12px"><img src="/img/vyntra-192.png" alt="" style="width:52px;height:52px"><div><h1 style="margin:0;letter-spacing:.04em">VYNTRA</h1><div style="color:var(--y);font-weight:800;font-size:12px;letter-spacing:.12em">GESTÃO INTELIGENTE</div></div></div><p>Entre com o seu usuário (ex.: <b>joao</b>) ou e-mail e a sua senha.</p>
     <label class="fld"><span>Usuário ou e-mail</span><input id="em" class="in" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
     <label class="fld"><span>Senha</span><input id="pw" class="in" type="password" autocomplete="current-password" required></label>
     <p class="err" id="e" ${msg?"":"hidden"}>${esc(msg||"")}</p><button class="btn" id="go">Entrar</button></form></div>`;
@@ -229,7 +229,7 @@ async function countNew(){
   const n=count||0;
   if(lastNew!==null&&n>lastNew){beep();toast("🔔 Pedido novo chegou!");if(page==="pedidos"&&!ov.innerHTML)PAGES.pedidos($("#main"),true)}
   if(window.PRN) PRN.tick(sb,S,addrOf);
-  lastNew=n; newCount=n; menu(); document.title=(newCount?`(${newCount}) 🔔 `:"")+"Painel · "+S.name;
+  lastNew=n; newCount=n; menu(); document.title=(newCount?`(${newCount}) 🔔 `:"")+S.name+" · VYNTRA";
 }
 function listenOrders(){
   countNew();
@@ -355,7 +355,7 @@ function htmlOrder(o,items,addr,change){
     ${pays.map(x=>r(esc(String(x.method).toUpperCase()),money(x.amount))).join("")}
     ${r("Troco R$",money(o.change_for&&+o.change_for>+o.total?change:0))}
     ${o.notes?`<hr><div>OBS: ${esc(o.notes)}</div>`:""}<hr>
-    <div class="rf">Obrigado pela preferência!<br>Documento sem valor fiscal</div></div>`;
+    <div class="rf">Obrigado pela preferência!<br>Documento sem valor fiscal<br><small>Sistema VYNTRA</small></div></div>`;
   window.print();
 }
 

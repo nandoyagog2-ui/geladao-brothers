@@ -16,6 +16,7 @@ const loginEmail=v=>String(v||"").includes("@")?String(v).trim().toLowerCase():l
 const slugify=v=>String(v||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"");
 const SEG={bebidas:"🍺 Bebidas / conveniência",pizzaria:"🍕 Pizzaria",lanchonete:"🍔 Lanchonete",restaurante:"🍽️ Restaurante",marmitaria:"🍱 Marmitaria",acai:"🍧 Açaí / sorveteria",outro:"🛍️ Outro"};
 const SITE=location.origin;
+const money2=v=>{let t=String(v||"").replace(/[^\d,.]/g,"");t=t.includes(",")?t.replace(/\./g,"").replace(",","."):t;const n=parseFloat(t);return isNaN(n)?null:n};
 
 async function boot(){
   const {data:{session}}=await sb.auth.getSession();
@@ -27,7 +28,7 @@ async function boot(){
 }
 async function out(){await sb.auth.signOut();location.reload()}
 function loginView(){
-  root.innerHTML=`<div class="login"><form id="lf"><h1>Lojas do sistema</h1><p class="muted" style="margin:0">Entre com o seu login do painel.</p>
+  root.innerHTML=`<div class="login"><form id="lf"><div style="display:flex;align-items:center;gap:12px"><img src="/img/vyntra-192.png" alt="" style="width:52px;height:52px"><div><h1 style="margin:0">VYNTRA</h1><div style="color:var(--y);font-weight:800;font-size:12px;letter-spacing:.12em">LOJAS DO SISTEMA</div></div></div><p class="muted" style="margin:0">Entre com o seu login do painel.</p>
     <label class="fld"><span>Usuário</span><input class="in" id="u" autocomplete="username" autocapitalize="none"></label>
     <label class="fld"><span>Senha</span><input class="in" id="p" type="password" autocomplete="current-password"></label>
     <button class="btn" type="submit">Entrar</button><p class="err" id="e" hidden></p></form></div>`;
@@ -50,14 +51,16 @@ async function list(){
   L=r.data||[];
   const ok=L.filter(x=>x.ok).length, bl=L.filter(x=>!x.ok).length, venc=L.filter(x=>x.paid_until&&new Date(x.paid_until+"T23:59:59")<new Date()).length;
   const tot=L.reduce((s,x)=>s+ +x.sales30,0);
+  const mrr=L.filter(x=>x.ok).reduce((s,x)=>s+(+x.monthly_fee||0),0), setupDue=L.filter(x=>x.setup_paid===false).reduce((s,x)=>s+(+x.setup_fee||0),0);
   const st=x=>!x.active?'<span class="pill p-cancelado">Bloqueada</span>':!x.ok?'<span class="pill p-cancelado">Mensalidade vencida</span>':x.paid_until&&new Date(x.paid_until+"T23:59:59")<new Date(Date.now()+5*864e5)?'<span class="pill p-novo">Vence logo</span>':'<span class="pill p-concluido">Ativa</span>';
-  root.innerHTML=`<div class="wrapA"><div class="top"><h1>🏢 Lojas do sistema</h1><div class="row"><button class="btn" id="nw">➕ Nova loja</button><a class="btn o" href="/painel/">Meu painel</a><button class="btn o" id="lo">Sair</button></div></div>
-    <div class="stats"><div class="stat"><small>Lojas ativas</small><b>${ok}</b></div><div class="stat"><small>Bloqueadas / vencidas</small><b style="color:${bl?"var(--red)":"inherit"}">${bl}</b></div><div class="stat"><small>Mensalidade vencida</small><b>${venc}</b></div><div class="stat"><small>Vendido por todas (30 dias)</small><b>${brl(tot)}</b></div></div>
+  root.innerHTML=`<div class="wrapA"><div class="top"><div style="display:flex;align-items:center;gap:12px"><img src="/img/vyntra-192.png" alt="" style="width:44px;height:44px"><h1 style="margin:0">VYNTRA · Lojas</h1></div><div class="row"><button class="btn" id="nw">➕ Nova loja</button><a class="btn o" href="/painel/">Meu painel</a><button class="btn o" id="lo">Sair</button></div></div>
+    <div class="stats"><div class="stat"><small>Lojas ativas</small><b>${ok}</b></div><div class="stat"><small>Bloqueadas / vencidas</small><b style="color:${bl?"var(--red)":"inherit"}">${bl}</b></div><div class="stat" style="border-color:var(--green)"><small>💰 Sua receita por mês</small><b style="color:var(--green)">${brl(mrr)}</b><span class="muted" style="font-size:12px">${ok} loja(s) ativa(s)</span></div><div class="stat"><small>Implantação a receber</small><b>${brl(setupDue)}</b><span class="muted" style="font-size:12px">mensalidade vencida: ${venc}</span></div></div>
+    <p class="muted" style="margin:-4px 0 12px;font-size:12.5px">As lojas venderam ${brl(tot)} nos últimos 30 dias usando a VYNTRA.</p>
     <div class="lj">${L.map(x=>`<div class="card"><div><h3>${esc(x.name)} ${st(x)}</h3>
         <div class="muted tagS">${esc(SEG[x.segment]||x.segment||"")} · loja nº ${x.id} · desde ${dBR(x.created_at)}</div>
         <div class="tagS" style="margin-top:4px">🔗 <a href="${SITE}/${esc(x.slug)}" target="_blank" rel="noopener">${esc(SITE.replace(/^https?:\/\//,""))}/${esc(x.slug)}</a></div>
         <div class="muted tagS">👤 ${(x.logins||[]).filter(l=>l.role==="dono").map(l=>esc((l.name||"")+" ("+(l.username||"")+")")).join(", ")||'<span style="color:var(--red)">sem login de dono</span>'} · ${(x.logins||[]).length} login(s)${x.owner_phone?" · 📞 "+esc(x.owner_phone):""}</div></div>
-      <div class="tagS"><div>📦 ${x.products} produtos · 🧾 ${x.orders30} pedidos (30 dias)</div><div>💰 ${brl(x.sales30)} (30 dias)</div><div class="muted">Último pedido: ${x.last_order?new Date(x.last_order).toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"}):"nenhum"}</div><div>📅 Pago até: <b>${dBR(x.paid_until)}</b>${x.plan?" · "+esc(x.plan):""}</div></div>
+      <div class="tagS"><div>📦 ${x.products} produtos · 🧾 ${x.orders30} pedidos (30 dias)</div><div>💰 ${brl(x.sales30)} (30 dias)</div><div class="muted">Último pedido: ${x.last_order?new Date(x.last_order).toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"}):"nenhum"}</div><div>📅 Pago até: <b>${dBR(x.paid_until)}</b>${x.plan?" · "+esc(x.plan):""}</div><div>💳 ${brl(x.monthly_fee)}/mês · implantação ${x.setup_paid?'<span style="color:var(--green)">paga ✓</span>':`<b style="color:#FF8A00">${brl(x.setup_fee)} a receber</b>`}</div></div>
       <div class="row" style="justify-content:flex-end"><button class="btn o sm" data-m="${x.id}">+1 mês</button><button class="btn o sm" data-e="${x.id}">Editar</button><button class="btn ${x.active?"r":"g"} sm" data-b="${x.id}">${x.active?"Bloquear":"Liberar"}</button></div></div>`).join("")||'<p class="empty">Nenhuma loja ainda.</p>'}</div></div>`;
   $("#lo").onclick=out; $("#nw").onclick=createStore;
   $$("[data-e]").forEach(b=>b.onclick=()=>edit(L.find(x=>x.id==b.dataset.e)));
@@ -76,12 +79,15 @@ function createStore(){
     <div class="card grid" style="gap:8px"><b>🔑 Login do dono no painel</b>
       <div class="grid g2"><label class="fld"><span>Usuário</span><input class="in" id="ou" autocapitalize="none" placeholder="ex.: ze.pizzaria"></label><label class="fld"><span>Senha (mín. 4)</span><input class="in" id="ow"></label></div>
       <p class="muted" style="margin:0;font-size:12px">O usuário não pode existir em outra loja. Dica: use nome + loja (ex.: <b>ze.pizzaria</b>).</p></div>
-    <div class="grid g2"><label class="fld"><span>Pago até (opcional)</span><input class="in" id="pu" type="date"></label><label class="fld"><span>Plano (opcional)</span><input class="in" id="pl" placeholder="Ex.: Mensal R$ 99"></label></div>
+    <div class="grid g2"><label class="fld"><span>Implantação (R$)</span><input class="in" id="sf" inputmode="decimal" value="300,00"></label><label class="fld"><span>Mensalidade (R$)</span><input class="in" id="mf" inputmode="decimal" value="99,90"></label></div>
+    <label class="chk"><input type="checkbox" id="spd"> Implantação já foi paga</label>
+    <div class="grid g2"><label class="fld"><span>Primeira mensalidade paga até (opcional)</span><input class="in" id="pu" type="date"></label><label class="fld"><span>Plano (opcional)</span><input class="in" id="pl" placeholder="Ex.: VYNTRA Completo"></label></div>
     <label class="fld"><span>Observação</span><input class="in" id="nt"></label><p class="err" id="e" hidden></p>`,`<button class="btn" id="sv">Criar loja</button>`);
   let touched=false; $("#sl",dr).oninput=()=>touched=true;
   $("#nm",dr).oninput=e=>{if(!touched)$("#sl",dr).value=slugify(e.target.value)};
   $("#sv",dr).onclick=async e=>{const p={name:$("#nm",dr).value.trim(),slug:slugify($("#sl",dr).value),segment:$("#sg",dr).value,owner_name:$("#on",dr).value.trim(),owner_phone:$("#op",dr).value.trim(),
-      owner_user:$("#ou",dr).value.trim(),owner_pass:$("#ow",dr).value,paid_until:$("#pu",dr).value,plan:$("#pl",dr).value.trim(),notes:$("#nt",dr).value.trim()};
+      owner_user:$("#ou",dr).value.trim(),owner_pass:$("#ow",dr).value,paid_until:$("#pu",dr).value,plan:$("#pl",dr).value.trim(),notes:$("#nt",dr).value.trim(),
+      setup_fee:money2($("#sf",dr).value),monthly_fee:money2($("#mf",dr).value),setup_paid:$("#spd",dr).checked};
     if(!p.name||!p.slug){$("#e",dr).hidden=false;$("#e",dr).textContent="Preencha o nome e o endereço.";return}
     if(p.owner_user&&p.owner_pass.length<4){$("#e",dr).hidden=false;$("#e",dr).textContent="A senha precisa ter pelo menos 4 caracteres.";return}
     e.target.disabled=true;const r=await sb.rpc("admin_create_store",{p});e.target.disabled=false;
@@ -109,13 +115,15 @@ function edit(x){
     <label class="fld"><span>Tipo de negócio</span>${segSel(x.segment)}</label>
     <div class="grid g2"><label class="fld"><span>Nome do dono</span><input class="in" id="on" value="${esc(x.owner_name||"")}"></label><label class="fld"><span>WhatsApp do dono</span><input class="in" id="op" value="${esc(x.owner_phone||"")}"></label></div>
     <div class="grid g2"><label class="fld"><span>Pago até</span><input class="in" id="pu" type="date" value="${x.paid_until||""}"></label><label class="fld"><span>Plano</span><input class="in" id="pl" value="${esc(x.plan||"")}"></label></div>
+    <div class="grid g2"><label class="fld"><span>Implantação (R$)</span><input class="in" id="sf" inputmode="decimal" value="${String((+x.setup_fee||0).toFixed(2)).replace(".",",")}"></label><label class="fld"><span>Mensalidade (R$)</span><input class="in" id="mf" inputmode="decimal" value="${String((+x.monthly_fee||0).toFixed(2)).replace(".",",")}"></label></div>
+    <label class="chk"><input type="checkbox" id="spd" ${x.setup_paid?"checked":""}> Implantação paga</label>
     <label class="fld"><span>Observação</span><textarea class="in" id="nt" rows="2">${esc(x.notes||"")}</textarea></label>
     <p class="muted" style="margin:0;font-size:12px">Com a mensalidade vencida há mais de 5 dias, a loja é bloqueada sozinha (cardápio e painel). Lance o pagamento com "+1 mês" pra liberar.</p>
     <div class="card grid" style="gap:8px"><b>🔑 Login do dono</b><p class="muted" style="margin:0;font-size:12px">Crie um login novo ou troque a senha de um que já existe nessa loja.</p>
       <div class="grid g2"><label class="fld"><span>Usuário</span><input class="in" id="ou" autocapitalize="none" value="${esc(((x.logins||[]).find(l=>l.role==="dono")||{}).username||"")}"></label><label class="fld"><span>Nova senha</span><input class="in" id="ow"></label></div>
       <button class="btn o sm" id="lg" style="justify-self:start">Salvar login</button></div><p class="err" id="e" hidden></p>`,
     `<button class="btn" id="sv">Salvar</button>`);
-  $("#sv",dr).onclick=async()=>{const r=await sb.rpc("admin_update_store",{p:{id:x.id,name:$("#nm",dr).value.trim(),slug:slugify($("#sl",dr).value),segment:$("#sg",dr).value,owner_name:$("#on",dr).value.trim(),owner_phone:$("#op",dr).value.trim(),paid_until:$("#pu",dr).value,plan:$("#pl",dr).value.trim(),notes:$("#nt",dr).value.trim()}});
+  $("#sv",dr).onclick=async()=>{const r=await sb.rpc("admin_update_store",{p:{id:x.id,name:$("#nm",dr).value.trim(),slug:slugify($("#sl",dr).value),segment:$("#sg",dr).value,owner_name:$("#on",dr).value.trim(),owner_phone:$("#op",dr).value.trim(),paid_until:$("#pu",dr).value,plan:$("#pl",dr).value.trim(),notes:$("#nt",dr).value.trim(),setup_fee:money2($("#sf",dr).value),monthly_fee:money2($("#mf",dr).value),setup_paid:$("#spd",dr).checked}});
     if(r.error){$("#e",dr).hidden=false;$("#e",dr).textContent=r.error.message;return}ov.innerHTML="";toast("Salvo");list()};
   $("#lg",dr).onclick=async()=>{const u=$("#ou",dr).value.trim(),pw=$("#ow",dr).value;if(!u||pw.length<4){$("#e",dr).hidden=false;$("#e",dr).textContent="Usuário e senha (mín. 4) obrigatórios.";return}
     const r=await sb.rpc("admin_store_login",{p:{store_id:x.id,username:u,password:pw,name:$("#on",dr).value.trim()||"Dono"}});
