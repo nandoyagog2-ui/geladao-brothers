@@ -128,6 +128,7 @@ const PRN=(()=>{
     }
     d.line().lr("Total bruto dos itens",num2(o.subtotal)).lr("Desconto",num2(o.discount||0));
     if(o.type==="delivery") d.lr("Taxa de entrega",num2(o.delivery_fee||0));
+    if(+o.service_fee) d.lr("Servico (garcom)",num2(o.service_fee));
     d.bold(1).big(1).lr("TOTAL R$",num2(o.total)).big(0).bold(0);
     const pays=Array.isArray(o.payments)&&o.payments.length?o.payments:[{method:o.payment_method||"-",amount:o.total}];
     pays.forEach(p=>d.lr(String(p.method).toUpperCase(),num2(p.amount)));
@@ -142,11 +143,12 @@ const PRN=(()=>{
     for(let i=0;i<Math.max(1,C.copies|0);i++) await send(bytes);
     markDone(o.id);
   }
-  function textDoc(title,rows,notes){
+  function textDoc(title,rows,notes,opt){
+    const clean=x=>String(x).replace(/<[^>]+>/g,"").replace(/&nbsp;/g," ").replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"').replace(/&#39;/g,"'");
     const d=Doc(); d.center(1).bold(1).text(title).bold(0).center(0).line();
-    rows.forEach(([l,v])=>d.lr(String(l).replace(/<[^>]+>/g,"").replace(/&nbsp;/g," "),String(v).replace(/<[^>]+>/g,"")));
+    rows.forEach(([l,v])=>v===""?d.wrap(clean(l)):d.lr(clean(l),clean(v)));
     if(notes) d.line().wrap("Obs.: "+notes);
-    d.feed(2).text("Assinatura: ____________________").cut(); return send(d.bytes());
+    if(opt&&opt.nosign) d.feed(2).cut(); else d.feed(2).text("Assinatura: ____________________").cut(); return send(d.bytes());
   }
   async function test(store){
     if(C.mode==="sistema"){ if(htmlFn) htmlFn({id:0,number:0,type:"balcao",created_at:new Date().toISOString(),customer_name:"TESTE DA IMPRESSORA",subtotal:10,discount:0,total:10,payment_method:"Dinheiro"},[{qty:1,name:"Produto exemplo",total:10,options:[]}],"",0); return; }

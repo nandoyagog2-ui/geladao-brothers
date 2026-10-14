@@ -5,8 +5,8 @@
    ========================================================= */
 
 /* ---------- imprimir uma lista simples (cupom térmico ou janela) ---------- */
-function printRows(title,rows,notes){
-  if(window.PRN&&PRN.direct()){PRN.textDoc(title,rows,notes).catch(e=>toast("Impressora: "+(e.message||e)));return}
+function printRows(title,rows,notes,opt){
+  if(window.PRN&&PRN.direct()){PRN.textDoc(title,rows,notes,opt).catch(e=>toast("Impressora: "+(e.message||e)));return}
   $("#print").innerHTML=`<h2>${esc(S.name)}</h2><div style="text-align:center">${esc(title)}</div><hr>${rows.map(([l,v])=>`<div>${String(l).replace(/&nbsp;/g," ")} <span style="float:right">${v}</span></div>`).join("")}${notes?`<hr><div>${esc(notes)}</div>`:""}`;
   window.print();
 }

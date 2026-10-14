@@ -105,7 +105,7 @@ function loginView(msg){
 
 /* ---------- estrutura ---------- */
 let S={}, page="pedidos", newCount=0;
-const MENU=[["Operação",[["pedidos","🧾","Pedidos"],["novo","➕","Novo pedido (telefone)"],["historico","📋","Histórico"],["caixa","💰","Caixa / venda balcão"],["cozinha","🍳","Cozinha (tela de preparo)"],["devolucoes","🔄","Trocas e devoluções"]]],
+const MENU=[["Operação",[["pedidos","🧾","Pedidos"],["novo","➕","Novo pedido (telefone)"],["historico","📋","Histórico"],["caixa","💰","Caixa / venda balcão"],["mesas","🍽️","Mesas e comandas"],["cozinha","🍳","Cozinha (tela de preparo)"],["devolucoes","🔄","Trocas e devoluções"]]],
   ["Cardápio",[["catalogo","🍺","Catálogo"],["complementos","🧊","Complementos"],["destaques","🔥","Destaques e promoções"]]],
   ["Clientes",[["clientes","👥","Clientes e fiado"],["avaliacoes","⭐","Avaliações"],["cupons","🎟️","Cupons"],["fidelidade","🏆","Fidelidade"]]],
   ["Gestão",[["desempenho","📈","Financeiro e lucro"],["estoque","📦","Estoque"],["inventario","📋","Inventário (contagem)"],["validades","📅","Validades"],["financeiro","💸","Despesas e contas"],["delivery","🛵","Delivery e bairros"],["entregadores","🏍️","Entregadores"],["chatbot","🤖","Chatbot e avisos"],["equipe","🪪","Equipe e acessos"],["config","⚙️","Configurações"]]]];
@@ -119,12 +119,12 @@ const PERMS=[["pedidos","🧾 Pedidos do cardápio (ver, aceitar e mudar status)
   ["entregas","🏍️ Mandar pedido pro entregador"],["cancelar","❌ Cancelar pedido"],
   ["resumo","💰 Ver os valores do caixa (vendido no turno e dinheiro esperado)"],["desconto","🏷️ Dar desconto no caixa"],["fiado_vender","📒 Vender no fiado"],
   ["estoque","📦 Consultar estoque"],["clientes","👥 Consultar clientes e quem deve no fiado"],["fiado_receber","💵 Receber pagamento de fiado"],
-  ["cozinha","🍳 Usar a tela da cozinha (marcar pedido pronto)"],["devolucao","🔄 Fazer troca e devolução"],["inventario","📋 Fazer inventário (contagem) e lançar validade"]];
+  ["mesas","🍽️ Atender mesas (abrir mesa, lançar pedido e fechar conta)"],["cozinha","🍳 Usar a tela da cozinha (marcar pedido pronto)"],["devolucao","🔄 Fazer troca e devolução"],["inventario","📋 Fazer inventário (contagem) e lançar validade"]];
 const PERM_OLD=["pedidos","novo","historico","entregas","cancelar","resumo","desconto","fiado_vender","estoque","clientes"];   // quem foi criado antes desta versão
 const PERM_NEW=["resumo"];                                                                                                      // padrão de funcionário novo
 const can=k=>OWNER()||(ME.perms||[]).includes(k);
-const canSee=p=>OWNER()||p==="caixa"||(["pedidos","novo","historico","estoque","clientes","cozinha"].includes(p)&&can(p))||(p==="devolucoes"&&can("devolucao"))||(p==="inventario"&&can("inventario"))||(p==="validades"&&(can("inventario")||can("estoque")));
-const home=()=>canSee("pedidos")?"pedidos":!OWNER()&&can("cozinha")?"cozinha":"caixa";
+const canSee=p=>OWNER()||p==="caixa"||(["pedidos","novo","historico","estoque","clientes","cozinha","mesas"].includes(p)&&can(p))||(p==="devolucoes"&&can("devolucao"))||(p==="inventario"&&can("inventario"))||(p==="validades"&&(can("inventario")||can("estoque")));
+const home=()=>canSee("pedidos")?"pedidos":!OWNER()&&can("mesas")?"mesas":!OWNER()&&can("cozinha")?"cozinha":"caixa";
 async function loadMe(){
   const {data:{user}}=await sb.auth.getUser(); ME.email=user?user.email:""; ME.id=user?user.id:null;
   const r=await sb.from("staff").select("*").eq("user_id",user.id).maybeSingle();
@@ -180,13 +180,14 @@ const PAGES={};
 PAGES.entregadores=m=>pageEntregadores(m);
 PAGES.devolucoes=m=>pageDevolucoes(m);
 PAGES.cozinha=(m,soft)=>pageCozinha(m,soft);
+PAGES.mesas=m=>pageMesas(m);
 PAGES.inventario=m=>pageInventario(m);
 PAGES.validades=m=>pageValidades(m);
 PAGES.chatbot=m=>pageChatbot(m);
 // leitor de código de barras (USB): no caixa, se nada estiver selecionado, os números vão direto pra busca
 document.addEventListener("keydown",e=>{if(page!=="caixa"||ov.innerHTML)return;const t=document.activeElement;if(t&&/INPUT|TEXTAREA|SELECT/.test(t.tagName))return;
   const ps=$("#ps");if(ps&&/^[0-9]$/.test(e.key)){ps.focus();}});
-function go(p){if(!PAGES[p]||!canSee(p))p=home();page=p;location.hash=p;menu();closeDr();const m=$("#main");m.innerHTML='<div class="empty">Carregando…</div>';PAGES[p](m).catch(e=>{m.innerHTML=`<div class="empty">Não foi possível carregar. ${esc(e.message||"")}</div>`})}
+function go(p){if(!PAGES[p]||!canSee(p))p=home();if(p!==page){const mm=$("#main");if(mm)mm._tab=null}page=p;location.hash=p;menu();closeDr();const m=$("#main");m.innerHTML='<div class="empty">Carregando…</div>';PAGES[p](m).catch(e=>{m.innerHTML=`<div class="empty">Não foi possível carregar. ${esc(e.message||"")}</div>`})}
 
 /* ---------- avisos de pedido novo ---------- */
 let audioCtx=null, soundOn=(()=>{try{return localStorage.getItem("gb_sound")!=="off"}catch{return true}})(), lastNew=null;
@@ -307,6 +308,7 @@ async function orderDrawer(id){
       <div class="line"><span class="muted">Subtotal</span><span>${brl(o.subtotal)}</span></div>
       ${o.type==="delivery"?`<div class="line"><span class="muted">Taxa de entrega</span><span>${brl(o.delivery_fee)}</span></div>`:""}
       ${+o.discount?`<div class="line"><span class="muted">Desconto ${esc(o.coupon_code||"")}</span><span>- ${brl(o.discount)}</span></div>`:""}
+      ${+o.service_fee?`<div class="line"><span class="muted">Serviço (garçom)</span><span>${brl(o.service_fee)}</span></div>`:""}
       <div class="line big"><span>Total</span><span class="price">${brl(o.total)}</span></div></div>
     <div class="card"><b>💳 ${esc(o.payment_method||"")}</b>${o.change_for?`<div>Cliente paga com <b>${brl(o.change_for)}</b> → <b style="color:var(--green)">levar ${brl(change)} de troco</b></div>`:(/dinheiro/i.test(o.payment_method||"")?'<div class="muted">Não precisa de troco</div>':"")}</div>
     ${o.notes?`<div class="card">📝 ${esc(o.notes)}</div>`:""}
@@ -351,7 +353,7 @@ function htmlOrder(o,items,addr,change){
     <div>USUÁRIO: ${esc((ME.name||"").toUpperCase())}</div><hr>
     <div class="ri hd"><span>QTD</span><span>DESCRIÇÃO</span><span>UNIT.</span><span>TOTAL</span></div><hr class="t">
     ${items.map(i=>`<div class="ri"><span>${+i.qty}</span><span>${esc(i.name)}${(i.options||[]).map(x=>`<br>+ ${x.qty>1?x.qty+"x ":""}${esc(x.name)}`).join("")}${i.notes?`<br>Obs: ${esc(i.notes)}`:""}</span><span>${money(i.unit_price??(i.total/i.qty))}</span><span>${money(i.total)}</span></div>`).join("")}<hr>
-    ${r("Total bruto dos itens",money(o.subtotal))}${r("Desconto",money(o.discount||0))}${o.type==="delivery"?r("Taxa de entrega",money(o.delivery_fee||0)):""}
+    ${r("Total bruto dos itens",money(o.subtotal))}${r("Desconto",money(o.discount||0))}${o.type==="delivery"?r("Taxa de entrega",money(o.delivery_fee||0)):""}${+o.service_fee?r("Serviço (garçom)",money(o.service_fee)):""}
     ${r("VALOR TOTAL R$",money(o.total),1)}
     ${pays.map(x=>r(esc(String(x.method).toUpperCase()),money(x.amount))).join("")}
     ${r("Troco R$",money(o.change_for&&+o.change_for>+o.total?change:0))}
