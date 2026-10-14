@@ -112,6 +112,8 @@ const MENU=[["Operação",[["pedidos","🧾","Pedidos"],["novo","➕","Novo pedi
 /* ---------- quem está logado: dono pode tudo, funcionário só o básico ---------- */
 let ME={role:"dono",name:"",email:"",id:null};
 const OWNER=()=>ME.role==="dono";
+const SID=()=>ME.store_id||1;                                           // loja de quem está logado
+const STORE_URL=()=>location.origin+(SID()===1||!ME.store_slug?"/":"/"+ME.store_slug);   // link do cardápio desta loja
 /* o que o dono pode liberar pra cada funcionário (o caixa é sempre liberado) */
 const PERMS=[["pedidos","🧾 Pedidos do cardápio (ver, aceitar e mudar status)"],["novo","➕ Fazer pedido por telefone"],["historico","📋 Ver histórico de pedidos"],
   ["entregas","🏍️ Mandar pedido pro entregador"],["cancelar","❌ Cancelar pedido"],
@@ -127,10 +129,11 @@ async function loadMe(){
   const {data:{user}}=await sb.auth.getUser(); ME.email=user?user.email:""; ME.id=user?user.id:null;
   const r=await sb.from("staff").select("*").eq("user_id",user.id).maybeSingle();
   if(r.error){ME.role="dono";ME.name=ME.email.split("@")[0];return true}   // parte 9 ainda não rodada: tudo liberado
-  if(!r.data||!r.data.active){ME.block=r.data?"bloqueado":"sem_cadastro";return false}
+  if(!r.data||!r.data.active){ME.block=r.data?"bloqueado":"sem_cadastro";try{const a0=await sb.rpc("my_access");ME.admin=!!(a0.data&&a0.data.admin)}catch{}return false}
   const a=await sb.rpc("my_access");
-  if(!a.error&&a.data&&!a.data.ok){ME.block=a.data.reason;ME.name=a.data.name||"";ME.schedule=a.data.schedule;return false}
-  ME.role=r.data.role; ME.name=r.data.name||r.data.username||ME.email.split("@")[0]; ME.perms=Array.isArray(r.data.perms)?r.data.perms:PERM_OLD; return true;
+  if(!a.error&&a.data&&!a.data.ok){ME.block=a.data.reason;ME.name=a.data.name||"";ME.schedule=a.data.schedule;ME.storeName=a.data.store||"";return false}
+  ME.role=r.data.role; ME.name=r.data.name||r.data.username||ME.email.split("@")[0]; ME.perms=Array.isArray(r.data.perms)?r.data.perms:PERM_OLD;
+  ME.store_id=r.data.store_id||1; ME.store_slug=(a.data&&a.data.store_slug)||""; ME.admin=!!(a.data&&a.data.admin); return true;
 }
 const DOW=["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
 function schedTxt(sc){if(!sc||!sc.start)return "Qualquer horário";const d=(sc.days||[0,1,2,3,4,5,6]).slice().sort();
@@ -138,16 +141,16 @@ function schedTxt(sc){if(!sc||!sc.start)return "Qualquer horário";const d=(sc.d
   return days+", "+sc.start+" às "+sc.end}
 async function setOpen(v){
   const r=await sb.rpc("set_store_open",{p_open:v});
-  if(r.error&&/set_store_open|function/i.test(r.error.message)) return q(sb.from("store_settings").update({is_open:v}).eq("id",1));
+  if(r.error&&/set_store_open|function/i.test(r.error.message)) return q(sb.from("store_settings").update({is_open:v}).eq("id",SID()));
   if(r.error) throw (toast(r.error.message),r.error);
 }
 async function shell(){
-  S=await q(sb.from("store_settings").select("*").eq("id",1).single());
-  if(!(await loadMe())){root.innerHTML=`<div class="login"><div class="card grid" style="max-width:380px">${ME.block==="fora_horario"?`<h1>Fora do seu horário</h1><p>Oi, ${esc(ME.name)}! Seu horário de trabalho é <b>${esc(schedTxt(ME.schedule))}</b>. Você pode entrar até 30 minutos antes de começar.</p>`:ME.block==="bloqueado"?`<h1>Acesso bloqueado</h1><p>O seu acesso foi bloqueado pelo dono da loja.</p>`:`<h1>Acesso bloqueado</h1><p>O login <b>${esc(ME.email)}</b> ainda não foi liberado. Peça pro dono da loja liberar em <b>Equipe e acessos</b>.</p>`}<button class="btn" id="lo">Sair</button></div></div>`;$("#lo").onclick=async()=>{await sb.auth.signOut();location.reload()};return}
+  if(!(await loadMe())){root.innerHTML=`<div class="login"><div class="card grid" style="max-width:380px">${ME.block==="fora_horario"?`<h1>Fora do seu horário</h1><p>Oi, ${esc(ME.name)}! Seu horário de trabalho é <b>${esc(schedTxt(ME.schedule))}</b>. Você pode entrar até 30 minutos antes de começar.</p>`:ME.block==="loja_bloqueada"?`<h1>Loja bloqueada</h1><p>O sistema da loja <b>${esc(ME.storeName||"")}</b> está bloqueado no momento. Fale com o suporte do sistema pra regularizar.</p>`:ME.block==="bloqueado"?`<h1>Acesso bloqueado</h1><p>O seu acesso foi bloqueado pelo dono da loja.</p>`:`<h1>Acesso bloqueado</h1><p>O login <b>${esc(ME.email)}</b> ainda não foi liberado. Peça pro dono da loja liberar em <b>Equipe e acessos</b>.</p>`}${ME.admin?'<a class="btn o" href="/admin/">🏢 Painel do dono do sistema</a>':""}<button class="btn" id="lo">Sair</button></div></div>`;$("#lo").onclick=async()=>{await sb.auth.signOut();location.reload()};return}
+  S=await q(sb.from("store_settings").select("*").eq("id",SID()).single());
   root.innerHTML=`<div class="mobilebar"><button class="x" id="mb" aria-label="Menu">☰</button><b>${esc(S.name)}</b></div>
   <div class="shell"><aside class="side" id="side"><div class="brand"><div class="lg">${S.logo_url?`<img src="${esc(S.logo_url)}" alt="">`:"GB"}</div><div><b>${esc(S.name)}</b><small>${esc(ME.name)} · ${OWNER()?"Dono":"Funcionário"}</small></div></div>
     <button class="openbtn" id="ob"></button><button class="openbtn off" id="snd"></button><button class="openbtn off" id="wab"></button><nav class="menu" id="menu"></nav>
-    <a class="btn o sm" href="/" target="_blank" rel="noopener" style="margin:14px 10px 0;display:flex">Ver cardápio ↗</a>
+    <a class="btn o sm" href="${STORE_URL()}" target="_blank" rel="noopener" style="margin:14px 10px 0;display:flex">Ver cardápio ↗</a>${ME.admin?'<a class="btn o sm" href="/admin/" style="margin:8px 10px 0;display:flex">🏢 Lojas do sistema</a>':""}
     <button class="out" id="swu" style="margin-bottom:0">🔄 Trocar usuário</button><button class="out" id="lo">Sair</button></aside><main class="main" id="main"></main></div>`;
   $("#mb").onclick=()=>$("#side").classList.toggle("open");
   $("#side").onclick=e=>{if(e.target.id==="side")$("#side").classList.remove("open")};
@@ -260,8 +263,8 @@ function waText(o,status){
   const tpl=((S.wa_templates||{})[status])||WA_DEFAULT[status]; if(!tpl) return null;
   const first=String(o.customer_name||"").trim().split(/\s+/)[0]||"";
   return tpl.replace(/\{nome\}/g,first).replace(/\{numero\}/g,o.number).replace(/\{loja\}/g,S.name).replace(/\{total\}/g,brl(o.total))
-    .replace(/\{link_pedido\}/g,`${location.origin}/?pedido=${o.id}&tel=${digits(o.customer_phone)}`)
-    .replace(/\{link_avaliacao\}/g,`${location.origin}/?avaliar=${o.id}&tel=${digits(o.customer_phone)}`);
+    .replace(/\{link_pedido\}/g,`${STORE_URL()}${STORE_URL().endsWith("/")?"":"/"}?pedido=${o.id}&tel=${digits(o.customer_phone)}`)
+    .replace(/\{link_avaliacao\}/g,`${STORE_URL()}${STORE_URL().endsWith("/")?"":"/"}?avaliar=${o.id}&tel=${digits(o.customer_phone)}`);
 }
 function waLink(o,status){const txt=waText(o,status), ph=digits(o.customer_phone); if(!txt||ph.length<10) return null; return waURL(ph,txt)}
 // coloca a mensagem na fila: a extensão do WhatsApp envia sozinha (sem abrir o WhatsApp aqui)
@@ -273,7 +276,7 @@ async function waQueue(phone,text,kind,order_id){
 const waAuto=()=>Object.assign({enabled:true,types:["delivery","retirada"],statuses:["em_preparo","saiu_entrega","pronto","concluido"]},S.wa_auto||{});
 // a extensão do WhatsApp deu sinal de vida nos últimos 2 minutos?
 const waOnline=()=>!!(S.wa_seen_at&&Date.now()-new Date(S.wa_seen_at).getTime()<120000);
-async function refreshWa(){const r=await sb.from("store_settings").select("wa_seen_at,wa_auto").eq("id",1).single();if(!r.error){S.wa_seen_at=r.data.wa_seen_at;S.wa_auto=r.data.wa_auto}waBadge()}
+async function refreshWa(){const r=await sb.from("store_settings").select("wa_seen_at,wa_auto").eq("id",SID()).single();if(!r.error){S.wa_seen_at=r.data.wa_seen_at;S.wa_auto=r.data.wa_auto}waBadge()}
 function waBadge(){const b=$("#wab");if(!b)return;const on=waOnline()&&waAuto().enabled;b.className="openbtn"+(on?"":" off");
   b.innerHTML=`<i></i>${on?"📲 WhatsApp automático ligado":"📲 WhatsApp automático desligado"}`;b.title=on?"A extensão está aberta: os avisos vão sozinhos pro cliente":"A extensão do WhatsApp não está aberta em nenhum computador: o painel abre o WhatsApp pra você enviar"}
 function waURL(phone,txt){const ph=digits(phone).replace(/^55(?=\d{10,11}$)/,"");return `https://api.whatsapp.com/send?phone=55${ph}${txt?"&text="+encodeURIComponent(txt):""}`}
@@ -646,7 +649,7 @@ PAGES.destaques=async m=>{
     $("#dl").innerHTML=list.slice(0,150).map(p=>`<tr><td>${esc(p.name)}${(p.price_tiers||[]).length?`<div class="muted" style="font-size:12px;color:var(--green)">🔥 ${tiersTxt(p)}</div>`:""}</td><td class="num">${brl(p.price)}</td>
       <td style="width:130px"><input class="in" data-pp="${p.id}" inputmode="decimal" placeholder="—" value="${money(p.promo_price)}"></td>
       <td><label class="chk"><input type="checkbox" data-ft="${p.id}" ${p.featured?"checked":""}> Destaque</label></td><td><label class="chk"><input type="checkbox" data-nw="${p.id}" ${p.is_new?"checked":""}> Novidade</label></td></tr>`).join("");
-    if($("#pbal"))$("#pbal").onchange=async e=>{const v=e.target.checked;const r=await sb.from("store_settings").update({promos_no_balcao:v}).eq("id",1);
+    if($("#pbal"))$("#pbal").onchange=async e=>{const v=e.target.checked;const r=await sb.from("store_settings").update({promos_no_balcao:v}).eq("id",SID());
       if(r.error){e.target.checked=!v;toast(/promos_no_balcao/.test(r.error.message)?"Rode a parte 13 do banco no Supabase primeiro":r.error.message);return}S.promos_no_balcao=v;toast(v?"Promoções valendo também no balcão":"Promoções só no cardápio");PAGES.destaques(m)};
     $$("[data-pp]").forEach(i=>i.onchange=async()=>{const p=prods.find(x=>x.id==i.dataset.pp),v=num(i.value);if(v!=null&&v>=p.price){toast("Promoção precisa ser menor que "+brl(p.price));i.value=money(p.promo_price);return}await q(sb.from("products").update({promo_price:v}).eq("id",p.id));p.promo_price=v;toast(v==null?"Promoção removida":"Promoção salva")});
     $$("[data-ft]").forEach(i=>i.onchange=async()=>{await q(sb.from("products").update({featured:i.checked}).eq("id",+i.dataset.ft));prods.find(x=>x.id==i.dataset.ft).featured=i.checked;toast("Salvo")});
@@ -820,7 +823,7 @@ PAGES.fidelidade=async m=>{
   const F=[{k:"loyalty_enabled",l:"Programa de fidelidade ligado",t:"check"},{k:"loyalty_points_per_real",l:"Pontos ganhos a cada R$ 1,00",t:"money"},{k:"loyalty_reward_points",l:"Pontos pra ganhar o prêmio",t:"int"},{k:"loyalty_reward_text",l:"Prêmio (ex.: R$ 10 de desconto, 1 gelo grátis)"}];
   m.innerHTML=`<div class="top"><h1>Fidelidade</h1></div><div class="grid g2"><div class="card grid">${formHTML(F,S)}<p class="muted" style="margin:0">O cliente ganha pontos quando o pedido é marcado como <b>Concluído</b>. Pra dar o prêmio, abra o cliente em Clientes e tire os pontos usados.</p><button class="btn" id="sv">Salvar</button></div>
     <div class="card"><b>Clientes com mais pontos</b>${top.map(c=>`<div class="line"><span>${esc(c.name)} <span class="muted">${esc(c.phone||"")}</span></span><b style="color:${c.loyalty_points>=S.loyalty_reward_points?"var(--green)":"inherit"}">${c.loyalty_points} pts${c.loyalty_points>=S.loyalty_reward_points?" 🏆":""}</b></div>`).join("")||'<p class="muted">Ninguém com pontos ainda.</p>'}</div></div>`;
-  $("#sv").onclick=async()=>{const v=readForm(F,m);v.loyalty_points_per_real=v.loyalty_points_per_real??1;v.loyalty_reward_points=v.loyalty_reward_points??100;await q(sb.from("store_settings").update(v).eq("id",1));Object.assign(S,v);toast("Salvo")};
+  $("#sv").onclick=async()=>{const v=readForm(F,m);v.loyalty_points_per_real=v.loyalty_points_per_real??1;v.loyalty_reward_points=v.loyalty_reward_points??100;await q(sb.from("store_settings").update(v).eq("id",SID()));Object.assign(S,v);toast("Salvo")};
 };
 
 /* ================= ESTOQUE ================= */
@@ -1117,8 +1120,8 @@ PAGES.delivery=async m=>{
     ${zs.map(z=>`<tr><td><b style="${z.active?"":"opacity:.45"}">${esc(z.neighborhood)}</b>${z.active?"":' <span class="pill p-inativo">Pausado</span>'}</td><td class="num">${+z.fee?brl(z.fee):"Grátis"}</td><td class="num">${z.eta_minutes?z.eta_minutes+" min":"padrão"}</td><td class="num"><button class="btn o sm" data-e="${z.id}">Editar</button></td></tr>`).join("")||'<tr><td colspan="4" class="empty">Cadastre os bairros que vocês entregam. <b>Sem bairro cadastrado o cliente não consegue pedir entrega.</b></td></tr>'}</tbody></table></div>
     <div class="card grid" style="align-content:start">${formHTML(F,S)}<button class="btn" id="sv">Salvar</button></div></div>
     <p class="muted">Dica: use o nome do bairro igual aos Correios (ex.: "Conjunto Ceará"), assim o CEP do cliente já encontra o bairro sozinho.</p>`;
-  $("#sv").onclick=async()=>{const v=readForm(F,m);v.min_order=v.min_order??0;await q(sb.from("store_settings").update(v).eq("id",1));Object.assign(S,v);toast("Salvo")};
-  $$("[data-mode]",m).forEach(b=>b.onclick=async()=>{await q(sb.from("store_settings").update({delivery_mode:b.dataset.mode}).eq("id",1));S.delivery_mode=b.dataset.mode;toast(b.dataset.mode==="km"?"Agora a entrega é cobrada por km":"Agora a entrega é cobrada por bairro");PAGES.delivery(m)});
+  $("#sv").onclick=async()=>{const v=readForm(F,m);v.min_order=v.min_order??0;await q(sb.from("store_settings").update(v).eq("id",SID()));Object.assign(S,v);toast("Salvo")};
+  $$("[data-mode]",m).forEach(b=>b.onclick=async()=>{await q(sb.from("store_settings").update({delivery_mode:b.dataset.mode}).eq("id",SID()));S.delivery_mode=b.dataset.mode;toast(b.dataset.mode==="km"?"Agora a entrega é cobrada por km":"Agora a entrega é cobrada por bairro");PAGES.delivery(m)});
   if(km){
     const setLoc=(la,ln,txt)=>{$("#slat").value=(+la).toFixed(6);$("#slng").value=(+ln).toFixed(6);$("#locmsg").innerHTML=`${txt} <a target="_blank" rel="noopener" href="https://maps.google.com/?q=${la},${ln}">conferir no mapa ↗</a> · clique em Salvar`};
     $("#gps").onclick=()=>{if(!navigator.geolocation){toast("Este aparelho não tem localização");return}$("#locmsg").textContent="Pegando a localização…";
@@ -1128,7 +1131,7 @@ PAGES.delivery=async m=>{
         if(!j[0]){$("#locmsg").textContent="Não achei esse endereço no mapa. Use a localização do aparelho estando na loja.";return}setLoc(j[0].lat,j[0].lon,"Achei pelo endereço.")}catch{$("#locmsg").textContent="A busca falhou. Tente a localização do aparelho."}};
     $("#svk").onclick=async()=>{const v=readForm(KF,m);v.store_lat=parseFloat($("#slat").value);v.store_lng=parseFloat($("#slng").value);if(isNaN(v.store_lat)||isNaN(v.store_lng)){toast("Falta a localização da loja");return}
       v.km_base_fee=v.km_base_fee??0;v.km_base_km=v.km_base_km??0;v.km_price=v.km_price??0;v.km_max=v.km_max??0;
-      await q(sb.from("store_settings").update(v).eq("id",1));Object.assign(S,v);toast("Taxa por km salva");PAGES.delivery(m)};
+      await q(sb.from("store_settings").update(v).eq("id",SID()));Object.assign(S,v);toast("Taxa por km salva");PAGES.delivery(m)};
   }
   const ZF=[{k:"neighborhood",l:"Nome do bairro"},{k:"fee",l:"Taxa de entrega (R$) · 0 = grátis",t:"money"},{k:"eta_minutes",l:"Tempo de entrega (min) · vazio = padrão",t:"int"},{k:"active",l:"Entregando nesse bairro",t:"check"}];
   const edit=z=>{const dr=drawer(z?"Editar bairro":"Novo bairro",formHTML(ZF,z||{active:true,fee:0})+'<p class="err" id="e" hidden></p>',`${z?'<button class="btn r" id="del">Excluir</button>':""}<button class="btn" id="sv2">Salvar</button>`);
@@ -1198,7 +1201,7 @@ PAGES.equipe=async m=>{
 };
 
 PAGES.config=async m=>{
-  S=await q(sb.from("store_settings").select("*").eq("id",1).single());
+  S=await q(sb.from("store_settings").select("*").eq("id",SID()).single());
   const F=[{k:"name",l:"Nome da loja"},{k:"whatsapp",l:"WhatsApp que recebe os pedidos (com DDD)"},{k:"address",l:"Endereço da loja"},{k:"logo_url",l:"Logo",t:"img"},{k:"banner_url",l:"Capa do cardápio (faixa do topo)",t:"img"},{k:"primary_color",l:"Cor principal",t:"color"}];
   const DAYS=[["seg","Segunda"],["ter","Terça"],["qua","Quarta"],["qui","Quinta"],["sex","Sexta"],["sab","Sábado"],["dom","Domingo"]];
   const H=S.opening_hours||{}, PAYS=["Pix","Dinheiro","Cartão de crédito","Cartão de débito","Vale-refeição"];
@@ -1214,14 +1217,14 @@ PAGES.config=async m=>{
       <label class="fld"><span>Link de avaliação no Google (opcional). Quem der 4 ou 5 estrelas no nosso link é convidado a avaliar no Google também</span><input class="in" id="rv" value="${esc(S.review_url||"")}"></label></div>
     <div class="card grid"><b>🖨️ Impressora térmica</b><p class="muted" style="margin:0;font-size:12px">Conecte a impressora Bluetooth ou USB deste aparelho e escolha se imprime sozinho no balcão e nos pedidos novos.</p><button class="btn o" id="prnb">${PRN.badge()}</button></div>
     <div class="card grid"><b>⚡ Deixar o cardápio mais rápido</b><p class="muted" style="margin:0;font-size:12px">Diminui as fotos que já estão no sistema (logo, capa, categorias e produtos) pra abrirem rápido no celular do cliente. A qualidade continua boa. Pode levar alguns minutos, deixe esta tela aberta.</p><button class="btn o" id="opt">⚡ Otimizar fotos agora</button><button class="btn o" id="rst">↩ Voltar as fotos originais (qualidade máxima)</button><div id="optm" class="muted" style="font-size:12.5px"></div></div>
-    <div class="card"><b>Link do cardápio pros clientes</b><p style="word-break:break-all"><a href="/" target="_blank" rel="noopener">${location.origin}/</a></p><button class="btn o sm" id="cpl">Copiar link</button></div></div></div>`;
+    <div class="card"><b>Link do cardápio pros clientes</b><p style="word-break:break-all"><a href="${STORE_URL()}" target="_blank" rel="noopener">${STORE_URL()}</a></p><button class="btn o sm" id="cpl">Copiar link</button></div></div></div>`;
   wireImgs(m);
   $("#opt").onclick=async e=>{const b=e.target; b.disabled=true; const msg=t=>$("#optm").textContent=t;
     try{
       const [cats,prods]=await Promise.all([q(sb.from("categories").select("id,image_url")),q(sb.from("products").select("id,image_url"))]);
       const jobs=[];
-      if(S.logo_url) jobs.push({url:S.logo_url,max:800,save:u=>sb.from("store_settings").update({logo_url:u}).eq("id",1)});
-      if(S.banner_url) jobs.push({url:S.banner_url,max:2000,save:u=>sb.from("store_settings").update({banner_url:u}).eq("id",1)});
+      if(S.logo_url) jobs.push({url:S.logo_url,max:800,save:u=>sb.from("store_settings").update({logo_url:u}).eq("id",SID())});
+      if(S.banner_url) jobs.push({url:S.banner_url,max:2000,save:u=>sb.from("store_settings").update({banner_url:u}).eq("id",SID())});
       const byUrl={}; prods.filter(p=>p.image_url).forEach(p=>(byUrl[p.image_url]=byUrl[p.image_url]||[]).push(p.id));
       cats.filter(c=>c.image_url).forEach(c=>jobs.push({url:c.image_url,max:1400,save:u=>sb.from("categories").update({image_url:u}).eq("id",c.id)}));
       Object.entries(byUrl).forEach(([u,ids])=>jobs.push({url:u,max:1400,save:nu=>sb.from("products").update({image_url:nu}).in("id",ids)}));
@@ -1236,7 +1239,7 @@ PAGES.config=async m=>{
           saved++; kb+=(blob.size-small.size)/1024;
         }catch{skip++}
       }
-      S=(await sb.from("store_settings").select("*").eq("id",1).single()).data||S;
+      S=(await sb.from("store_settings").select("*").eq("id",SID()).single()).data||S;
       msg(`✅ Pronto! ${saved} foto(s) otimizada(s), ${Math.round(kb/1024*10)/10} MB a menos. ${skip} já estavam leves ou não deu pra mexer.`);
     }catch(x){msg("Não deu pra terminar: "+(x.message||x))}finally{b.disabled=false}};
   // volta as fotos originais: acha, entre os arquivos guardados, a foto original parecida com cada cópia otimizada
@@ -1260,16 +1263,16 @@ PAGES.config=async m=>{
         if(!best||bd>256*10)continue;
         const nu=urlOf(best);
         for(const x of used.filter(x=>nameOf(x.u)===n)){
-          if(x.t==="logo")await sb.from("store_settings").update({logo_url:nu}).eq("id",1);
-          else if(x.t==="banner")await sb.from("store_settings").update({banner_url:nu}).eq("id",1);
+          if(x.t==="logo")await sb.from("store_settings").update({logo_url:nu}).eq("id",SID());
+          else if(x.t==="banner")await sb.from("store_settings").update({banner_url:nu}).eq("id",SID());
           else if(x.t==="cat")await sb.from("categories").update({image_url:nu}).eq("id",x.id);
           else await sb.from("products").update({image_url:nu}).eq("id",x.id);
         }
         fixed++;}
-      S=(await sb.from("store_settings").select("*").eq("id",1).single()).data||S;
+      S=(await sb.from("store_settings").select("*").eq("id",SID()).single()).data||S;
       msg(`✅ Pronto! ${fixed} foto(s) voltaram pra original. ${opt.length-fixed>0?(opt.length-fixed)+" não encontrei a original.":""}`);
     }catch(x){msg("Não deu pra terminar: "+(x.message||x))}finally{b.disabled=false}};
-  $("#cpl").onclick=async()=>{try{await navigator.clipboard.writeText(location.origin+"/");toast("Link copiado")}catch{toast(location.origin+"/")}};
+  $("#cpl").onclick=async()=>{try{await navigator.clipboard.writeText(STORE_URL());toast("Link copiado")}catch{toast(STORE_URL())}};
   $("#sv").onclick=async()=>{const v=readForm(F,m);
     if(!v.name){toast("Informe o nome da loja");return}
     v.opening_hours=Object.fromEntries(DAYS.map(([k])=>[k,{open:$(`#h_${k}_o`).value||"00:00",close:$(`#h_${k}_c`).value||"00:00",closed:$(`#h_${k}_x`).checked}]));
@@ -1278,7 +1281,7 @@ PAGES.config=async m=>{
     v.wa_templates=Object.fromEntries(Object.keys(WA_LABEL).map(k=>[k,$("#wa_"+k).value.trim()||WA_DEFAULT[k]]));
     v.review_url=$("#rv").value.trim()||null;
     v.updated_at=new Date().toISOString();
-    await q(sb.from("store_settings").update(v).eq("id",1)); Object.assign(S,v); toast("Configurações salvas"); setTimeout(()=>location.reload(),600);};
+    await q(sb.from("store_settings").update(v).eq("id",SID())); Object.assign(S,v); toast("Configurações salvas"); setTimeout(()=>location.reload(),600);};
 };
 
 boot();

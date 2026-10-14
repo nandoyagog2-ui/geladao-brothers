@@ -112,7 +112,7 @@ const BOT_DEFAULT={enabled:false,
   cooldown_hours:6,pause_hours:2,wait_seconds:0,only_greet:true,save_contacts:true};
 const AUTO_DEFAULT={enabled:true,types:["delivery","retirada"],statuses:["em_preparo","saiu_entrega","pronto","concluido"]};
 async function pageChatbot(m){
-  const r0=await sb.from("store_settings").select("bot,wa_auto").eq("id",1).single();
+  const r0=await sb.from("store_settings").select("bot,wa_auto").eq("id",SID()).single();
   if(r0.error){m.innerHTML=`<div class="top"><h1>Chatbot e avisos</h1></div><p class="alert">Rode a <b>parte 15</b> do banco no Supabase pra configurar o robô.</p>`;return}
   const B=JSON.parse(JSON.stringify(Object.assign({},BOT_DEFAULT,r0.data.bot||{}))), A=Object.assign({},AUTO_DEFAULT,r0.data.wa_auto||{});
   const VARS='<span class="muted" style="font-size:12px">Pode usar: <b>{nome}</b> nome do cliente · <b>{loja}</b> · <b>{link}</b> link do cardápio · <b>{horario}</b> horário de funcionamento · <b>{endereco}</b></span>';
@@ -167,7 +167,7 @@ async function pageChatbot(m){
     $$("[data-mx]",m).forEach(b=>b.onclick=()=>{read();B.menu.splice(+b.dataset.mx,1);draw()});
     $$("[data-kx]",m).forEach(b=>b.onclick=()=>{read();B.keywords.splice(+b.dataset.kx,1);draw()});
     $("#gcfg",m).onclick=e=>{e.preventDefault();go("config")};
-    $("#sv",m).onclick=async()=>{read();const r=await sb.from("store_settings").update({bot:B,wa_auto:A}).eq("id",1);
+    $("#sv",m).onclick=async()=>{read();const r=await sb.from("store_settings").update({bot:B,wa_auto:A}).eq("id",SID());
       if(r.error){toast(r.error.message);return} S.bot=B;S.wa_auto=A;toast("Salvo · a extensão atualiza em até 1 minuto");draw()};
   };
   draw();

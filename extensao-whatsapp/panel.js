@@ -51,6 +51,7 @@ window.addEventListener("message", async e => {
     const r = await toWhats({ gb: "sendto", id: d.id, phone: d.phone, text: d.text }, true);
     if (!r) toApp({ gb: "sent-to", id: d.id, ok: false, reason: "nowa" });
   }
+  if (d.gb === "store" && d.id) { const v = await chrome.storage.local.get("gb_store"); if (v.gb_store !== d.id || true) { await chrome.storage.local.set({ gb_store: d.id, gb_slug: d.slug || "" }); toWhats({ gb: "bot-reload" }, true); } }
   if (d.gb === "bot-set") { await chrome.storage.local.set({ gb_bot_on: !!d.on }); pushBot(); }
   if (d.gb === "bot-reload") toWhats({ gb: "bot-reload" }, true);
 });

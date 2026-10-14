@@ -88,7 +88,7 @@ async function finDash(m){
       ${methods.map(x=>`<label class="row" style="flex-wrap:nowrap"><span style="flex:1">${esc(x)}</span><input class="in" data-fee="${esc(x)}" inputmode="decimal" style="width:90px" value="${fees[x]!=null?String(fees[x]).replace(".",","):""}" placeholder="0"> %</label>`).join("")}
       <label class="fld"><span>Meta de faturamento do mês (R$)</span><input class="in" id="mg" inputmode="decimal" value="${S.monthly_goal?money(S.monthly_goal):""}" placeholder="Ex.: 30.000,00"></label>`,`<button class="btn" id="sv">Salvar</button>`);
     $("#sv",dr).onclick=async()=>{const f={};$$("[data-fee]",dr).forEach(i=>{const v=num(i.value);if(v!=null)f[i.dataset.fee]=v});
-      const {error}=await sb.from("store_settings").update({payment_fees:f,monthly_goal:num($("#mg",dr).value)}).eq("id",1);
+      const {error}=await sb.from("store_settings").update({payment_fees:f,monthly_goal:num($("#mg",dr).value)}).eq("id",SID());
       if(error){toast(/payment_fees|monthly_goal/.test(error.message)?"Rode a parte 12 do banco no Supabase primeiro":error.message);return}
       S.payment_fees=f;S.monthly_goal=num($("#mg",dr).value);closeDr();toast("Salvo");load()};
   }

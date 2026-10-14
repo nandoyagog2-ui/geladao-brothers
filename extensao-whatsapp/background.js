@@ -16,7 +16,8 @@ let cache = null, at = 0;
 async function cfg(force) {
   if (cache && !force && Date.now() - at < 60000) return cache;
   try {
-    const r = await fetch(SB_URL + "/rest/v1/store_settings?id=eq.1&select=*", { headers: { apikey: SB_KEY } });
+    const { gb_store } = await chrome.storage.local.get("gb_store");     // loja de quem entrou no painel
+    const r = await fetch(SB_URL + "/rest/v1/store_settings?id=eq." + (+gb_store || 1) + "&select=*", { headers: { apikey: SB_KEY } });
     const j = await r.json();
     if (Array.isArray(j) && j[0]) { cache = j[0]; at = Date.now(); }
   } catch {}

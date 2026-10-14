@@ -2,6 +2,8 @@
 const sb = supabase.createClient(GB_CONFIG.SUPABASE_URL, GB_CONFIG.SUPABASE_KEY);
 const app = document.getElementById("app"), ov = document.getElementById("ov");
 const SITE = location.origin;
+let SID=1, SLUG="";                                   // loja de quem está logado
+const STORE_URL=()=>SITE+(SID===1||!SLUG?"/":"/"+SLUG);
 
 /* ---------- utilidades ---------- */
 const brl=v=>"R$ "+Number(v||0).toFixed(2).replace(".",",").replace(/\B(?=(\d{3})+(?!\d))/g,".");
@@ -62,7 +64,7 @@ window.addEventListener("message",e=>{
 let S={}, CUSTS=null, cust=null, CATS=[], PRODS=[], ZONES=[], view="home";
 async function loadBase(){
   const [s,c,p,z]=await Promise.all([
-    q(sb.from("store_settings").select("*").eq("id",1).single()),
+    q(sb.from("store_settings").select("*").eq("id",SID).single()),
     q(sb.from("categories").select("id,name,sort_order,active").order("sort_order")),
     q(sb.from("products").select("id,name,price,promo_price,price_tiers,image_url,category_id,status").neq("status","inativo").order("sort_order").order("name")),
     q(sb.from("delivery_zones").select("*").eq("active",true).order("neighborhood"))]);
@@ -96,8 +98,8 @@ function waText(o,status){
   const tpl=((S.wa_templates||{})[status])||WA_DEFAULT[status]; if(!tpl) return null;
   const first=String(o.customer_name||"").trim().split(/\s+/)[0]||"";
   return tpl.replace(/\{nome\}/g,first).replace(/\{numero\}/g,o.number).replace(/\{loja\}/g,S.name).replace(/\{total\}/g,brl(o.total))
-    .replace(/\{link_pedido\}/g,`${SITE}/?pedido=${o.id}&tel=${digits(o.customer_phone)}`)
-    .replace(/\{link_avaliacao\}/g,`${SITE}/?avaliar=${o.id}&tel=${digits(o.customer_phone)}`);
+    .replace(/\{link_pedido\}/g,`${STORE_URL()}${STORE_URL().endsWith("/")?"":"/"}?pedido=${o.id}&tel=${digits(o.customer_phone)}`)
+    .replace(/\{link_avaliacao\}/g,`${STORE_URL()}${STORE_URL().endsWith("/")?"":"/"}?avaliar=${o.id}&tel=${digits(o.customer_phone)}`);
 }
 function orderMsg(o,items){
   const d=new Date(o.created_at),p=x=>String(x).padStart(2,"0");
@@ -180,7 +182,7 @@ function frame(title,body,foot,{back,sub}={}){
     ${back?"":`<button class="pill-btn ${S.is_open?"on":"off"}" id="op">${S.is_open?"● Aberto":"● Fechado"}</button><a class="back" href="${SITE}/painel/" target="_blank" rel="noopener" title="Abrir painel completo">↗</a>`}</div>
     <div class="body">${body}</div>${foot?`<div class="foot">${foot}</div>`:""}`;
   if(back) $("#bk").onclick=back;
-  const op=$("#op"); if(op) op.onclick=async()=>{S.is_open=!S.is_open;{const r=await sb.rpc("set_store_open",{p_open:S.is_open});if(r.error)await q(sb.from("store_settings").update({is_open:S.is_open}).eq("id",1));}toast(S.is_open?"Loja aberta":"Loja fechada");frameRefresh()};
+  const op=$("#op"); if(op) op.onclick=async()=>{S.is_open=!S.is_open;{const r=await sb.rpc("set_store_open",{p_open:S.is_open});if(r.error)await q(sb.from("store_settings").update({is_open:S.is_open}).eq("id",SID));}toast(S.is_open?"Loja aberta":"Loja fechada");frameRefresh()};
 }
 let frameRefresh=()=>home();
 
@@ -197,7 +199,7 @@ function loginView(){
 /* ================= INÍCIO ================= */
 async function home(){
   view="home"; frameRefresh=home;
-  const link=SITE+"/";
+  const link=STORE_URL();
   let orders=[],count=0;
   if(cust){const r=await sb.from("orders").select("id,number,total,type,status,created_at",{count:"exact"}).eq("customer_id",cust.id).order("created_at",{ascending:false}).limit(15);orders=r.data||[];count=r.count||0}
   const name=cust?cust.name:(chat.title||"");
@@ -480,6 +482,7 @@ function printOrder(o,items){
 
 /* ---------- início ---------- */
 async function start(){
+  try{const a=await sb.rpc("my_access");if(!a.error&&a.data){SID=a.data.store_id||1;SLUG=a.data.store_slug||"";post({gb:"store",id:SID,slug:SLUG})}}catch{}
   try{await loadBase()}catch{app.innerHTML='<div class="empty">Não foi possível carregar. Verifique a internet.</div>';return}
   started=true; if(chat.title||chat.phone) cust=await findCust();
   await home();
@@ -488,6 +491,6 @@ async function start(){
   setInterval(autoTick,3000); setInterval(outboxTick,3000);
   const beat=()=>{if(autoHere()&&link.ok!==false)sb.rpc("wa_heartbeat").then(()=>{})}; beat(); setInterval(beat,45000);
   sb.channel("whats-outbox").on("postgres_changes",{event:"INSERT",schema:"public",table:"wa_outbox"},()=>outboxTick()).subscribe();
-  setInterval(async()=>{const r=await sb.from("store_settings").select("*").eq("id",1).single();if(!r.error){const ch=JSON.stringify(r.data.bot)!==JSON.stringify(S.bot);S=r.data;if(ch)post({gb:"bot-reload"})}},60000);
+  setInterval(async()=>{const r=await sb.from("store_settings").select("*").eq("id",SID).single();if(!r.error){const ch=JSON.stringify(r.data.bot)!==JSON.stringify(S.bot);S=r.data;if(ch)post({gb:"bot-reload"})}},60000);
 }
 (async()=>{const {data:{session}}=await sb.auth.getSession();session?start():loginView()})();

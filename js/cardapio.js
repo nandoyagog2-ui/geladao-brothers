@@ -19,7 +19,10 @@ const brl=v=>"R$ "+Number(v||0).toFixed(2).replace(".",",");
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const norm=s=>String(s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/\(.*?\)/g,"").toLowerCase().trim();
 const digits=s=>String(s||"").replace(/\D/g,"");
-const store={get(k,d){try{return JSON.parse(localStorage.getItem("gb_"+k))??d}catch{return d}},set(k,v){try{localStorage.setItem("gb_"+k,JSON.stringify(v))}catch{}}};
+/* qual loja: site.com/endereco-da-loja (ou ?loja=). Sem nada = loja 1 */
+const LOJA=window.GB_LOJA!=null?window.GB_LOJA:(()=>{const q=new URLSearchParams(location.search).get("loja");const seg=decodeURIComponent(location.pathname.split("/")[1]||"");return String(q||(/^[a-z0-9-]+$/i.test(seg)?seg:"")).toLowerCase()})();
+const PFX="gb_"+(LOJA?LOJA+"_":"");
+const store={get(k,d){try{return JSON.parse(localStorage.getItem(PFX+k))??d}catch{return d}},set(k,v){try{localStorage.setItem(PFX+k,JSON.stringify(v))}catch{}}};
 
 /* ---------- dados ---------- */
 let S={}, CATS=[], PRODS=[], GROUPS=[], ZONES=[], PC=[], SUGG=[];
@@ -31,23 +34,26 @@ const tierTag=p=>(p.tiers||[]).length&&p.s?`<div class="tier">🔥 ${p.tiers.map
 const priceHTML=p=>`<span class="price">${brl(price(p))}</span>${p.promo?`<span class="was">${brl(p.p)}</span><span class="off">-${pct(p)}%</span>`:""}`;
 const byId=id=>PRODS.find(p=>p.id===id);
 
-const CACHE_KEY="gb_menu_v1";
+const CACHE_KEY="gb_menu_v1"+(LOJA?"_"+LOJA:"");
 async function fetchMenu(){
   // 1º jeito: tudo num pedido só, que já começou quando a página abriu
   try{ const pre=window.GB_PRE?await window.GB_PRE:null; window.GB_PRE=null;
+    if(pre&&pre.erro) throw Object.assign(new Error(pre.erro),{loja:pre.erro,nome:pre.nome});
     if(pre&&pre.s&&Array.isArray(pre.p)) return {s:pre.s,c:pre.c||[],p:pre.p,g:pre.g||[],o:pre.o||[],pc:pre.pc||[],z:pre.z||[],ps:pre.ps||[]};
-    const r=await sb.rpc("get_menu"); if(!r.error&&r.data&&r.data.s) return {s:r.data.s,c:r.data.c||[],p:r.data.p||[],g:r.data.g||[],o:r.data.o||[],pc:r.data.pc||[],z:r.data.z||[],ps:r.data.ps||[]};
-  }catch(e){}
+    const r=await sb.rpc("get_menu",LOJA?{p_loja:LOJA}:{}); if(!r.error&&r.data&&r.data.erro) throw Object.assign(new Error(r.data.erro),{loja:r.data.erro,nome:r.data.nome});
+    if(!r.error&&r.data&&r.data.s) return {s:r.data.s,c:r.data.c||[],p:r.data.p||[],g:r.data.g||[],o:r.data.o||[],pc:r.data.pc||[],z:r.data.z||[],ps:r.data.ps||[]};
+  }catch(e){ if(e&&e.loja) throw e }
+  if(LOJA) throw new Error("menu");
   // jeito antigo (se a parte 18 do banco ainda não foi rodada)
   const [s,c,p,g,o,pc,z,ps]=await Promise.all([
     sb.from("store_settings").select("*").eq("id",1).single(),
-    sb.from("categories").select("*").eq("active",true).order("sort_order").order("name"),
-    sb.from("products").select("id,category_id,name,description,price,promo_price,image_url,status,is_combo,featured,is_new,sort_order,price_tiers").neq("status","inativo").order("sort_order").order("name"),
-    sb.from("complement_groups").select("*").eq("active",true),
-    sb.from("complement_options").select("*").eq("active",true).order("sort_order"),
-    sb.from("product_complements").select("*").order("sort_order"),
-    sb.from("delivery_zones").select("*").eq("active",true).order("neighborhood"),
-    sb.from("product_suggestions").select("*")
+    sb.from("categories").select("*").eq("store_id",1).eq("active",true).order("sort_order").order("name"),
+    sb.from("products").select("id,category_id,name,description,price,promo_price,image_url,status,is_combo,featured,is_new,sort_order,price_tiers").eq("store_id",1).neq("status","inativo").order("sort_order").order("name"),
+    sb.from("complement_groups").select("*").eq("store_id",1).eq("active",true),
+    sb.from("complement_options").select("*").eq("store_id",1).eq("active",true).order("sort_order"),
+    sb.from("product_complements").select("*").eq("store_id",1).order("sort_order"),
+    sb.from("delivery_zones").select("*").eq("store_id",1).eq("active",true).order("neighborhood"),
+    sb.from("product_suggestions").select("*").eq("store_id",1)
   ]);
   const err=[s,c,p].find(r=>r.error); if(err) throw err.error;
   return {s:s.data,c:c.data,p:p.data,g:g.data||[],o:o.data||[],pc:pc.data||[],z:z.data||[],ps:ps.data||[]};
@@ -269,7 +275,7 @@ function couponPop(){
   L("#ok").onclick=async()=>{
     const code=L("#cc").value.trim().toUpperCase(); if(!code){coupon=null;return cartSheet()}
     L("#ok").disabled=true;
-    const {data,error}=await sb.rpc("check_coupon",{p_code:code,p_subtotal:sub()});
+    const {data,error}=await sb.rpc("check_coupon",{p_code:code,p_subtotal:sub(),...(LOJA?{p_loja:LOJA}:{})});
     if(error||!data||!data.valid){L("#ok").disabled=false;L("#e").hidden=false;L("#e").textContent="Cupom inválido, vencido ou o pedido não atingiu o valor mínimo.";return}
     coupon={code,kind:data.kind,value:+data.value}; cartSheet();
   };
@@ -402,7 +408,7 @@ function step3(){
   L("[data-e1]").onclick=step1; L("[data-e2]").onclick=step2; L("#bk").onclick=step2;
   L("#send").onclick=async()=>{
     const btn=L("#send"); btn.disabled=true; btn.textContent="Enviando…";
-    const payload={customer_name:ck.nm,customer_phone:ck.tel,type:ck.mode==="entrega"?"delivery":"retirada",
+    const payload={store:LOJA||null,customer_name:ck.nm,customer_phone:ck.tel,type:ck.mode==="entrega"?"delivery":"retirada",
       zone_id:ck.mode==="entrega"&&!KM()?a.zone:null,lat:ck.mode==="entrega"&&KM()?String(a.lat):"",lng:ck.mode==="entrega"&&KM()?String(a.lng):"",neighborhood:ck.mode==="entrega"?nbName(a):"",cep:ck.mode==="entrega"?a.cep:null,street:ck.mode==="entrega"?a.street:null,
       street_number:ck.mode==="entrega"?a.num:null,complement:ck.mode==="entrega"?a.comp:null,reference:ck.mode==="entrega"?a.ref:null,
       payment_method:ck.pay,change_for:/dinheiro/i.test(ck.pay)&&ck.troco?String(ck.troco):"",coupon_code:coupon?coupon.code:"",notes:L("#nt").value.trim(),
@@ -516,13 +522,23 @@ mark("js");
   if(cached&&cached.s){ try{ applyMenu(cached); restoreCart(); render(); shown=true; mark("cache"); afterBoot(); }catch(e){ console.error(e) } }
   let fresh=null;
   try{ fresh=await fetchMenu(); mark("dados"); }
-  catch(e){ if(!shown) app.innerHTML=`<div class="empty">Não foi possível carregar o cardápio agora. Tente de novo em instantes.</div>`; console.error(e); return; }
+  catch(e){
+    if(e&&e.loja){ try{localStorage.removeItem(CACHE_KEY)}catch{} app.innerHTML=e.loja==="loja_bloqueada"?`<div class="empty" style="padding:60px 20px">😴 <b>${esc(e.nome||"Esta loja")}</b> está temporariamente fora do ar.<br><br>Tente de novo mais tarde.</div>`:`<div class="empty" style="padding:60px 20px">🔎 Não encontramos essa loja.<br><br>Confira o link que você recebeu.</div>`; return; }
+    if(!shown) app.innerHTML=`<div class="empty">Não foi possível carregar o cardápio agora. Tente de novo em instantes.</div>`; console.error(e); return; }
   try{ localStorage.setItem(CACHE_KEY,JSON.stringify(fresh)) }catch{}
   if(!shown){ applyMenu(fresh); restoreCart(); render(); mark("tela"); afterBoot(); setTimeout(speedReport,4000); return; }
   mark("tela"); setTimeout(speedReport,4000);
   if(JSON.stringify(fresh)!==JSON.stringify(cached)){ applyMenu(fresh); const y=window.scrollY, ae=document.activeElement; if(!(ae&&ae.id==="q")){ render(); window.scrollTo(0,y); } }
 })();
-function afterBoot(){
+// app instalado no celular abre direto na loja certa, com o nome e a logo dela
+function storeManifest(){ if(!LOJA||!S) return; try{
+  const m={name:S.name,short_name:S.name,start_url:"/"+LOJA,scope:"/",display:"standalone",background_color:"#000000",theme_color:"#000000",
+    icons:S.logo_url?[{src:S.logo_url,sizes:"512x512",type:"image/png",purpose:"any"}]:[{src:"/img/logo-192.png",sizes:"192x192",type:"image/png"},{src:"/img/logo-512.png",sizes:"512x512",type:"image/png"}]};
+  const l=document.querySelector('link[rel="manifest"]'); if(l) l.href=URL.createObjectURL(new Blob([JSON.stringify(m)],{type:"application/manifest+json"}));
+  document.title=S.name; const t=document.querySelector('meta[name="apple-mobile-web-app-title"]'); if(t) t.content=S.name;
+  if(S.logo_url){const a=document.querySelector('link[rel="apple-touch-icon"]'); if(a) a.href=S.logo_url}
+}catch{} }
+function afterBoot(){ storeManifest();
   const qs=new URLSearchParams(location.search);
   if(qs.get("avaliar")&&qs.get("tel")){ history.replaceState(null,"",location.pathname); reviewSheet(+qs.get("avaliar"),qs.get("tel")); return; }
   if(qs.get("pedido")&&qs.get("tel")){ history.replaceState(null,"",location.pathname); trackSheet(+qs.get("pedido"),qs.get("tel")); return; }

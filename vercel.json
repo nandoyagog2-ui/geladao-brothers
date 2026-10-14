@@ -51,6 +51,21 @@
           "value": "cross-origin"
         }
       ]
+    },
+    {
+      "source": "/admin/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, max-age=0"
+        }
+      ]
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/((?!painel|admin|js|css|img|impressora|api|index)[a-z0-9-]+)/?",
+      "destination": "/index.html"
     }
   ]
 }
