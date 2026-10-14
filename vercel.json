@@ -64,7 +64,11 @@
   ],
   "rewrites": [
     {
-      "source": "/((?!painel|admin|js|css|img|impressora|api|index)[a-z0-9-]+)/?",
+      "source": "/:loja([a-z0-9-]+)",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/:loja([a-z0-9-]+)/",
       "destination": "/index.html"
     }
   ]
