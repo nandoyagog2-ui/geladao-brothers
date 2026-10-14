@@ -157,6 +157,7 @@ async function shell(){
     if(mine&&!confirm("Seu caixa ainda está ABERTO. O certo é fechar o caixa antes de sair.\n\nSair mesmo assim?")){go("caixa");return}
     await sb.auth.signOut();location.reload()};
   $("#swu").onclick=()=>switchUser();
+  if(window.PRN) PRN.cfg().user=ME.name;
   lotsSoon();
   $("#ob").onclick=async()=>{S.is_open=!S.is_open;await setOpen(S.is_open);openBtn();toast(S.is_open?"Loja aberta":"Loja fechada")};
   $("#snd").onclick=e=>{e.stopPropagation();unlockAudio();soundDrawer()};
@@ -331,13 +332,27 @@ function printOrder(o,items,addr,change){
   }
   htmlOrder(o,items,addr,change);
 }
+function receiptHead(){const c=window.PRN?PRN.cfg():{};const lines=String(c.header||"").split("\n").map(x=>x.trim()).filter(Boolean);
+  if(!lines.length){if(S.address)lines.push(S.address);if(S.whatsapp)lines.push("FONE: "+S.whatsapp)}return lines}
 function htmlOrder(o,items,addr,change){
-  $("#print").innerHTML=`<h2>${esc(S.name)}</h2><div style="text-align:center">Pedido #${o.number} · ${dt(o.created_at)}</div><hr>
-    <div>${o.type==="delivery"?"ENTREGA":o.type==="retirada"?"RETIRADA":"BALCÃO"}</div><div><b>${esc(o.customer_name||"")}</b> ${esc(o.customer_phone||"")}</div>
-    ${o.type==="delivery"?`<div>${esc(addr)} - ${esc(o.neighborhood||"")}</div>${o.complement?`<div>${esc(o.complement)}</div>`:""}${o.reference?`<div>Ref: ${esc(o.reference)}</div>`:""}`:""}<hr>
-    ${items.map(i=>`<div>${i.qty}x ${esc(i.name)} <span style="float:right">${brl(i.total)}</span></div>${(i.options||[]).map(x=>`<div>&nbsp; + ${x.qty}x ${esc(x.name)}</div>`).join("")}${i.notes?`<div>&nbsp; Obs: ${esc(i.notes)}</div>`:""}`).join("")}<hr>
-    <div>Subtotal <span style="float:right">${brl(o.subtotal)}</span></div>${o.type==="delivery"?`<div>Entrega <span style="float:right">${brl(o.delivery_fee)}</span></div>`:""}${+o.discount?`<div>Desconto <span style="float:right">-${brl(o.discount)}</span></div>`:""}
-    <div><b>TOTAL <span style="float:right">${brl(o.total)}</span></b></div><hr><div>Pagamento: ${esc(o.payment_method||"")}</div>${o.change_for?`<div>Paga com ${brl(o.change_for)} - TROCO ${brl(change)}</div>`:""}${o.notes?`<hr><div>Obs: ${esc(o.notes)}</div>`:""}`;
+  const T={delivery:"ENTREGA",retirada:"RETIRADA",balcao:"BALCÃO"}, wide=!(window.PRN&&PRN.cfg().cols==32);
+  const pays=Array.isArray(o.payments)&&o.payments.length?o.payments:[{method:o.payment_method||"—",amount:+o.total}];
+  const r=(l,v,b)=>`<div class="rl${b?" b":""}"><span>${l}</span><span>${v}</span></div>`;
+  $("#print").innerHTML=`<div class="rc ${wide?"w80":"w58"}">
+    <div class="rh">${S.logo_url?`<img src="${esc(S.logo_url)}" alt="">`:""}<div><b>${esc(S.name)}</b>${receiptHead().map(x=>`<div>${esc(x)}</div>`).join("")}</div></div><hr>
+    <div class="rl b"><span>${o.type==="balcao"?"RECIBO":"PEDIDO"}: ${o.number}</span><span>${new Date(o.created_at).toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"})}</span></div>
+    <div>${o.type==="balcao"?"":"<b>"+T[o.type]+"</b> · "}${esc(o.customer_name||"CONSUMIDOR NÃO IDENTIFICADO").toUpperCase()}</div>
+    ${o.customer_phone?`<div>FONE: ${esc(o.customer_phone)}</div>`:""}
+    ${o.type==="delivery"?`<div><b>${esc(addr)}</b></div>${o.neighborhood?`<div>BAIRRO: ${esc(o.neighborhood)}</div>`:""}${o.complement?`<div>COMPL.: ${esc(o.complement)}</div>`:""}${o.reference?`<div>REF.: ${esc(o.reference)}</div>`:""}`:""}
+    <div>USUÁRIO: ${esc((ME.name||"").toUpperCase())}</div><hr>
+    <div class="ri hd"><span>QTD</span><span>DESCRIÇÃO</span><span>UNIT.</span><span>TOTAL</span></div><hr class="t">
+    ${items.map(i=>`<div class="ri"><span>${+i.qty}</span><span>${esc(i.name)}${(i.options||[]).map(x=>`<br>+ ${x.qty>1?x.qty+"x ":""}${esc(x.name)}`).join("")}${i.notes?`<br>Obs: ${esc(i.notes)}`:""}</span><span>${money(i.unit_price??(i.total/i.qty))}</span><span>${money(i.total)}</span></div>`).join("")}<hr>
+    ${r("Total bruto dos itens",money(o.subtotal))}${r("Desconto",money(o.discount||0))}${o.type==="delivery"?r("Taxa de entrega",money(o.delivery_fee||0)):""}
+    ${r("VALOR TOTAL R$",money(o.total),1)}
+    ${pays.map(x=>r(esc(String(x.method).toUpperCase()),money(x.amount))).join("")}
+    ${r("Troco R$",money(o.change_for&&+o.change_for>+o.total?change:0))}
+    ${o.notes?`<hr><div>OBS: ${esc(o.notes)}</div>`:""}<hr>
+    <div class="rf">Obrigado pela preferência!<br>Documento sem valor fiscal</div></div>`;
   window.print();
 }
 

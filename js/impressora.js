@@ -103,28 +103,36 @@ const PRN=(()=>{
   }
   const TYPE={delivery:"ENTREGA",retirada:"RETIRADA",balcao:"BALCAO"};
   function orderDoc(o,items,addr,change,store){
-    const d=Doc(), st=store||{};
-    d.center(1).bold(1).big(1).text(st.name||"Pedido").big(0).bold(0);
-    if(st.address) d.wrap(st.address);
-    if(st.whatsapp) d.text("WhatsApp "+st.whatsapp);
-    d.line().bold(1).big(1).text("PEDIDO #"+o.number).big(0).text(TYPE[o.type]||String(o.type||"").toUpperCase()).bold(0)
-     .text(new Date(o.created_at).toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"})).center(0).line();
-    if(o.customer_name||o.customer_phone){ d.bold(1).wrap(o.customer_name||"").bold(0); if(o.customer_phone) d.text("Tel: "+o.customer_phone) }
-    if(o.type==="delivery"){ d.bold(1).wrap(addr||"").bold(0); if(o.neighborhood) d.wrap("Bairro: "+o.neighborhood); if(o.complement) d.wrap("Compl.: "+o.complement); if(o.reference) d.wrap("Ref.: "+o.reference) }
-    if(o.customer_name||o.customer_phone||o.type==="delivery") d.line();
+    const d=Doc(), st=store||{}, W=C.cols;
+    const head=String(C.header||"").split("\n").map(x=>x.trim()).filter(Boolean);
+    if(!head.length){ if(st.address) head.push(st.address); if(st.whatsapp) head.push("FONE: "+st.whatsapp) }
+    d.center(1).bold(1).big(1).text(st.name||"Pedido").big(0).bold(0); head.forEach(x=>d.wrap(x)); d.center(0).line();
+    const dts=new Date(o.created_at).toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"});
+    d.bold(1).lr((o.type==="balcao"?"RECIBO: ":"PEDIDO: ")+o.number,dts).bold(0);
+    if(o.type!=="balcao") d.bold(1).big(1).text(TYPE[o.type]||"").big(0).bold(0);
+    d.wrap(String(o.customer_name||"CONSUMIDOR NAO IDENTIFICADO").toUpperCase());
+    if(o.customer_phone) d.text("FONE: "+o.customer_phone);
+    if(o.type==="delivery"){ d.bold(1).wrap(addr||"").bold(0); if(o.neighborhood) d.wrap("BAIRRO: "+o.neighborhood); if(o.complement) d.wrap("COMPL.: "+o.complement); if(o.reference) d.wrap("REF.: "+o.reference) }
+    if(C.user) d.wrap("USUARIO: "+String(C.user).toUpperCase());
+    d.line();
+    // QTD DESCRIÇÃO ............ UNIT  TOTAL
+    const col=(q,desc,u,t)=>{const qw=4,uw=W>=48?9:0,tw=9,dw=W-qw-uw-tw;const L=clean(desc);const first=L.slice(0,dw),rest=L.slice(dw);
+      d.text(String(q).padEnd(qw)+first.padEnd(dw)+(uw?String(u).padStart(uw):"")+String(t).padStart(tw));
+      for(let k=0;k<rest.length;k+=dw) d.text(" ".repeat(qw)+rest.slice(k,k+dw))};
+    d.bold(1); col("QTD","DESCRICAO",W>=48?"UNIT.":"","TOTAL"); d.bold(0);
+    const num2=v=>Number(v||0).toFixed(2).replace(".",",");
     for(const i of items){
-      d.bold(1).lr(`${i.qty}x ${i.name}`,money(i.total)).bold(0);
-      (i.options||[]).forEach(x=>d.wrap(`  + ${x.qty>1?x.qty+"x ":""}${x.name}`,"    "));
-      if(i.notes) d.wrap("  Obs: "+i.notes,"    ");
+      col(+i.qty,i.name,num2(i.unit_price??(i.total/i.qty)),num2(i.total));
+      (i.options||[]).forEach(x=>d.wrap(`    + ${x.qty>1?x.qty+"x ":""}${x.name}`,"      "));
+      if(i.notes) d.wrap("    Obs: "+i.notes,"      ");
     }
-    d.line().lr("Subtotal",money(o.subtotal));
-    if(o.type==="delivery") d.lr("Entrega",money(o.delivery_fee));
-    if(+o.discount) d.lr("Desconto","-"+money(o.discount));
-    d.bold(1).big(1).lr("TOTAL",money(o.total)).big(0).bold(0).line();
-    const pays=Array.isArray(o.payments)&&o.payments.length?o.payments:null;
-    if(pays) pays.forEach(p=>d.lr(p.method,money(p.amount))); else d.wrap("Pagamento: "+(o.payment_method||"-"));
-    if(o.change_for&&+o.change_for>+o.total) d.lr("Paga com",money(o.change_for)).bold(1).lr("TROCO",money(change)).bold(0);
-    if(o.notes) d.line().wrap("Obs: "+o.notes);
+    d.line().lr("Total bruto dos itens",num2(o.subtotal)).lr("Desconto",num2(o.discount||0));
+    if(o.type==="delivery") d.lr("Taxa de entrega",num2(o.delivery_fee||0));
+    d.bold(1).big(1).lr("TOTAL R$",num2(o.total)).big(0).bold(0);
+    const pays=Array.isArray(o.payments)&&o.payments.length?o.payments:[{method:o.payment_method||"-",amount:o.total}];
+    pays.forEach(p=>d.lr(String(p.method).toUpperCase(),num2(p.amount)));
+    if(o.change_for&&+o.change_for>+o.total) d.lr("Paga com",num2(o.change_for)).bold(1).lr("TROCO R$",num2(change)).bold(0); else d.lr("Troco R$","0,00");
+    if(o.notes) d.line().wrap("OBS: "+o.notes);
     d.line().center(1).text("Obrigado pela preferencia!").text("Documento sem valor fiscal").center(0).cut();
     return d.bytes();
   }
@@ -199,7 +207,8 @@ const PRN=(()=>{
       <div class="card grid"><b>Papel</b>
         <div class="row"><label class="chk"><input type="radio" name="pcw" value="32" ${C.cols==32?"checked":""}> 58 mm (pequena)</label><label class="chk"><input type="radio" name="pcw" value="48" ${C.cols==48?"checked":""}> 80 mm (grande)</label></div>
         <label class="fld"><span>Vias de cada pedido</span><select class="in" id="pcp">${[1,2,3].map(n=>`<option ${C.copies==n?"selected":""}>${n}</option>`).join("")}</select></label>
-        <label class="chk"><input type="checkbox" id="pac" ${C.acc?"checked":""}> Imprimir com acentos (desmarque se sair letra estranha)</label></div>
+        <label class="chk"><input type="checkbox" id="pac" ${C.acc?"checked":""}> Imprimir com acentos (desmarque se sair letra estranha)</label>
+        <label class="fld"><span>Cabeçalho da notinha (embaixo do nome da loja) · ex.: razão social, CNPJ, endereço, telefone</span><textarea class="in" id="phd" rows="4" placeholder="ALEF TROY MARQUES MORAES&#10;CNPJ: 00.000.000/0001-00&#10;AV MINISTRO ALBUQUERQUE LIMA, Q22&#10;FONE: (85) 98522-4282">${esc2(C.header||"")}</textarea></label></div>
     </div>`;
   }
   function wire(root,store,toast){
@@ -219,6 +228,7 @@ const PRN=(()=>{
     root.querySelectorAll("[name=pcw]").forEach(r=>r.onchange=()=>{C.cols=+r.value;save()});
     $("#pcp").onchange=e=>{C.copies=+e.target.value;save()};
     $("#pac").onchange=e=>{C.acc=e.target.checked;save()};
+    $("#phd").onchange=e=>{C.header=e.target.value;save()};
   }
 
   if(direct()) setTimeout(reconnect,800);
