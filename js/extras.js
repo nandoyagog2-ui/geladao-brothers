@@ -37,7 +37,7 @@ function courierMsg(o,items){
     `📍 ${addr}${o.neighborhood?" - "+o.neighborhood:""}`,
     o.complement?`🏠 ${o.complement}`:null, o.reference?`📌 Ref.: ${o.reference}`:null,
     `🗺️ ${map}`,"",
-    "🧾 *Itens*", ...items.map(i=>`${i.qty}x ${i.name}${(i.options||[]).length?" ("+i.options.map(x=>x.qty+"x "+x.name).join(", ")+")":""}`),"",
+    "🧾 *Itens*", ...items.map(i=>`${i.qty}x ${i.name}${(i.options||[]).length?" ("+i.options.map(x=>/^\d+\/\d+ /.test(x.name)?x.name:x.qty+"x "+x.name).join(", ")+")":""}`),"",
     `💰 *Cobrar: ${brl(o.total)}*`, pay,
     o.notes?`📝 ${o.notes}`:null].filter(x=>x!==null).join("\n");
 }

@@ -31,8 +31,29 @@ const pct=p=>p.promo?Math.round((1-p.promo/p.p)*100):0;
 const tierPrice=(p,q)=>{let best=price(p);(p.tiers||[]).forEach(x=>{if(q>=x.min_qty&&x.price<best)best=x.price});return best};
 const qtyOf=(p,list=cart,skip=null)=>list.filter(i=>i.p.id===p.id&&i!==skip).reduce((s,i)=>s+i.n,0);
 const tierTag=p=>(p.tiers||[]).length&&p.s?`<div class="tier">🔥 ${p.tiers.map(x=>`${x.min_qty}+ un: <b>${brl(x.price)}</b>`).join(" · ")}</div>`:"";
-const priceHTML=p=>`<span class="price">${brl(price(p))}</span>${p.promo?`<span class="was">${brl(p.p)}</span><span class="off">-${pct(p)}%</span>`:""}`;
+const fromPrice=p=>{if(price(p)>0)return 0;const gs=PC.filter(x=>x.product_id===p.id).map(x=>GROUPS.find(g=>g.id===x.group_id)).filter(g=>g&&g.min_select>0);
+  const v=gs.reduce((s,g)=>{const ps=g.options.filter(o=>o.active!==false).map(o=>+o.price).filter(x=>x>0);return s+(ps.length?Math.min(...ps):0)},0);return v};
+const priceHTML=p=>fromPrice(p)?`<span class="price"><small style="font-size:.7em;font-weight:600;opacity:.75">a partir de </small>${brl(fromPrice(p))}</span>`:`<span class="price">${brl(price(p))}</span>${p.promo?`<span class="was">${brl(p.p)}</span><span class="off">-${pct(p)}%</span>`:""}`;
 const byId=id=>PRODS.find(p=>p.id===id);
+/* ---------- categoria com horário (ex.: marmitas só no almoço) ---------- */
+const DOWS=["dom","seg","ter","qua","qui","sex","sab"];
+function nowTZ(){try{const f=new Intl.DateTimeFormat("en-GB",{timeZone:S.timezone||"America/Fortaleza",weekday:"short",hour:"2-digit",minute:"2-digit",hour12:false}).formatToParts(new Date());
+  const g=k=>(f.find(x=>x.type===k)||{}).value;const wd=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].indexOf(g("weekday"));return {d:wd,m:(+g("hour")%24)*60+ +g("minute")}}catch{const n=new Date();return {d:n.getDay(),m:n.getHours()*60+n.getMinutes()}}}
+const hm2m=t=>{const [h,mi]=String(t||"0:0").split(":").map(Number);return h*60+(mi||0)};
+function catOpen(av){ if(!av) return true; const days=av.days||[], n=nowTZ(), d=DOWS[n.d], y=DOWS[(n.d+6)%7];
+  const okDay=x=>!days.length||days.includes(x);
+  if(!av.from||!av.to) return okDay(d);
+  const f=hm2m(av.from), e=hm2m(av.to);
+  return f<=e ? okDay(d)&&n.m>=f&&n.m<e : (okDay(d)&&n.m>=f)||(okDay(y)&&n.m<e); }
+const catHours=av=>!av?"":[av.from&&av.to?`das ${av.from} às ${av.to}`:"",(av.days||[]).length&&(av.days||[]).length<7?"("+av.days.join(", ")+")":""].filter(Boolean).join(" ");
+/* ---------- complementos: pizza meio a meio cobra o sabor mais caro ou a média ---------- */
+const gRule=gid=>{const g=GROUPS.find(x=>x.id===gid);return g&&g.pricing||"soma"};
+function optsTotal(opts){ const by={}; (opts||[]).forEach(o=>{const k=o.g==null?"x"+o.id:o.g;(by[k]=by[k]||[]).push(o)});
+  return Object.entries(by).reduce((s,[k,list])=>{const r=k[0]==="x"?"soma":gRule(+k), n=list.reduce((a,o)=>a+o.qty,0);
+    return s+(r==="maior"?Math.max(...list.map(o=>o.price)):r==="media"?Math.round(list.reduce((a,o)=>a+o.price*o.qty,0)/n*100)/100:list.reduce((a,o)=>a+o.price*o.qty,0))},0); }
+function optNames(opts){ const by={}; (opts||[]).forEach(o=>{const k=o.g==null?"x"+o.id:o.g;(by[k]=by[k]||[]).push(o)});
+  return Object.entries(by).flatMap(([k,list])=>{const r=k[0]==="x"?"soma":gRule(+k), n=list.reduce((a,o)=>a+o.qty,0);
+    return list.map(o=>(r!=="soma"&&n>1?o.qty+"/"+n+" ":o.qty+"x ")+o.name)}); }
 
 const CACHE_KEY="gb_menu_v1"+(LOJA?"_"+LOJA:"");
 async function fetchMenu(){
@@ -64,6 +85,8 @@ function applyMenu(D){
   const catName=Object.fromEntries(CATS.map(x=>[x.id,x.name]));
   PRODS=p.data.filter(x=>catName[x.category_id]).map(x=>({id:x.id,cid:x.category_id,c:catName[x.category_id],n:x.name,d:x.description,p:+x.price,promo:x.promo_price!=null&&+x.promo_price<+x.price?+x.promo_price:null,s:x.status==="ativo",img:x.image_url,feat:x.featured,isNew:x.is_new,tiers:(Array.isArray(x.price_tiers)?x.price_tiers:[]).map(y=>({min_qty:+y.min_qty,price:+y.price})).filter(y=>y.min_qty>1&&y.price>0).sort((a,b)=>a.min_qty-b.min_qty)}));
   GROUPS=(g.data||[]).map(gr=>({...gr,options:(o.data||[]).filter(op=>op.group_id===gr.id)}));
+  CATS.forEach(c=>{c.closedNow=!catOpen(c.available);c.hrs=catHours(c.available)});
+  PRODS.forEach(x=>{const c=CATS.find(y=>y.id===x.cid);if(c&&c.closedNow&&x.s){x.s=false;x.hrs="⏰ "+(c.hrs||"fora do horário")}});
   PC=pc.data||[]; ZONES=z.data||[]; SUGG=ps.data||[];
   document.title=S.name+" · Cardápio";
   if(S.primary_color) document.documentElement.style.setProperty("--y",S.primary_color);
@@ -87,7 +110,7 @@ let tab="home", cat=null, q="", searching=false, cart=store.get("cart",[]), ck=s
 const app=document.getElementById("app"), layer=document.getElementById("layer");
 const saveCart=()=>store.set("cart",cart.map(i=>({id:i.p.id,n:i.n,obs:i.obs,opts:i.opts})));
 function restoreCart(){cart=cart.map(i=>{const p=byId(i.id);return p&&p.s?{p,n:i.n,obs:i.obs||"",opts:i.opts||[]}:null}).filter(Boolean)}
-const lineUnit=(i,list=cart)=>tierPrice(i.p,qtyOf(i.p,list))+(i.opts||[]).reduce((s,o)=>s+o.price*o.qty,0);
+const lineUnit=(i,list=cart)=>tierPrice(i.p,qtyOf(i.p,list))+optsTotal(i.opts);
 const sub=()=>cart.reduce((s,i)=>s+lineUnit(i)*i.n,0);
 
 /* ---------- telas ---------- */
@@ -129,25 +152,25 @@ function homeView(){
   feats.forEach(p=>m.querySelector("#rail").append(featCard(p)));
   CATS.forEach(c=>{
     const b=document.createElement("button"); b.className="ct";
-    b.innerHTML=`<div class="tile${c.image_url?" has-img":""}">${c.image_url?`<img src="${esc(c.image_url)}" alt="" loading="lazy" decoding="async">`:`<span class="brand">${esc(S.name).replace(" ","<br>")}</span>${svg(c.name)}`}</div><span>${esc(c.name)}</span>`;
+    b.innerHTML=`<div class="tile${c.image_url?" has-img":""}">${c.image_url?`<img src="${esc(c.image_url)}" alt="" loading="lazy" decoding="async">`:`<span class="brand">${esc(S.name).replace(" ","<br>")}</span>${svg(c.name)}`}</div><span>${esc(c.name)}${c.closedNow&&c.hrs?`<small style="display:block;font-size:10.5px;opacity:.7">⏰ ${esc(c.hrs)}</small>`:""}</span>`;
     b.onclick=()=>{cat=c;render();scrollTo(0,0)}; m.querySelector("#cats").append(b);
   });
 }
 function featCard(p){
   const b=document.createElement("button"); b.className="feat"+(p.s?"":" out");
-  b.innerHTML=`${p.s?"":'<span class="ribbon">Esgotado</span>'}<div class="ph">${pic(p)}</div><div class="b">${p.isNew?'<span class="new">NOVIDADE</span>':""}<div class="n">${esc(p.n)}</div><div class="pr">${priceHTML(p)}</div>${tierTag(p)}</div>`;
+  b.innerHTML=`${p.s?"":`<span class="ribbon">${esc(p.hrs||"Esgotado")}</span>`}<div class="ph">${pic(p)}</div><div class="b">${p.isNew?'<span class="new">NOVIDADE</span>':""}<div class="n">${esc(p.n)}</div><div class="pr">${priceHTML(p)}</div>${tierTag(p)}</div>`;
   b.onclick=()=>productSheet(p); return b;
 }
 function list(el,items){
   items.sort((a,b)=>b.s-a.s).forEach(p=>{
     const b=document.createElement("button"); b.className="row"+(p.s?"":" out");
-    b.innerHTML=`${p.s?"":'<span class="ribbon">Esgotado</span>'}<div class="t">${p.isNew?'<span class="new">NOVIDADE</span>':""}<div class="n">${esc(p.n)}</div>${p.d?`<div class="d">${esc(p.d)}</div>`:""}<div class="pr">${priceHTML(p)}</div>${tierTag(p)}</div><div class="ph">${pic(p)}</div>`;
+    b.innerHTML=`${p.s?"":`<span class="ribbon">${esc(p.hrs||"Esgotado")}</span>`}<div class="t">${p.isNew?'<span class="new">NOVIDADE</span>':""}<div class="n">${esc(p.n)}</div>${p.d?`<div class="d">${esc(p.d)}</div>`:""}<div class="pr">${priceHTML(p)}</div>${tierTag(p)}</div><div class="ph">${pic(p)}</div>`;
     b.onclick=()=>productSheet(p); el.append(b);
   });
   if(!items.length) el.innerHTML='<div class="empty">Nada encontrado.</div>';
 }
 function catView(){
-  app.innerHTML=`${barHTML()}<main class="wrap"><div class="cathead"><div class="h2">${esc(cat.name)}</div></div><div class="rows" id="rows"></div><div class="foot">${esc(S.name)} · ${new Date().getFullYear()} · Todos os direitos reservados</div></main>`;
+  app.innerHTML=`${barHTML()}<main class="wrap"><div class="cathead"><div class="h2">${esc(cat.name)}</div>${cat.closedNow&&cat.hrs?`<div class="closed" style="margin:6px 0 0;border-radius:8px">⏰ Disponível ${esc(cat.hrs)}</div>`:""}</div><div class="rows" id="rows"></div><div class="foot">${esc(S.name)} · ${new Date().getFullYear()} · Todos os direitos reservados</div></main>`;
   wireBar(); const term=norm(q);
   list(app.querySelector("#rows"),PRODS.filter(p=>p.cid===cat.id&&(!term||norm(p.n).includes(term))));
 }
@@ -212,12 +235,12 @@ function productSheet(p,editIdx){
   let obs=ed?ed.obs:"";
   const others=qtyOf(p,cart,ed);
   const unitNow=()=>tierPrice(p,n+others);
-  const extra=()=>groups.flatMap(g=>g.options).reduce((s,o)=>s+(sel[o.id]||0)*o.price,0);
+  const extra=()=>optsTotal(groups.flatMap(g=>g.options.filter(o=>sel[o.id]).map(o=>({id:o.id,g:g.id,price:+o.price,qty:sel[o.id],name:o.name}))));
   const draw=()=>{
     sheet("",`<div class="ph bigph" style="margin-inline:-16px">${pic(p)}</div>
       <h2 style="margin:14px 0 4px;font-size:18px">${esc(p.n)}</h2>${p.d?`<p class="sub" style="color:var(--muted);margin:0 0 6px">${esc(p.d)}</p>`:""}<div class="pr">${priceHTML(p)}</div>
       ${(p.tiers||[]).length?`<div class="grp">🔥 Leve mais, pague menos</div><div class="opts">${[{min_qty:1,price:price(p)}].concat(p.tiers).map(x=>{const q=n+others,act=Math.max(1,...p.tiers.filter(y=>y.min_qty<=q).map(y=>y.min_qty)),on=x.min_qty===act;return `<button class="optrow" data-tq="${x.min_qty}" style="text-align:left;${on?"border-color:var(--y)":""}"><span>${x.min_qty===1?"1 unidade":"A partir de "+x.min_qty+" un"}</span><b class="price">${brl(x.price)} cada</b></button>`}).join("")}</div>${others?`<p class="sub" style="color:var(--muted);font-size:12px;margin:6px 0 0">Você já tem ${others} na sacola; conta junto pro desconto.</p>`:""}`:""}
-      ${groups.map(g=>`<div class="grp">${esc(g.name)}<small class="sub" style="color:var(--muted);font-weight:500"> · ${g.min_select>0?"obrigatório, ":""}escolha até ${g.max_select}</small></div><div class="opts">${g.options.map(o=>`<div class="optrow"><span>${esc(o.name)}${+o.price?` <span class="sub" style="color:var(--muted)">+ ${brl(o.price)}</span>`:""}</span><span class="step"><button data-o="${o.id}" data-g="${g.id}" data-d="-1" aria-label="Menos">−</button><span>${sel[o.id]||0}</span><button data-o="${o.id}" data-g="${g.id}" data-d="1" aria-label="Mais">+</button></span></div>`).join("")}</div>`).join("")}
+      ${groups.map(g=>{const pz=g.pricing==="maior"||g.pricing==="media";return `<div class="grp">${pz?"🍕 ":""}${esc(g.name)}<small class="sub" style="color:var(--muted);font-weight:500"> · ${g.min_select>0?"obrigatório, ":""}${pz?`escolha até ${g.max_select} ${g.max_select>1?"sabores":"sabor"}${g.max_select>1?` · cobra ${g.pricing==="maior"?"o sabor mais caro":"a média dos sabores"}`:""}`:`escolha até ${g.max_select}`}</small></div><div class="opts">${g.options.map(o=>`<div class="optrow"><span>${esc(o.name)}${+o.price?` <span class="sub" style="color:var(--muted)">${pz?"":"+ "}${brl(o.price)}</span>`:""}</span><span class="step"><button data-o="${o.id}" data-g="${g.id}" data-d="-1" aria-label="Menos">−</button><span>${sel[o.id]||0}</span><button data-o="${o.id}" data-g="${g.id}" data-d="1" aria-label="Mais">+</button></span></div>`).join("")}</div>`}).join("")}
       <div class="lbl"><span>Alguma observação?</span><span id="cnt">${obs.length} / 140</span></div>
       <textarea id="obs" class="in" rows="3" maxlength="140" placeholder="Ex.: bem gelada">${esc(obs)}</textarea><p class="err" id="e" hidden></p>`,
       `<div class="addrow"><span class="step"><button id="mi" aria-label="Menos">−</button><span>${n}</span><button id="pl" aria-label="Mais">+</button></span><button class="btn" id="add"><span>${ed?"Atualizar":"Adicionar"}</span><span>${brl((unitNow()+extra())*n)}</span></button></div>${unitNow()<price(p)?`<p class="sub" style="text-align:center;color:var(--green);font-size:12.5px;margin:8px 0 0">Preço de atacado: ${brl(unitNow())} cada · você economiza ${brl((price(p)-unitNow())*n)}</p>`:(()=>{const nx=(p.tiers||[]).find(x=>x.min_qty>n+others&&x.price<price(p));return nx?`<p class="sub" style="text-align:center;color:var(--muted);font-size:12.5px;margin:8px 0 0">Faltam ${nx.min_qty-(n+others)} un pra pagar ${brl(nx.price)} cada</p>`:""})()}`);
@@ -233,7 +256,7 @@ function productSheet(p,editIdx){
     L("#add").onclick=()=>{
       const miss=groups.find(g=>g.options.reduce((s,x)=>s+(sel[x.id]||0),0)<g.min_select);
       if(miss){L("#e").hidden=false;L("#e").textContent="Escolha "+miss.name+".";return}
-      const opts=groups.flatMap(g=>g.options).filter(x=>sel[x.id]).map(x=>({id:x.id,name:x.name,price:+x.price,qty:sel[x.id]}));
+      const opts=groups.flatMap(g=>g.options.filter(x=>sel[x.id]).map(x=>({id:x.id,g:g.id,name:x.name,price:+x.price,qty:sel[x.id]})));
       if(ed){Object.assign(ed,{n,obs:obs.trim(),opts});saveCart();return cartSheet()}
       cart.push({p,n,obs:obs.trim(),opts}); saveCart(); close(); render();
     };
@@ -251,7 +274,7 @@ function cartSheet(){
   if(!cart.length) return close();
   const sugs=suggestions();
   sheet(esc(S.name),`<div class="lbl" style="margin-top:12px"><span>Sua sacola</span></div>
-    ${cart.map((i,k)=>`<div class="ci"><div class="ph mini-ph">${pic(i.p)}</div><div class="t"><div><span class="q">${i.n}x</span> ${esc(i.p.n)}</div>${tierPrice(i.p,qtyOf(i.p))<price(i.p)?`<div class="sub" style="color:var(--green)">🔥 Atacado: ${brl(tierPrice(i.p,qtyOf(i.p)))} cada</div>`:""}${i.opts.length?`<div class="sub">${i.opts.map(o=>o.qty+"x "+esc(o.name)).join(", ")}</div>`:""}${i.obs?`<div class="sub">Obs.: ${esc(i.obs)}</div>`:""}<div class="acts"><button data-ed="${k}">Editar</button><button data-rm="${k}">Remover</button></div></div><b>${brl(lineUnit(i)*i.n)}</b></div>`).join("")}
+    ${cart.map((i,k)=>`<div class="ci"><div class="ph mini-ph">${pic(i.p)}</div><div class="t"><div><span class="q">${i.n}x</span> ${esc(i.p.n)}</div>${tierPrice(i.p,qtyOf(i.p))<price(i.p)?`<div class="sub" style="color:var(--green)">🔥 Atacado: ${brl(tierPrice(i.p,qtyOf(i.p)))} cada</div>`:""}${i.opts.length?`<div class="sub">${optNames(i.opts).map(esc).join(", ")}</div>`:""}${i.obs?`<div class="sub">Obs.: ${esc(i.obs)}</div>`:""}<div class="acts"><button data-ed="${k}">Editar</button><button data-rm="${k}">Remover</button></div></div><b>${brl(lineUnit(i)*i.n)}</b></div>`).join("")}
     <button class="link" data-close>Adicionar mais itens</button>
     ${sugs.length?`<div class="grp">Peça também</div><div class="rail" style="margin-top:8px">${sugs.map(p=>`<button class="sug" data-sg="${p.id}"><div class="ph">${pic(p)}</div><div class="b">${esc(p.n)}<div class="price">${brl(price(p))}</div></div></button>`).join("")}</div>`:""}
     <div class="sum"><div><span>Subtotal</span><span>${brl(sub())}</span></div><div><span>Taxa de entrega</span><span>A definir</span></div>${coupon?`<div><span>Cupom ${esc(coupon.code)}</span><span>${coupon.kind==="free_delivery"?"Entrega grátis":"- "+brl(discount())}</span></div>`:""}<div class="tot"><span>Total</span><span>${brl(sub()-discount())}</span></div></div>
@@ -399,7 +422,7 @@ function step3(){
     <div class="ci"><div class="t"><b>👤 ${esc(ck.nm)}</b><div class="sub">${esc(ck.tel)}</div></div></div>
     <div class="ci"><div class="t">${ck.mode==="entrega"?`<b>📍 ${esc(a.street)}, ${esc(a.num)}</b><div class="sub">${esc(nbName(a))}${a.comp?" · "+esc(a.comp):""}<br>Ref.: ${esc(a.ref)}</div>`:"<b>🏪 Retirar no estabelecimento</b>"}</div><button data-e1 aria-label="Editar">✏️</button></div>
     <div class="grp">Itens</div>
-    ${cart.map(i=>`<div class="ci"><div class="t"><span class="q">${i.n}x</span> ${esc(i.p.n)}${i.opts.length?`<div class="sub">${i.opts.map(o=>o.qty+"x "+esc(o.name)).join(", ")}</div>`:""}</div><b>${brl(lineUnit(i)*i.n)}</b></div>`).join("")}
+    ${cart.map(i=>`<div class="ci"><div class="t"><span class="q">${i.n}x</span> ${esc(i.p.n)}${i.opts.length?`<div class="sub">${optNames(i.opts).map(esc).join(", ")}</div>`:""}</div><b>${brl(lineUnit(i)*i.n)}</b></div>`).join("")}
     ${sumHTML()}
     <div class="grp">Pagamento</div><div class="ci"><div class="t"><b>${esc(ck.pay)}</b>${/dinheiro/i.test(ck.pay)?`<div class="sub">${trocoTxt()}</div>`:""}</div><button data-e2 aria-label="Editar">✏️</button></div>
     <label class="field"><span>Observação do pedido (opcional)</span><input id="nt" class="in" maxlength="200"></label>
@@ -426,7 +449,7 @@ function waMsg(o){
   if(c.mode==="entrega") M.push("🛵 Endereço de entrega",`${a.street} ${a.num}`,...(a.comp?["Complemento: "+a.comp]:[]),`Bairro: ${o.nb}`,...(a.cep?["CEP: "+a.cep]:[]),`(${a.ref})`,"",`Link do endereço:`,a.lat!=null&&KM()?`https://maps.google.com/?q=${a.lat},${a.lng}`:`https://maps.google.com/?q=${encodeURIComponent(`${a.street}, ${a.num}, ${o.nb}`)}`,"");
   else M.push("🏪 Retirar no estabelecimento","");
   M.push("------- ITENS DO PEDIDO -------","");
-  o.items.forEach(i=>{M.push(`*${i.n} x ${i.p.n}*`,`💵 ${i.n} x ${brl(lineUnit(i,o.items))} = ${brl(lineUnit(i,o.items)*i.n)}${tierPrice(i.p,qtyOf(i.p,o.items))<price(i.p)?" (atacado)":""}`);i.opts.forEach(x=>M.push(`   + ${x.qty}x ${x.name}`));if(i.obs)M.push("Obs.: "+i.obs);M.push("")});
+  o.items.forEach(i=>{M.push(`*${i.n} x ${i.p.n}*`,`💵 ${i.n} x ${brl(lineUnit(i,o.items))} = ${brl(lineUnit(i,o.items)*i.n)}${tierPrice(i.p,qtyOf(i.p,o.items))<price(i.p)?" (atacado)":""}`);optNames(i.opts).forEach(x=>M.push("   + "+x));if(i.obs)M.push("Obs.: "+i.obs);M.push("")});
   M.push("-------------------------------","",`SUBTOTAL: ${brl(o.subtotal)}`,`ENTREGA: ${c.mode==="entrega"?(+o.delivery_fee?brl(o.delivery_fee):"Grátis")+(o.distance_km!=null?` (${String(o.distance_km).replace(".",",")} km)`:""):"Retirada"}`);
   if(+o.discount) M.push(`CUPOM ${o.coupon?o.coupon.code:""}: - ${brl(o.discount)}`);
   M.push(`*VALOR FINAL: ${brl(o.total)}*`,"","PAGAMENTO",`*${c.pay}*: ${brl(o.total)}`);

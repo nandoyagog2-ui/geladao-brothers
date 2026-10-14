@@ -157,3 +157,9 @@ td.num,th.num{text-align:right}
   #print .rf{text-align:center;margin-top:4px}
 }
 td.num,.line>b{white-space:nowrap}
+/* tela da cozinha */
+.kds{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.kds .kt{display:flex;flex-direction:column;gap:8px}
+.kds .ki{display:grid;gap:8px;font-size:17px;flex:1}
+.kds .ko{font-size:14.5px;opacity:.85;margin-left:14px}
+.kds .kobs{background:rgba(255,159,67,.15);color:var(--orange);border-radius:8px;padding:6px 8px;font-weight:700;font-size:14px}

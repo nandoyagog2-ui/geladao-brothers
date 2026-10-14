@@ -105,7 +105,7 @@ function loginView(msg){
 
 /* ---------- estrutura ---------- */
 let S={}, page="pedidos", newCount=0;
-const MENU=[["Operação",[["pedidos","🧾","Pedidos"],["novo","➕","Novo pedido (telefone)"],["historico","📋","Histórico"],["caixa","💰","Caixa / venda balcão"],["devolucoes","🔄","Trocas e devoluções"]]],
+const MENU=[["Operação",[["pedidos","🧾","Pedidos"],["novo","➕","Novo pedido (telefone)"],["historico","📋","Histórico"],["caixa","💰","Caixa / venda balcão"],["cozinha","🍳","Cozinha (tela de preparo)"],["devolucoes","🔄","Trocas e devoluções"]]],
   ["Cardápio",[["catalogo","🍺","Catálogo"],["complementos","🧊","Complementos"],["destaques","🔥","Destaques e promoções"]]],
   ["Clientes",[["clientes","👥","Clientes e fiado"],["avaliacoes","⭐","Avaliações"],["cupons","🎟️","Cupons"],["fidelidade","🏆","Fidelidade"]]],
   ["Gestão",[["desempenho","📈","Financeiro e lucro"],["estoque","📦","Estoque"],["inventario","📋","Inventário (contagem)"],["validades","📅","Validades"],["financeiro","💸","Despesas e contas"],["delivery","🛵","Delivery e bairros"],["entregadores","🏍️","Entregadores"],["chatbot","🤖","Chatbot e avisos"],["equipe","🪪","Equipe e acessos"],["config","⚙️","Configurações"]]]];
@@ -119,12 +119,12 @@ const PERMS=[["pedidos","🧾 Pedidos do cardápio (ver, aceitar e mudar status)
   ["entregas","🏍️ Mandar pedido pro entregador"],["cancelar","❌ Cancelar pedido"],
   ["resumo","💰 Ver os valores do caixa (vendido no turno e dinheiro esperado)"],["desconto","🏷️ Dar desconto no caixa"],["fiado_vender","📒 Vender no fiado"],
   ["estoque","📦 Consultar estoque"],["clientes","👥 Consultar clientes e quem deve no fiado"],["fiado_receber","💵 Receber pagamento de fiado"],
-  ["devolucao","🔄 Fazer troca e devolução"],["inventario","📋 Fazer inventário (contagem) e lançar validade"]];
+  ["cozinha","🍳 Usar a tela da cozinha (marcar pedido pronto)"],["devolucao","🔄 Fazer troca e devolução"],["inventario","📋 Fazer inventário (contagem) e lançar validade"]];
 const PERM_OLD=["pedidos","novo","historico","entregas","cancelar","resumo","desconto","fiado_vender","estoque","clientes"];   // quem foi criado antes desta versão
 const PERM_NEW=["resumo"];                                                                                                      // padrão de funcionário novo
 const can=k=>OWNER()||(ME.perms||[]).includes(k);
-const canSee=p=>OWNER()||p==="caixa"||(["pedidos","novo","historico","estoque","clientes"].includes(p)&&can(p))||(p==="devolucoes"&&can("devolucao"))||(p==="inventario"&&can("inventario"))||(p==="validades"&&(can("inventario")||can("estoque")));
-const home=()=>canSee("pedidos")?"pedidos":"caixa";
+const canSee=p=>OWNER()||p==="caixa"||(["pedidos","novo","historico","estoque","clientes","cozinha"].includes(p)&&can(p))||(p==="devolucoes"&&can("devolucao"))||(p==="inventario"&&can("inventario"))||(p==="validades"&&(can("inventario")||can("estoque")));
+const home=()=>canSee("pedidos")?"pedidos":!OWNER()&&can("cozinha")?"cozinha":"caixa";
 async function loadMe(){
   const {data:{user}}=await sb.auth.getUser(); ME.email=user?user.email:""; ME.id=user?user.id:null;
   const r=await sb.from("staff").select("*").eq("user_id",user.id).maybeSingle();
@@ -179,6 +179,7 @@ function menu(){
 const PAGES={};
 PAGES.entregadores=m=>pageEntregadores(m);
 PAGES.devolucoes=m=>pageDevolucoes(m);
+PAGES.cozinha=(m,soft)=>pageCozinha(m,soft);
 PAGES.inventario=m=>pageInventario(m);
 PAGES.validades=m=>pageValidades(m);
 PAGES.chatbot=m=>pageChatbot(m);
@@ -234,7 +235,7 @@ async function countNew(){
 function listenOrders(){
   countNew();
   sb.channel("orders").on("postgres_changes",{event:"*",schema:"public",table:"orders"},()=>{
-    countNew(); if(page==="pedidos"&&!ov.innerHTML) PAGES.pedidos($("#main"),true);
+    countNew(); if(page==="pedidos"&&!ov.innerHTML) PAGES.pedidos($("#main"),true); if(page==="cozinha"&&!ov.innerHTML) PAGES.cozinha($("#main"),true);
   }).subscribe();
   setInterval(countNew,15000);                                   // confere a cada 15 s, mesmo sem conexão ao vivo
   setInterval(()=>{if(newCount>0)beep()},4000);                  // toca sem parar enquanto tiver pedido sem aceitar
@@ -302,7 +303,7 @@ async function orderDrawer(id){
     ${curWa?(AUTO?`<button class="btn o sm" id="rw" style="justify-self:start">📲 Enviar aviso de "${STATUS[o.status]}" de novo</button>`:`<a class="btn o sm" href="${curWa}" target="_blank" rel="noopener" style="justify-self:start">📲 Enviar aviso de "${STATUS[o.status]}" de novo</a>`):""}
     <div class="card"><b>👤 ${esc(o.customer_name||"Cliente balcão")}</b>${o.customer_phone?`<div class="muted">${esc(o.customer_phone)}</div>`:""}
       ${o.type==="delivery"?`<div style="margin-top:8px"><b>📍 ${esc(addr)}</b><div class="muted">${esc(o.neighborhood||"")}${o.complement?" · "+esc(o.complement):""}${o.cep?" · CEP "+esc(o.cep):""}</div>${o.reference?`<div>Ref.: ${esc(o.reference)}</div>`:""}<a href="${maps}" target="_blank" rel="noopener">Abrir no mapa ↗</a></div>`:""}</div>
-    <div class="card">${items.map(i=>`<div class="line"><div><b>${i.qty}x</b> ${esc(i.name)}${(i.options||[]).length?`<div class="muted">${i.options.map(x=>x.qty+"x "+esc(x.name)).join(", ")}</div>`:""}${i.notes?`<div class="muted">Obs.: ${esc(i.notes)}</div>`:""}</div><b>${brl(i.total)}</b></div>`).join("")}
+    <div class="card">${items.map(i=>`<div class="line"><div><b>${i.qty}x</b> ${esc(i.name)}${(i.options||[]).length?`<div class="muted">${i.options.map(x=>esc(kdsOpt(x))).join(", ")}</div>`:""}${i.notes?`<div class="muted">Obs.: ${esc(i.notes)}</div>`:""}</div><b>${brl(i.total)}</b></div>`).join("")}
       <div class="line"><span class="muted">Subtotal</span><span>${brl(o.subtotal)}</span></div>
       ${o.type==="delivery"?`<div class="line"><span class="muted">Taxa de entrega</span><span>${brl(o.delivery_fee)}</span></div>`:""}
       ${+o.discount?`<div class="line"><span class="muted">Desconto ${esc(o.coupon_code||"")}</span><span>- ${brl(o.discount)}</span></div>`:""}
@@ -535,10 +536,19 @@ PAGES.catalogo=async m=>{
     $("#npd").onclick=()=>prodForm(null);
   };
   const CF=[{k:"name",l:"Nome da categoria"},{k:"image_url",l:"Foto da categoria (aparece no bloco)",t:"img"},{k:"active",l:"Mostrar no cardápio",t:"check"}];
+  const HAS22=!cats.length||"to_kitchen" in cats[0], DW=[["seg","Seg"],["ter","Ter"],["qua","Qua"],["qui","Qui"],["sex","Sex"],["sab","Sáb"],["dom","Dom"]];
+  const hoursHTML=c=>{const av=c&&c.available||null,on=!!av,d=av&&av.days&&av.days.length?av.days:DW.map(x=>x[0]);return `
+    <label class="chk"><input type="checkbox" id="kt" ${!c||c.to_kitchen!==false?"checked":""}> <span>🍳 Os itens dessa categoria vão pra <b>tela da cozinha</b> <span class="muted">(desmarque em bebidas, sobremesas prontas…)</span></span></label>
+    <label class="chk"><input type="checkbox" id="hon" ${on?"checked":""}> <span>⏰ Só vende em <b>alguns horários</b> <span class="muted">(ex.: marmita só no almoço)</span></span></label>
+    <div id="hbx" class="card" style="margin:6px 0 10px;${on?"":"display:none"}"><div class="row" style="flex-wrap:wrap;gap:6px">${DW.map(([k,l])=>`<label class="chk" style="margin:0"><input type="checkbox" data-dw="${k}" ${d.includes(k)?"checked":""}> ${l}</label>`).join("")}</div>
+      <div class="row" style="gap:10px;margin-top:8px"><label class="fld" style="flex:1"><span>Começa</span><input type="time" class="in" id="hf" value="${esc(av&&av.from||"11:00")}"></label><label class="fld" style="flex:1"><span>Termina</span><input type="time" class="in" id="ht" value="${esc(av&&av.to||"14:30")}"></label></div>
+      <div class="muted" style="font-size:12px">Fora desse horário os produtos aparecem com "⏰ disponível das … às …" e o cliente não consegue pedir. Pode passar da meia-noite (ex.: 18:00 às 02:00).</div></div>`};
+  const readHours=dr=>{if(!$("#hon",dr).checked)return null;return {days:$$("[data-dw]",dr).filter(x=>x.checked).map(x=>x.dataset.dw),from:$("#hf",dr).value||null,to:$("#ht",dr).value||null}};
   function catForm(c,n){
-    const dr=drawer(c?"Editar categoria":"Nova categoria",formHTML(CF,c||{active:true})+'<p class="err" id="e" hidden></p>',`${c?'<button class="btn r" id="del">Excluir</button>':""}<button class="btn" id="sv">Salvar</button>`);
-    wireImgs(dr);
+    const dr=drawer(c?"Editar categoria":"Nova categoria",formHTML(CF,c||{active:true})+(HAS22?hoursHTML(c):"")+'<p class="err" id="e" hidden></p>',`${c?'<button class="btn r" id="del">Excluir</button>':""}<button class="btn" id="sv">Salvar</button>`);
+    wireImgs(dr); if(HAS22) $("#hon",dr).onchange=e=>$("#hbx",dr).style.display=e.target.checked?"":"none";
     $("#sv",dr).onclick=async()=>{const v=readForm(CF,dr);if(!v.name){$("#e",dr).hidden=false;$("#e",dr).textContent="Dê um nome.";return}
+      if(HAS22){v.to_kitchen=$("#kt",dr).checked;v.available=readHours(dr);if(v.available&&!v.available.days.length){$("#e",dr).hidden=false;$("#e",dr).textContent="Marque pelo menos um dia.";return}}
       if(c) await q(sb.from("categories").update(v).eq("id",c.id)); else {const r=await q(sb.from("categories").insert({...v,sort_order:n}).select().single());catSel=r.id}
       closeDr();toast("Categoria salva");PAGES.catalogo(m)};
     if(c) $("#del",dr).onclick=async e=>{if(prods.some(p=>p.category_id===c.id)){$("#e",dr).hidden=false;$("#e",dr).textContent="Mova ou exclua os produtos dessa categoria antes. Ou desmarque \"Mostrar no cardápio\" pra só esconder.";return}
@@ -621,18 +631,19 @@ PAGES.catalogo=async m=>{
 PAGES.complementos=async m=>{
   const [groups,opts]=await Promise.all([q(sb.from("complement_groups").select("*").order("name")),q(sb.from("complement_options").select("*").order("sort_order"))]);
   m.innerHTML=`<div class="top"><h1>Complementos e opções</h1><button class="btn" id="ng">➕ Novo complemento</button></div>
-    <p class="muted" style="margin-top:-6px">Ex.: "Gelo Sabores" com as opções Melancia, Limão… Depois ligue o complemento ao produto, na tela de editar produto.</p>
+    <p class="muted" style="margin-top:-6px">Ex.: "Gelo Sabores" com as opções Melancia, Limão… Depois ligue o complemento ao produto, na tela de editar produto.<br>🍕 <b>Pizza meio a meio:</b> crie o complemento "Sabores", máximo 2 (ou 3), e em "Como cobrar" escolha <b>sabor mais caro</b> ou <b>média</b>. O preço de cada sabor é o preço da pizza inteira daquele sabor, e o produto "Pizza Grande" fica com preço R$ 0.</p>
     <div class="grid g2">${groups.map(g=>`<div class="card"><div class="row" style="justify-content:space-between"><b>${esc(g.name)}</b><button class="btn o sm" data-eg="${g.id}">Editar</button></div>
-      <div class="muted" style="font-size:12px;margin:2px 0 8px">Mín. ${g.min_select} · máx. ${g.max_select}${g.allow_repeat?" · pode repetir":""}${g.active?"":" · desativado"}</div>
+      <div class="muted" style="font-size:12px;margin:2px 0 8px">${g.pricing==="maior"?"🍕 Pizza · cobra o mais caro · ":g.pricing==="media"?"🍕 Pizza · cobra a média · ":""}Mín. ${g.min_select} · máx. ${g.max_select}${g.allow_repeat?" · pode repetir":""}${g.active?"":" · desativado"}</div>
       ${opts.filter(o=>o.group_id===g.id).map(o=>`<div class="line"><span style="${o.active?"":"opacity:.45"}">${esc(o.name)}</span><span class="row">${+o.price?brl(o.price):"grátis"}<button class="icb" data-eo="${o.id}" aria-label="Editar">✎</button></span></div>`).join("")}
       <button class="btn o sm" data-no="${g.id}" style="margin-top:8px">➕ Opção</button></div>`).join("")||'<div class="empty">Nenhum complemento ainda.</div>'}</div>`;
   const GF=[{k:"name",l:"Nome (ex.: Gelo Sabores)"},{k:"min_select",l:"Mínimo que o cliente escolhe (0 = opcional)",t:"int"},{k:"max_select",l:"Máximo que pode escolher",t:"int"},{k:"allow_repeat",l:"Pode escolher a mesma opção mais de uma vez",t:"check"},{k:"active",l:"Ativo",t:"check"}];
+  if(!groups.length||"pricing" in groups[0]) GF.splice(3,0,{k:"pricing",l:"Como cobrar as opções",t:"select",o:[["soma","Somar o preço de cada opção (normal)"],["maior","🍕 Pizza meio a meio: cobra o sabor MAIS CARO"],["media","🍕 Pizza meio a meio: cobra a MÉDIA dos sabores"]]});
   const OF=[{k:"name",l:"Nome da opção"},{k:"price",l:"Preço adicional (R$)",t:"money"},{k:"image_url",l:"Foto (opcional)",t:"img"},{k:"active",l:"Disponível",t:"check"}];
   const edit=(title,F,v,table,id,extra)=>{const dr=drawer(title,formHTML(F,v)+'<p class="err" id="e" hidden></p>',`${id?'<button class="btn r" id="del">Excluir</button>':""}<button class="btn" id="sv">Salvar</button>`);wireImgs(dr);
     $("#sv",dr).onclick=async()=>{const x={...readForm(F,dr),...extra};if(!x.name){$("#e",dr).hidden=false;$("#e",dr).textContent="Dê um nome.";return}if("price" in x)x.price=x.price??0;if("min_select" in x){x.min_select=x.min_select??0;x.max_select=x.max_select??1}
       id?await q(sb.from(table).update(x).eq("id",id)):await q(sb.from(table).insert(x));closeDr();toast("Salvo");PAGES.complementos(m)};
     if(id)$("#del",dr).onclick=async e=>{if(!e.target.dataset.sure){e.target.dataset.sure=1;e.target.textContent="Confirmar exclusão";return}await q(sb.from(table).delete().eq("id",id));closeDr();PAGES.complementos(m)}};
-  $("#ng").onclick=()=>edit("Novo complemento",GF,{min_select:0,max_select:1,active:true},"complement_groups");
+  $("#ng").onclick=()=>edit("Novo complemento",GF,{min_select:0,max_select:1,active:true,pricing:"soma"},"complement_groups");
   $$("[data-eg]",m).forEach(b=>b.onclick=()=>{const g=groups.find(x=>x.id==b.dataset.eg);edit("Editar complemento",GF,g,"complement_groups",g.id)});
   $$("[data-no]",m).forEach(b=>b.onclick=()=>edit("Nova opção",OF,{active:true},"complement_options",null,{group_id:+b.dataset.no,sort_order:opts.filter(o=>o.group_id==b.dataset.no).length+1}));
   $$("[data-eo]",m).forEach(b=>b.onclick=()=>{const o=opts.find(x=>x.id==b.dataset.eo);edit("Editar opção",OF,o,"complement_options",o.id)});
