@@ -16,7 +16,19 @@ const PRN=(()=>{
   let C; try{C={...def,...JSON.parse(localStorage.getItem(KEY)||"{}")}}catch{C={...def}}
   if(!C.balcao) C.balcao=C.autoBalcao===false?"nunca":"auto";
   const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(C))}catch{}};
-  let ch=null, dev=null, port=null, busy=Promise.resolve();
+  let ch=null, dev=null, port=null, busy=Promise.resolve(), localOk=false, localInfo=null;
+  /* programa de impressão do Windows (pasta /impressora): recebe o cupom e manda direto pra impressora, sem janela */
+  const LOCAL="http://127.0.0.1:9123";
+  async function localStatus(){
+    try{const ctl=new AbortController();const t=setTimeout(()=>ctl.abort(),2500);
+      const r=await fetch(LOCAL+"/status",{signal:ctl.signal,cache:"no-store"});clearTimeout(t);const j=await r.json();localOk=!!j.ok;localInfo=j;return j}
+    catch{localOk=false;localInfo=null;return null}
+  }
+  async function pickLocal(){
+    const j=await localStatus();
+    if(!j) throw new Error("O programa de impressão não está aberto neste computador. Instale e abra o \"Impressora Geladão\" (passo 1).");
+    C.mode="local"; if(!C.printer||!(j.printers||[]).includes(C.printer)) C.printer=j.printer||""; C.name=C.printer||"Impressora do computador"; if(C.cols==32) C.cols=48; save(); ui();
+  }
   const hasBT=!!(navigator.bluetooth), hasSerial=!!(navigator.serial);
 
   /* ---------- conexão ---------- */
@@ -43,16 +55,21 @@ const PRN=(()=>{
       if(C.mode==="bluetooth"&&hasBT&&!ch&&navigator.bluetooth.getDevices){
         const ds=await navigator.bluetooth.getDevices(); const d=ds.find(x=>x.name===C.name)||ds[0]; if(d) await linkBT(d);
       }
+      if(C.mode==="local") await localStatus();
       if(C.mode==="usb"&&hasSerial&&!port){ const ps=await navigator.serial.getPorts(); if(ps[0]) await openSerial(ps[0]); }
     }catch{}
     ui(); return ready();
   }
-  const ready=()=>C.mode==="sistema"?true:C.mode==="bluetooth"?!!ch:C.mode==="usb"?!!port:false;
-  const direct=()=>C.mode==="bluetooth"||C.mode==="usb";
+  const ready=()=>C.mode==="sistema"?true:C.mode==="local"?localOk:C.mode==="bluetooth"?!!ch:C.mode==="usb"?!!port:false;
+  const direct=()=>C.mode==="bluetooth"||C.mode==="usb"||C.mode==="local";
   let htmlFn=null;
 
   /* ---------- envio ---------- */
   async function write(bytes){
+    if(C.mode==="local"){
+      const r=await fetch(LOCAL+"/print?printer="+encodeURIComponent(C.printer||""),{method:"POST",body:bytes,headers:{"Content-Type":"application/octet-stream"}});
+      const j=await r.json().catch(()=>({ok:false,error:"sem resposta"})); if(!j.ok){localOk=r.ok; throw new Error(j.error||"não imprimiu")} return;
+    }
     if(C.mode==="usb"){ const w=port.writable.getWriter(); try{await w.write(bytes)}finally{w.releaseLock()} return; }
     const n=ch.properties.writeWithoutResponse?100:180;
     for(let i=0;i<bytes.length;i+=n){ const part=bytes.slice(i,i+n);
@@ -155,7 +172,13 @@ const PRN=(()=>{
     const iphone=/iPhone|iPad/i.test(navigator.userAgent);
     return `<div class="grid" id="prnp">
       ${iphone?`<div class="card" style="border-color:var(--red)">⚠️ No iPhone/iPad o navegador <b>não conecta</b> em impressora Bluetooth. Use um computador ou celular Android com o Chrome. Aqui ele usa a janela de impressão normal.</div>`:""}
-      <div class="card grid"><b>Status: ${C.mode==="janela"?"usando a janela de impressão normal":C.mode==="sistema"?"✅ impressora instalada no computador (driver)":ready()?"✅ conectada em "+esc2(C.name):"⚠️ desconectada"}</b>
+      ${!iphone&&!/Android/i.test(navigator.userAgent)?`<div class="card grid" style="border-color:${C.mode==="local"&&localOk?"var(--green)":"var(--y)"}"><b>⭐ Impressão direta no computador (recomendado)</b>
+        <p class="muted" style="margin:0;font-size:12.5px">Igual ao Datacaixa: finalizou, a notinha sai na hora, <b>sem abrir janela nenhuma</b>. Funciona com a impressora instalada no Windows (USB, rede ou Bluetooth).</p>
+        <div><b>1.</b> Baixe e instale o programinha (só uma vez): <a class="btn o sm" href="/impressora/Impressora-Geladao.zip" download>⬇️ Baixar Impressora Geladão</a></div>
+        <div><b>2.</b> Depois de instalado: <button class="btn${C.mode==="local"?"":" o"} sm" id="plc">🔗 Conectar no programa</button></div>
+        ${C.mode==="local"?(localOk?`<div class="ok">✅ Programa ligado · imprimindo em <b>${esc2(C.printer||"impressora padrão")}</b></div>${localInfo&&(localInfo.printers||[]).length>1?`<label class="fld"><span>Qual impressora</span><select class="in" id="plp">${localInfo.printers.map(n=>`<option ${n===C.printer?"selected":""}>${esc2(n)}</option>`).join("")}</select></label>`:""}`:`<div class="err">⚠️ O programa de impressão não está respondendo. Abra o "Impressora Geladão" no computador (ou reinicie o computador) e toque em Reconectar.</div>`):""}
+      </div>`:""}
+      <div class="card grid"><b>Status: ${C.mode==="local"?(localOk?"✅ impressão direta pelo programa":"⚠️ programa de impressão desligado"):C.mode==="janela"?"usando a janela de impressão normal":C.mode==="sistema"?"✅ impressora instalada no computador (driver)":ready()?"✅ conectada em "+esc2(C.name):"⚠️ desconectada"}</b>
         <div class="row" style="flex-wrap:wrap">
           ${!iphone?`<button class="btn${C.mode==="sistema"?"":" o"}" id="psy">🖥️ Impressora com cabo USB (instalada no Windows)</button>`:""}
           ${hasBT?`<button class="btn o" id="pbt">🔵 Conectar impressora Bluetooth</button>`:""}
@@ -184,11 +207,13 @@ const PRN=(()=>{
     const redo=()=>{ const p=$("#prnp"); if(p){ p.outerHTML=panelHTML(); wire(root,store,toast) } };
     const go=fn=>async e=>{ e.target.disabled=true; msg("Conectando…"); try{ await fn(); redo(); toast&&toast("Impressora conectada") }catch(x){ msg(/cancel|chosen/i.test(x.message||"")?"Nenhuma impressora escolhida.":"Não conectou: "+(x.message||x)); e.target.disabled=false } };
     if($("#pbt")) $("#pbt").onclick=go(pickBT);
+    if($("#plc")) $("#plc").onclick=go(pickLocal);
+    if($("#plp")) $("#plp").onchange=e=>{C.printer=e.target.value;C.name=C.printer;save();ui()};
     if($("#psy")) $("#psy").onclick=()=>{ C.mode="sistema"; C.name="Impressora do computador"; if(C.cols==32) C.cols=48; save(); redo(); ui(); toast&&toast("Usando a impressora instalada no computador") };
     if($("#pus")) $("#pus").onclick=go(pickSerial);
     if($("#prc")) $("#prc").onclick=async()=>{ msg("Reconectando…"); if(await reconnect()) redo(); else if(C.mode==="bluetooth"&&hasBT) { try{await pickBT();redo()}catch(x){msg("Não conectou: "+(x.message||x))} } else msg("Não achei a impressora. Ligue ela e tente de novo.") };
     if($("#pts")) $("#pts").onclick=async()=>{ msg("Imprimindo teste…"); try{await test(store);msg("✅ Teste enviado. Saiu o papel?")}catch(x){msg("Não imprimiu: "+(x.message||x))} };
-    if($("#pjn")) $("#pjn").onclick=()=>{ C.mode="janela"; ch=null; try{dev&&dev.gatt.disconnect()}catch{} save(); redo() };
+    if($("#pjn")) $("#pjn").onclick=()=>{ C.mode="janela"; ch=null; localOk=false; try{dev&&dev.gatt.disconnect()}catch{} save(); redo() };
     $("#pab").onchange=e=>{C.balcao=e.target.value;C.autoBalcao=C.balcao!=="nunca";save()};
     $("#pad").onchange=e=>{C.autoDelivery=e.target.checked; if(C.autoDelivery) C.since=Date.now(); save()};
     root.querySelectorAll("[name=pcw]").forEach(r=>r.onchange=()=>{C.cols=+r.value;save()});
@@ -197,6 +222,7 @@ const PRN=(()=>{
   }
 
   if(direct()) setTimeout(reconnect,800);
+  setInterval(()=>{ if(C.mode==="local") localStatus().then(ui) },30000);
   return { cfg:()=>C, ready, reconnect, printOrder, textDoc, tick, panelHTML, wire, badge, hasBT, hasSerial, markDone, direct, setHtml:f=>htmlFn=f, onUi:f=>uiCb=f };
 })();
 window.PRN=PRN;
