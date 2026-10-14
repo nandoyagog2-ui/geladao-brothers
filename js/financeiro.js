@@ -112,6 +112,12 @@ async function finDash(m){
     const inRg=(e,a,b)=>{const d=expDate(e);return d>=ymd(a)&&d<ymd(b)};
     const fees=S.payment_fees||{};
     const R=crunch(orders,exAll.filter(e=>inRg(e,rg.a,rg.b)),prods,fees), PR=crunch(prev,exAll.filter(e=>inRg(e,rg.pa,rg.pb)),prods,fees);
+    // trocas e devoluções do período saem do faturamento e do custo
+    const getRet=async(a,b)=>{const r=await sb.from("returns").select("amount,items,restock,created_at").gte("created_at",a.toISOString()).lt("created_at",b.toISOString());return r.error?[]:r.data};
+    const [retA,retP]=await Promise.all([getRet(rg.a,rg.b),getRet(rg.pa,rg.pb)]);
+    const applyRet=(X,list)=>{X.dev=list.reduce((s,r)=>s+ +r.amount,0);X.devN=list.length;const dc=list.filter(r=>r.restock!==false).reduce((s,r)=>s+(r.items||[]).reduce((t,i)=>t+(+i.unit_cost||0)*(+i.qty||0),0),0);
+      X.fat-=X.dev;X.cmv-=dc;X.lb=X.fat-X.cmv-X.taxas;X.lucro=X.lb-X.despOp};
+    applyRet(R,retA); applyRet(PR,retP);
     last={orders,rg};
     const C=Object.fromEntries(cats.map(c=>[c.id,c.name]));
     const today=ymd(new Date());
@@ -142,7 +148,7 @@ async function finDash(m){
     const DOWN=["Domingo","Segunda","Terça","Quarta","Quinta","Sexta","Sábado"];
     const topC=Object.values(R.custs).sort((a,b)=>b.v-a.v).slice(0,8);
     const dre=[
-      ["Vendas de produtos",R.prod,""],["+ Taxas de entrega cobradas",R.fee,""],["− Descontos e cupons",-R.disc,""],
+      ["Vendas de produtos",R.prod,""],["+ Taxas de entrega cobradas",R.fee,""],["− Descontos e cupons",-R.disc,""],...(R.dev?[[`− Trocas e devoluções (${R.devN})`,-R.dev,""]]:[]),
       ["= Faturamento (receita)",R.fat,"b"],
       ["− Custo das mercadorias vendidas (CMV)",-R.cmv,""],["− Taxas da maquininha / apps",-R.taxas,""],
       ["= Lucro bruto",R.lb,"b"],

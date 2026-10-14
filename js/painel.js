@@ -105,10 +105,10 @@ function loginView(msg){
 
 /* ---------- estrutura ---------- */
 let S={}, page="pedidos", newCount=0;
-const MENU=[["Operação",[["pedidos","🧾","Pedidos"],["novo","➕","Novo pedido (telefone)"],["historico","📋","Histórico"],["caixa","💰","Caixa / venda balcão"]]],
+const MENU=[["Operação",[["pedidos","🧾","Pedidos"],["novo","➕","Novo pedido (telefone)"],["historico","📋","Histórico"],["caixa","💰","Caixa / venda balcão"],["devolucoes","🔄","Trocas e devoluções"]]],
   ["Cardápio",[["catalogo","🍺","Catálogo"],["complementos","🧊","Complementos"],["destaques","🔥","Destaques e promoções"]]],
   ["Clientes",[["clientes","👥","Clientes e fiado"],["avaliacoes","⭐","Avaliações"],["cupons","🎟️","Cupons"],["fidelidade","🏆","Fidelidade"]]],
-  ["Gestão",[["desempenho","📈","Financeiro e lucro"],["estoque","📦","Estoque"],["financeiro","💸","Despesas e contas"],["delivery","🛵","Delivery e bairros"],["entregadores","🏍️","Entregadores"],["chatbot","🤖","Chatbot e avisos"],["equipe","🪪","Equipe e acessos"],["config","⚙️","Configurações"]]]];
+  ["Gestão",[["desempenho","📈","Financeiro e lucro"],["estoque","📦","Estoque"],["inventario","📋","Inventário (contagem)"],["validades","📅","Validades"],["financeiro","💸","Despesas e contas"],["delivery","🛵","Delivery e bairros"],["entregadores","🏍️","Entregadores"],["chatbot","🤖","Chatbot e avisos"],["equipe","🪪","Equipe e acessos"],["config","⚙️","Configurações"]]]];
 /* ---------- quem está logado: dono pode tudo, funcionário só o básico ---------- */
 let ME={role:"dono",name:"",email:"",id:null};
 const OWNER=()=>ME.role==="dono";
@@ -116,11 +116,12 @@ const OWNER=()=>ME.role==="dono";
 const PERMS=[["pedidos","🧾 Pedidos do cardápio (ver, aceitar e mudar status)"],["novo","➕ Fazer pedido por telefone"],["historico","📋 Ver histórico de pedidos"],
   ["entregas","🏍️ Mandar pedido pro entregador"],["cancelar","❌ Cancelar pedido"],
   ["resumo","💰 Ver os valores do caixa (vendido no turno e dinheiro esperado)"],["desconto","🏷️ Dar desconto no caixa"],["fiado_vender","📒 Vender no fiado"],
-  ["estoque","📦 Consultar estoque"],["clientes","👥 Consultar clientes e quem deve no fiado"],["fiado_receber","💵 Receber pagamento de fiado"]];
+  ["estoque","📦 Consultar estoque"],["clientes","👥 Consultar clientes e quem deve no fiado"],["fiado_receber","💵 Receber pagamento de fiado"],
+  ["devolucao","🔄 Fazer troca e devolução"],["inventario","📋 Fazer inventário (contagem) e lançar validade"]];
 const PERM_OLD=["pedidos","novo","historico","entregas","cancelar","resumo","desconto","fiado_vender","estoque","clientes"];   // quem foi criado antes desta versão
 const PERM_NEW=["resumo"];                                                                                                      // padrão de funcionário novo
 const can=k=>OWNER()||(ME.perms||[]).includes(k);
-const canSee=p=>OWNER()||p==="caixa"||(["pedidos","novo","historico","estoque","clientes"].includes(p)&&can(p));
+const canSee=p=>OWNER()||p==="caixa"||(["pedidos","novo","historico","estoque","clientes"].includes(p)&&can(p))||(p==="devolucoes"&&can("devolucao"))||(p==="inventario"&&can("inventario"))||(p==="validades"&&(can("inventario")||can("estoque")));
 const home=()=>canSee("pedidos")?"pedidos":"caixa";
 async function loadMe(){
   const {data:{user}}=await sb.auth.getUser(); ME.email=user?user.email:""; ME.id=user?user.id:null;
@@ -147,7 +148,7 @@ async function shell(){
   <div class="shell"><aside class="side" id="side"><div class="brand"><div class="lg">${S.logo_url?`<img src="${esc(S.logo_url)}" alt="">`:"GB"}</div><div><b>${esc(S.name)}</b><small>${esc(ME.name)} · ${OWNER()?"Dono":"Funcionário"}</small></div></div>
     <button class="openbtn" id="ob"></button><button class="openbtn off" id="snd"></button><button class="openbtn off" id="wab"></button><nav class="menu" id="menu"></nav>
     <a class="btn o sm" href="/" target="_blank" rel="noopener" style="margin:14px 10px 0;display:flex">Ver cardápio ↗</a>
-    <button class="out" id="lo">Sair</button></aside><main class="main" id="main"></main></div>`;
+    <button class="out" id="swu" style="margin-bottom:0">🔄 Trocar usuário</button><button class="out" id="lo">Sair</button></aside><main class="main" id="main"></main></div>`;
   $("#mb").onclick=()=>$("#side").classList.toggle("open");
   $("#side").onclick=e=>{if(e.target.id==="side")$("#side").classList.remove("open")};
   $("#lo").onclick=async()=>{
@@ -155,6 +156,8 @@ async function shell(){
     const mine=r.data&&r.data[0]&&(r.data[0].user_id?r.data[0].user_id===ME.id:r.data[0].operator===ME.name);
     if(mine&&!confirm("Seu caixa ainda está ABERTO. O certo é fechar o caixa antes de sair.\n\nSair mesmo assim?")){go("caixa");return}
     await sb.auth.signOut();location.reload()};
+  $("#swu").onclick=()=>switchUser();
+  lotsSoon();
   $("#ob").onclick=async()=>{S.is_open=!S.is_open;await setOpen(S.is_open);openBtn();toast(S.is_open?"Loja aberta":"Loja fechada")};
   $("#snd").onclick=e=>{e.stopPropagation();unlockAudio();soundDrawer()};
   $("#snd").oncontextmenu=e=>{e.preventDefault();soundOn=!soundOn;try{localStorage.setItem("gb_sound",soundOn?"on":"off")}catch{};soundBtn()};
@@ -166,11 +169,14 @@ async function shell(){
 }
 function openBtn(){const b=$("#ob");b.className="openbtn"+(S.is_open?"":" off");b.innerHTML=`<i></i>${S.is_open?"Loja aberta · clique p/ fechar":"Loja fechada · clique p/ abrir"}`}
 function menu(){
-  $("#menu").innerHTML=MENU.map(([s,items])=>[s,items.filter(([k])=>canSee(k))]).filter(([,items])=>items.length).map(([s,items])=>`<div class="sec">${s}</div>`+items.map(([k,i,l])=>`<button data-p="${k}" aria-current="${page===k}"><span>${i}</span>${l}${k==="pedidos"&&newCount?`<span class="badge">${newCount}</span>`:""}</button>`).join("")).join("");
+  $("#menu").innerHTML=MENU.map(([s,items])=>[s,items.filter(([k])=>canSee(k))]).filter(([,items])=>items.length).map(([s,items])=>`<div class="sec">${s}</div>`+items.map(([k,i,l])=>`<button data-p="${k}" aria-current="${page===k}"><span>${i}</span>${l}${k==="pedidos"&&newCount?`<span class="badge">${newCount}</span>`:""}${k==="validades"&&window.__lotsSoon?`<span class="badge" title="Vencendo em até 7 dias">${window.__lotsSoon}</span>`:""}</button>`).join("")).join("");
   $$("#menu [data-p]").forEach(b=>b.onclick=()=>{go(b.dataset.p);$("#side").classList.remove("open")});
 }
 const PAGES={};
 PAGES.entregadores=m=>pageEntregadores(m);
+PAGES.devolucoes=m=>pageDevolucoes(m);
+PAGES.inventario=m=>pageInventario(m);
+PAGES.validades=m=>pageValidades(m);
 PAGES.chatbot=m=>pageChatbot(m);
 // leitor de código de barras (USB): no caixa, se nada estiver selecionado, os números vão direto pra busca
 document.addEventListener("keydown",e=>{if(page!=="caixa"||ov.innerHTML)return;const t=document.activeElement;if(t&&/INPUT|TEXTAREA|SELECT/.test(t.tagName))return;
@@ -823,11 +829,12 @@ PAGES.estoque=async m=>{
         closeDr();toast(pick.length+" fardo(s) ligado(s)");draw()}};
     $$("[data-tr]",m).forEach(b=>b.onclick=async()=>{await q(sb.from("products").update({track_stock:true}).eq("id",+b.dataset.tr));prods.find(p=>p.id==b.dataset.tr).track_stock=true;draw();toast("Agora é só lançar a entrada")});
     $$("[data-in],[data-aj]",m).forEach(b=>b.onclick=()=>{const isIn=!!b.dataset.in,p=prods.find(x=>x.id==(b.dataset.in||b.dataset.aj));
-      const dr=drawer((isIn?"Entrada de estoque · ":"Ajustar estoque · ")+esc(p.name),`<p class="muted">Estoque atual: <b>${+p.stock_qty}</b></p><label class="fld"><span>${isIn?"Quantidade que chegou":"Quantidade correta agora (contagem)"}</span><input class="in" id="qq" inputmode="decimal"></label>${isIn?`<label class="fld"><span>Preço de custo por unidade (opcional)</span><input class="in" id="cp" inputmode="decimal" value="${money(p.cost_price)}"></label>`:""}<label class="fld"><span>Observação</span><input class="in" id="ob" placeholder="${isIn?"Ex.: compra no atacado":"Ex.: contagem do mês"}"></label>${isIn?"":`<label class="fld"><span>Estoque mínimo</span><input class="in" id="mn" inputmode="decimal" value="${+p.stock_min}"></label>`}`,`<button class="btn" id="sv">Salvar</button>`);
+      const dr=drawer((isIn?"Entrada de estoque · ":"Ajustar estoque · ")+esc(p.name),`<p class="muted">Estoque atual: <b>${+p.stock_qty}</b></p><label class="fld"><span>${isIn?"Quantidade que chegou":"Quantidade correta agora (contagem)"}</span><input class="in" id="qq" inputmode="decimal"></label>${isIn?`<label class="fld"><span>Preço de custo por unidade (opcional)</span><input class="in" id="cp" inputmode="decimal" value="${money(p.cost_price)}"></label><label class="fld"><span>📅 Validade deste lote (opcional · avisa antes de vencer)</span><input class="in" id="vl" type="date"></label>`:""}<label class="fld"><span>Observação</span><input class="in" id="ob" placeholder="${isIn?"Ex.: compra no atacado":"Ex.: contagem do mês"}"></label>${isIn?"":`<label class="fld"><span>Estoque mínimo</span><input class="in" id="mn" inputmode="decimal" value="${+p.stock_min}"></label>`}`,`<button class="btn" id="sv">Salvar</button>`);
       $("#sv",dr).onclick=async()=>{const v=num($("#qq",dr).value);if(v==null){toast("Informe a quantidade");return}
         const novo=isIn?+p.stock_qty+v:v, diff=novo-p.stock_qty, upd={stock_qty:novo};
         if(isIn&&num($("#cp",dr).value)!=null)upd.cost_price=num($("#cp",dr).value); if(!isIn&&num($("#mn",dr).value)!=null)upd.stock_min=num($("#mn",dr).value);
         await q(sb.from("products").update(upd).eq("id",p.id)); if(diff) await q(sb.from("stock_movements").insert({product_id:p.id,kind:isIn?"entrada":"ajuste",qty:diff,description:$("#ob",dr).value.trim()||null}));
+        if(isIn&&$("#vl",dr).value){const r=await sb.from("product_lots").insert({product_id:p.id,qty:v,expires_on:$("#vl",dr).value,note:$("#ob",dr).value.trim()||null,created_by_name:ME.name});if(r.error)toast("Rode a parte 19 do banco pra guardar a validade")}
         Object.assign(p,upd);closeDr();draw();toast("Estoque atualizado")}});
     $$("[data-hi]",m).forEach(b=>b.onclick=async()=>{const p=prods.find(x=>x.id==b.dataset.hi);const mv=await q(sb.from("stock_movements").select("*").eq("product_id",p.id).order("created_at",{ascending:false}).limit(100));
       drawer("Histórico · "+esc(p.name),mv.map(x=>`<div class="line"><span>${dt(x.created_at)} · ${({entrada:"Entrada",saida:"Saída",ajuste:"Ajuste",venda:"Venda"})[x.kind]}${x.description?" · "+esc(x.description):""}</span><b style="color:${+x.qty<0?"var(--red)":"var(--green)"}">${+x.qty>0?"+":""}${+x.qty}</b></div>`).join("")||'<p class="muted">Sem movimentações.</p>')});
@@ -883,7 +890,7 @@ PAGES.caixa=async m=>{
   const SEE=can("resumo");   // funcionário sem essa permissão fecha o caixa "às cegas" (não vê o valor esperado)
   const PM=[...new Set(["Pix","Dinheiro","Cartão de crédito","Cartão de débito"].concat(S.payment_methods||[]))].concat(can("fiado_vender")?["Fiado"]:[]);
   const ico=x=>/pix/i.test(x)?"⚡":/dinheiro/i.test(x)?"💵":/fiado/i.test(x)?"📒":"💳";
-  let cart=[], term="", cat="", pay="Dinheiro", troco="", disc="", cli=null, printIt=!!(window.PRN&&PRN.cfg().balcao!=="nunca"), split=false, parts=[];
+  let cart=[], term="", cat="", pay="Dinheiro", troco="", disc=window.__gbTroca?money(window.__gbTroca.amount):"", cli=null, printIt=!!(window.PRN&&PRN.cfg().balcao!=="nunca"), split=false, parts=[];
   const r2=v=>Math.round(v*100)/100;
   const paid=()=>r2(parts.reduce((s,x)=>s+(num(x.v)||0),0));
   const cashPart=()=>r2(parts.filter(x=>/dinheiro/i.test(x.m)).reduce((s,x)=>s+(num(x.v)||0),0));
@@ -903,12 +910,13 @@ PAGES.caixa=async m=>{
     return {ords,done,byPay,mv,expected,pending:ords.filter(o=>o.status!=="concluido")};
   }
   let SM=await summary();
+  if(window.__gbTroca){toast(`🔄 Troca do pedido #${window.__gbTroca.number}: desconto de ${brl(window.__gbTroca.amount)} já lançado. Passe os produtos novos.`);window.__gbTroca=null}
   const KL={entrada:"Entrada",saida:"Saída / despesa",sangria:"Sangria (retirada)",suprimento:"Suprimento (reforço)"};
   const draw=()=>{
     const list=prods.filter(p=>(!cat||String(p.category_id)===cat)&&(!term||p.name.toLowerCase().includes(term)||(p.barcode&&String(p.barcode).includes(term)))).slice(0,120);
     const t=tot(), isCash=/dinheiro/i.test(pay), tr=num(troco);
     m.innerHTML=`<div class="top"><div><h1>Caixa · venda no balcão</h1><div class="muted">🟢 Aberto por <b>${esc(open.operator||"—")}</b> desde ${dt(open.opened_at)} · ${SM.done.length} venda(s)${SEE?` · <b style="color:var(--y)">${brl(SM.done.reduce((s,o)=>s+ +o.total,0))}</b>`:""}</div></div>
-      <div class="row"><button class="btn o" id="prnb">${PRN.badge()}</button><button class="btn o" id="mvb">💸 Sangria / suprimento</button><button class="btn r" id="fc">🔒 Fechar caixa</button></div></div>
+      <div class="row"><button class="btn o" id="prnb">${PRN.badge()}</button><button class="btn o" id="mvl">📋 Movimentação</button><button class="btn o" id="mvb">💸 Sangria / suprimento</button><button class="btn o" id="swc">🔄 Trocar usuário</button><button class="btn r" id="fc">🔒 Fechar caixa</button></div></div>
     <div class="cat2" style="grid-template-columns:minmax(0,1fr) 380px">
       <div class="grid" style="align-content:start;gap:10px">
         <div class="row" style="flex-wrap:nowrap"><input class="in" id="ps" placeholder="🔍 Buscar produto ou passar o código de barras…" value="${esc(term)}" autocomplete="off">${matchMedia("(pointer:coarse)").matches?`<button class="btn o" id="cam" title="Ler código com a câmera">📷</button>`:""}</div>
@@ -972,6 +980,7 @@ PAGES.caixa=async m=>{
     if($("#cx"))$("#cx").onclick=()=>{cart=[];disc="";troco="";cli=null;draw()};
     $$("[data-o]",m).forEach(r=>r.onclick=()=>orderDrawer(+r.dataset.o));
     $("#mvb").onclick=movDrawer; $("#fc").onclick=closeDrawer;
+    $("#mvl").onclick=async()=>{SM=await summary();cashMoves(open,SM,SEE)}; $("#swc").onclick=()=>switchUser();
     $("#fz").onclick=finish;
   };
   function add(p){if(!p)return;const i=cart.find(x=>x.p===p);i?i.n++:cart.push({p,n:1})}
@@ -1041,9 +1050,11 @@ PAGES.caixa=async m=>{
     const dr=drawer("Fechar caixa · "+esc(open.operator||""),`${SEE?"":`<p class="muted" style="margin:0">Conte todo o dinheiro da gaveta e digite o valor abaixo. O dono confere a diferença depois.</p>`}<div class="card" ${SEE?"":"hidden"}>${Object.entries(SM.byPay).map(([k,v])=>`<div class="line"><span>${esc(k)}</span><b>${brl(v)}</b></div>`).join("")||'<p class="muted">Nenhuma venda concluída.</p>'}
       <div class="line big"><span>Total vendido</span><span class="price">${brl(SM.done.reduce((s,o)=>s+ +o.total,0))}</span></div></div>
       <div class="card" ${SEE?"":"hidden"}><div class="line"><span>Abertura</span><span>${brl(open.opening_amount)}</span></div><div class="line big"><span>💵 Dinheiro esperado</span><span class="price">${brl(SM.expected)}</span></div></div>
-      ${SM.pending.length?`<p class="alert" style="margin:0">⚠️ ${SM.pending.length} pedido(s) ainda não concluído(s). Conclua antes de fechar pra entrar na conta deste turno.</p>`:""}
+      ${SM.pending.length?`<div class="alert" style="margin:0"><b>⚠️ Tem ${SM.pending.length} pedido(s) em aberto neste turno.</b> Se fechar agora, eles ficam fora da conta deste caixa. Toque no pedido pra concluir:
+        <div class="grid" style="gap:4px;margin-top:8px">${SM.pending.map(o=>`<button class="line" data-po="${o.id}" style="text-align:left;cursor:pointer"><span>#${o.number} · ${hm(o.created_at)} · ${o.type==="delivery"?"🛵 Entrega":o.type==="retirada"?"🏪 Retirada":"🧾 Balcão"} · ${esc(o.customer_name||"")} ${pill(o.status)}</span><b>${brl(o.total)}</b></button>`).join("")}</div></div>`:""}
       <label class="fld"><span>Quanto tem de dinheiro na gaveta agora (contado)</span><input class="in" id="ca" inputmode="decimal"></label><div id="df"></div>
       <label class="fld"><span>Observação</span><input class="in" id="cn"></label>`,`<button class="btn r" id="cb">🔒 Fechar caixa</button>`);
+    $$("[data-po]",dr).forEach(b=>b.onclick=()=>{closeDr();orderDrawer(+b.dataset.po)});
     $("#ca",dr).oninput=()=>{const v=num($("#ca",dr).value);if(!SEE)return;if(v==null){$("#df",dr).innerHTML="";return}const d=v-SM.expected;$("#df",dr).innerHTML=Math.abs(d)<0.01?'<span class="ok">Caixa bateu certinho ✓</span>':`<span class="${d<0?"err":"ok"}">${d<0?"Faltando":"Sobrando"} ${brl(Math.abs(d))}</span>`};
     $("#cb",dr).onclick=async e=>{const v=num($("#ca",dr).value);if(v==null){toast("Informe o valor contado");return}if(!e.target.dataset.sure){e.target.dataset.sure=1;e.target.textContent="Confirmar fechamento";return}
       await q(sb.from("cash_sessions").update({closed_at:new Date().toISOString(),closing_amount:v,expected_amount:Math.round(SM.expected*100)/100,closed_by:email,notes:$("#cn",dr).value.trim()||null}).eq("id",open.id));
