@@ -3,7 +3,7 @@ const SITE = "https://geladao-brothers.vercel.app";
 const app = document.getElementById("app");
 const msg = document.getElementById("msg");
 const show = t => { msg.textContent = t; msg.style.display = "block"; clearTimeout(show.t); show.t = setTimeout(() => msg.style.display = "none", 4000); };
-const toApp = m => app.contentWindow && app.contentWindow.postMessage(m, SITE);
+const toApp = m => { try { app.contentWindow && app.contentWindow.postMessage(m, SITE); } catch {} };   // a tela ainda está carregando: ignora
 
 async function whatsTab() {
   const tabs = await chrome.tabs.query({ url: "https://web.whatsapp.com/*" });
