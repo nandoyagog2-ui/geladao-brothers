@@ -95,7 +95,7 @@ function createStore(){
     e.target.disabled=true;const r=await sb.rpc("admin_create_store",{p});e.target.disabled=false;
     if(r.error){$("#e",dr).hidden=false;$("#e",dr).textContent=r.error.message;return}
     drawer("✅ Loja criada",`<p style="margin-top:0">Mande isso pro dono da <b>${esc(p.name)}</b>:</p>
-      <textarea class="in" id="msg" rows="9" readonly>Olá${p.owner_name?", "+p.owner_name.split(" ")[0]:""}! Seu sistema está pronto 🎉
+      <textarea class="in" id="msg" rows="14" readonly>Olá${p.owner_name?", "+p.owner_name.split(" ")[0]:""}! Seu sistema está pronto 🎉
 
 🛒 Cardápio pros clientes:
 ${SITE}/${r.data.slug}
@@ -105,7 +105,13 @@ ${SITE}/painel/
 Usuário: ${r.data.login||"(criar)"}
 Senha: ${p.owner_pass?p.owner_pass:"(criar)"}
 
-No painel, comece por Configurações (logo, horário, WhatsApp) e depois Catálogo (produtos).</textarea>`,`<button class="btn" id="cp">📋 Copiar mensagem</button>`);
+📲 WhatsApp automático (robô + avisos de pedido):
+No painel, vá em Gestão → Chatbot e avisos → "Instalar a extensão do WhatsApp" e siga os passos. Precisa do Chrome no computador da loja com o WhatsApp Web aberto.
+
+🖨️ Impressora (cupom sai sozinho):
+No painel, clique em Impressora → "Baixar" o programinha → Extrair → INSTALAR → "Conectar no programa".
+
+Qualquer dúvida, é só me chamar aqui. Boas vendas! 🚀</textarea>`,`<button class="btn" id="cp">📋 Copiar mensagem</button>`);
     $("#cp",ov).onclick=async()=>{try{await navigator.clipboard.writeText($("#msg",ov).value);toast("Mensagem copiada")}catch{$("#msg",ov).select()}};
     list()};
 }

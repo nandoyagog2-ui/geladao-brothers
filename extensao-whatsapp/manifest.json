@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Geladão Brothers no WhatsApp",
-  "version": "3.3.0",
-  "description": "Painel do Geladão Brothers dentro do WhatsApp Web: pedidos, robô de respostas automáticas e avisos de status.",
+  "name": "VYNTRA no WhatsApp",
+  "version": "3.4.0",
+  "description": "Painel da sua loja VYNTRA dentro do WhatsApp Web: pedidos, robô de respostas automáticas e avisos de status.",
   "icons": {
     "16": "icon-16.png",
     "32": "icon-32.png",
@@ -10,7 +10,7 @@
     "128": "icon-128.png"
   },
   "action": {
-    "default_title": "Mostrar/esconder o painel do Geladão",
+    "default_title": "Mostrar/esconder o painel VYNTRA",
     "default_icon": {
       "16": "icon-16.png",
       "32": "icon-32.png"

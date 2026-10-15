@@ -1,5 +1,5 @@
 // Ponte entre a tela do Geladão (iframe) e o WhatsApp Web
-const SITE = "https://geladao-brothers.vercel.app";
+const SITE = "https://cardapiovyntra.com.br";
 const app = document.getElementById("app");
 const msg = document.getElementById("msg");
 const show = t => { msg.textContent = t; msg.style.display = "block"; clearTimeout(show.t); show.t = setTimeout(() => msg.style.display = "none", 4000); };

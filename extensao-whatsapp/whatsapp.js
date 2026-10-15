@@ -232,7 +232,7 @@ function fill(tpl, name) {
   return s
     .replace(/\{nome\}/g, first)
     .replace(/\{loja\}/g, S.name || "nossa loja")
-    .replace(/\{link\}/g, "https://geladao-brothers.vercel.app/" + (STORE.id > 1 && STORE.slug ? STORE.slug : ""))
+    .replace(/\{link\}/g, "https://cardapiovyntra.com.br/" + (STORE.id > 1 && STORE.slug ? STORE.slug : ""))
     .replace(/\{endereco\}/g, S.address || "")
     .replace(/\{horario\}/g, [oi.text, hoursText()].filter(Boolean).join("\n"))
     .replace(/Olá, !/g, "Olá!").replace(/ +\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
@@ -536,7 +536,7 @@ html.gb-open #gb-tab{display:none}`;
 document.documentElement.appendChild(pcss);
 const panel = document.createElement("div"); panel.id = "gb-panel";
 panel.innerHTML = `<button class="gb-x" title="Esconder o painel">›</button><iframe allow="clipboard-write" src="${chrome.runtime.getURL("panel.html")}"></iframe>`;
-const tab = document.createElement("button"); tab.id = "gb-tab"; tab.textContent = "🍺 GELADÃO"; tab.title = "Mostrar o painel do Geladão";
+const tab = document.createElement("button"); tab.id = "gb-tab"; tab.textContent = "⚡ VYNTRA"; tab.title = "Mostrar o painel VYNTRA";
 function mountPanel() {
   const root = document.body || document.documentElement;
   if (!panel.isConnected) root.appendChild(panel);

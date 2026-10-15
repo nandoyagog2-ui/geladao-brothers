@@ -122,6 +122,16 @@ async function pageChatbot(m){
   const ST={em_preparo:"Pedido aceito / em preparo",saiu_entrega:"Saiu para entrega",pronto:"Pronto para retirada",concluido:"Concluído (obrigado + avaliação)",cancelado:"Cancelado"};
   const draw=()=>{
     m.innerHTML=`<div class="top"><h1>Chatbot e avisos</h1><button class="btn" id="sv">💾 Salvar</button></div>
+    <details class="card" style="margin-bottom:12px"${waOnline()?"":" open"}><summary style="cursor:pointer;font-weight:800">🧩 Instalar a extensão do WhatsApp no computador ${waOnline()?'<span class="pill p-concluido">✓ ligada</span>':'<span class="pill p-novo">não instalada / desligada</span>'}</summary>
+      <ol style="margin:10px 0 0;padding-left:20px;line-height:1.7">
+        <li><a class="btn o sm" href="/extensao/VYNTRA-WhatsApp.zip" download>⬇️ Baixar a extensão VYNTRA</a></li>
+        <li>Na pasta <b>Downloads</b>, clique com o botão direito em <b>VYNTRA-WhatsApp.zip</b> → <b>Extrair tudo</b> → <b>Extrair</b>. Guarde essa pasta num lugar fixo (ex.: Documentos). <b>Não apague</b> depois.</li>
+        <li>No Chrome, digite na barra de endereço: <b>chrome://extensions</b> e aperte Enter.</li>
+        <li>Ligue a chave <b>Modo do desenvolvedor</b> (canto de cima, à direita).</li>
+        <li>Clique em <b>Carregar sem compactação</b> e escolha a pasta que você extraiu.</li>
+        <li>Abra o <b>web.whatsapp.com</b>, entre com o WhatsApp da loja, clique na aba <b>⚡ VYNTRA</b> do lado direito e faça login com o mesmo usuário do painel.</li>
+      </ol>
+      <p class="muted" style="margin:6px 0 0;font-size:12.5px">Precisa ficar com o WhatsApp Web aberto no computador da loja pra o robô responder e os avisos saírem sozinhos.</p></details>
     <div class="grid g2">
       <div class="card grid" style="align-content:start">
         <label class="chk" style="font-size:16px;font-weight:800"><input type="checkbox" id="be" ${B.enabled?"checked":""}> 🤖 Robô de respostas automáticas ligado</label>
