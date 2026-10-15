@@ -232,7 +232,7 @@ function fill(tpl, name) {
   return s
     .replace(/\{nome\}/g, first)
     .replace(/\{loja\}/g, S.name || "nossa loja")
-    .replace(/\{link\}/g, "https://cardapiovyntra.com.br/" + (STORE.id > 1 && STORE.slug ? STORE.slug : ""))
+    .replace(/\{link\}/g, (STORE.slug ? "https://cardapiovyntra.com.br/" + STORE.slug : "https://geladao-brothers.vercel.app/"))
     .replace(/\{endereco\}/g, S.address || "")
     .replace(/\{horario\}/g, [oi.text, hoursText()].filter(Boolean).join("\n"))
     .replace(/Olá, !/g, "Olá!").replace(/ +\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();

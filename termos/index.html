@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Termos de uso · VYNTRA</title>
+<meta name="theme-color" content="#FFC400">
+<link rel="icon" href="/img/vyntra-32.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,500..900&family=Figtree:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="/vyntra/vyntra.css">
+<script src="/vyntra/contato.js"></script>
+</head>
+<body>
+<div class="doc-top"><div class="wrap"><div class="top"><a class="logo" href="/vyntra/"><img src="/img/vyntra-192.png" alt="">VYNTRA</a><nav><a href="/privacidade/">Privacidade</a></nav></div></div></div>
+<main class="doc">
+  <h1>Termos de uso</h1>
+  <p class="upd">Atualizados em 15 de outubro de 2026</p>
+  <p>Estes termos valem para as lojas que contratam a VYNTRA (cardápio digital e sistema de gestão) e para quem usa os cardápios e painéis feitos com ela.</p>
+  <p id="resp"></p>
+
+  <h2>1. O serviço</h2>
+  <p>A VYNTRA oferece cardápio digital com link próprio, painel de pedidos, caixa, estoque, financeiro, avisos pelo WhatsApp, impressão de cupom, mesas, tela da cozinha e acompanhamento de entregadores. As funções podem ser melhoradas e atualizadas com o tempo.</p>
+
+  <h2>2. Contratação e pagamento</h2>
+  <ul>
+    <li>A implantação (montagem da loja) é paga uma vez. A mensalidade é paga todo mês, nos valores combinados na contratação.</li>
+    <li>Não há cobrança por pedido.</li>
+    <li>Com a mensalidade vencida há mais de 5 dias, o cardápio e o painel da loja ficam bloqueados até o pagamento. Os dados não são apagados por causa do bloqueio.</li>
+  </ul>
+
+  <h2>3. Responsabilidades da loja</h2>
+  <ul>
+    <li>Manter preços, produtos, horários, taxas e informações do cardápio corretos.</li>
+    <li>Atender, preparar, entregar e cobrar os pedidos, e cumprir as leis do consumidor, sanitárias, fiscais e de proteção de dados.</li>
+    <li>Guardar em segredo os usuários e senhas do painel e definir o que cada funcionário pode fazer.</li>
+    <li>Usar o WhatsApp de acordo com as regras do próprio WhatsApp. O envio automático de mensagens depende do WhatsApp Web aberto no computador da loja, e o uso exagerado pode levar o WhatsApp a restringir o número.</li>
+  </ul>
+
+  <h2>4. Responsabilidades da VYNTRA</h2>
+  <ul>
+    <li>Manter o sistema funcionando e corrigir falhas no menor tempo possível.</li>
+    <li>Tratar os dados das lojas e dos clientes delas só para o funcionamento do serviço, conforme a <a href="/privacidade/">Política de privacidade</a>.</li>
+    <li>Dar suporte pelos canais de contato informados.</li>
+  </ul>
+
+  <h2>5. Limites</h2>
+  <p>O sistema depende de internet, do navegador, do computador e da impressora da loja e de serviços de terceiros (hospedagem, banco de dados, WhatsApp, mapas). A VYNTRA não responde por falhas desses itens, por pedidos não atendidos pela loja nem pelos produtos vendidos. O cupom impresso não tem valor fiscal.</p>
+
+  <h2>6. Cancelamento</h2>
+  <p>A loja pode pedir o cancelamento a qualquer momento pelos canais de contato. A VYNTRA pode encerrar o serviço em caso de falta de pagamento ou de uso contra a lei ou contra estes termos.</p>
+
+  <h2>7. Mudanças nos termos</h2>
+  <p>Estes termos podem ser atualizados. A data no topo mostra a versão em vigor.</p>
+
+  <h2>8. Contato</h2>
+  <p id="contato">Fale com a VYNTRA pelos canais informados na contratação.</p>
+</main>
+<footer><div class="wrap"><span>VYNTRA · Gestão inteligente para delivery</span><nav><a href="/privacidade/">Política de privacidade</a><a href="/vyntra/">Conheça a VYNTRA</a></nav></div></footer>
+<script>
+(function(){var V=window.VYNTRA||{},d=String(V.whatsapp||"").replace(/\D/g,""),c=[];
+  if(V.responsavel) document.getElementById("resp").textContent="A VYNTRA é operada por "+V.responsavel+(V.documento?" ("+V.documento+")":"")+(V.cidade?", "+V.cidade:"")+".";
+  if(V.email) c.push('e-mail <a href="mailto:'+V.email+'">'+V.email+'</a>');
+  if(d.length>=10) c.push('WhatsApp <a href="https://wa.me/'+(d.length<=11?"55":"")+d+'">'+V.whatsapp+'</a>');
+  if(c.length) document.getElementById("contato").innerHTML="Fale com a VYNTRA por "+c.join(" ou ")+".";
+})();
+</script>
+</body>
+</html>

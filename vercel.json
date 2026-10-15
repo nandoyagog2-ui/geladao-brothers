@@ -71,5 +71,29 @@
       "source": "/:loja([a-z0-9-]+)/",
       "destination": "/index.html"
     }
+  ],
+  "redirects": [
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "cardapiovyntra.com.br"
+        }
+      ],
+      "destination": "/vyntra/",
+      "permanent": false
+    },
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "www.cardapiovyntra.com.br"
+        }
+      ],
+      "destination": "/vyntra/",
+      "permanent": false
+    }
   ]
 }

@@ -113,7 +113,7 @@ const MENU=[["Operação",[["pedidos","🧾","Pedidos"],["novo","➕","Novo pedi
 let ME={role:"dono",name:"",email:"",id:null};
 const OWNER=()=>ME.role==="dono";
 const SID=()=>ME.store_id||1;                                           // loja de quem está logado
-const STORE_URL=()=>ME.domain?"https://"+ME.domain+"/":location.origin+(SID()===1||!ME.store_slug?"/":"/"+ME.store_slug);   // link do cardápio desta loja
+const STORE_URL=()=>ME.domain?"https://"+ME.domain+"/":location.origin+(ME.store_slug?"/"+ME.store_slug:"/");   // link do cardápio desta loja
 /* o que o dono pode liberar pra cada funcionário (o caixa é sempre liberado) */
 const PERMS=[["pedidos","🧾 Pedidos do cardápio (ver, aceitar e mudar status)"],["novo","➕ Fazer pedido por telefone"],["historico","📋 Ver histórico de pedidos"],
   ["entregas","🏍️ Mandar pedido pro entregador"],["cancelar","❌ Cancelar pedido"],

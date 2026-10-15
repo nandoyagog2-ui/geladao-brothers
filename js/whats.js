@@ -3,7 +3,7 @@ const sb = supabase.createClient(GB_CONFIG.SUPABASE_URL, GB_CONFIG.SUPABASE_KEY)
 const app = document.getElementById("app"), ov = document.getElementById("ov");
 const SITE = location.origin;
 let SID=1, SLUG="";                                   // loja de quem está logado
-const STORE_URL=()=>SITE+(SID===1||!SLUG?"/":"/"+SLUG);
+const STORE_URL=()=>SITE+(!SLUG?(SID===1&&!/cardapiovyntra/.test(SITE)?"/":"/loja1"):"/"+SLUG);
 
 /* ---------- utilidades ---------- */
 const brl=v=>"R$ "+Number(v||0).toFixed(2).replace(".",",").replace(/\B(?=(\d{3})+(?!\d))/g,".");

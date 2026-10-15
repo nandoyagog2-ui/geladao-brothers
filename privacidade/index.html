@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Política de privacidade · VYNTRA</title>
+<meta name="theme-color" content="#FFC400">
+<link rel="icon" href="/img/vyntra-32.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,500..900&family=Figtree:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="/vyntra/vyntra.css">
+<script src="/vyntra/contato.js"></script>
+</head>
+<body>
+<div class="doc-top"><div class="wrap"><div class="top"><a class="logo" href="/vyntra/"><img src="/img/vyntra-192.png" alt="">VYNTRA</a><nav><a href="/termos/">Termos de uso</a></nav></div></div></div>
+<main class="doc">
+  <h1>Política de privacidade</h1>
+  <p class="upd">Atualizada em 15 de outubro de 2026</p>
+
+  <p>Esta política explica quais dados pessoais são tratados quando você usa um cardápio digital ou um painel feitos com a VYNTRA, para que servem e quais são os seus direitos, conforme a Lei Geral de Proteção de Dados (Lei nº 13.709/2018).</p>
+
+  <h2>Quem é quem</h2>
+  <ul>
+    <li><b>A loja</b> (restaurante, adega, lanchonete etc.) é a responsável pelos dados dos clientes que fazem pedidos no cardápio dela. É ela que decide como atender, entregar e falar com o cliente.</li>
+    <li><b>A VYNTRA</b> fornece o sistema e trata esses dados em nome da loja, só para fazer o sistema funcionar. A VYNTRA é a responsável pelos dados das próprias lojas clientes (dono e funcionários).</li>
+  </ul>
+  <p id="resp"></p>
+
+  <h2>Quais dados são usados</h2>
+  <ul>
+    <li><b>De quem faz pedido:</b> nome, telefone/WhatsApp, endereço de entrega, localização marcada no mapa (se você permitir), itens do pedido, forma de pagamento, observações e avaliações.</li>
+    <li><b>De quem usa o painel da loja:</b> nome, usuário de acesso e o registro do que foi feito (vendas, caixa, alterações).</li>
+    <li><b>De entregadores:</b> nome, telefone e a localização do celular enquanto a página de entregas estiver aberta com o GPS ligado.</li>
+    <li><b>Dados técnicos:</b> informações guardadas no seu próprio navegador para lembrar sua sacola, seu endereço e suas preferências.</li>
+  </ul>
+
+  <h2>Para que os dados são usados</h2>
+  <ul>
+    <li>Receber, preparar, entregar e cobrar o pedido.</li>
+    <li>Avisar sobre o andamento do pedido, inclusive pelo WhatsApp.</li>
+    <li>Mostrar ao cliente e à loja onde está o entregador durante a entrega.</li>
+    <li>Programa de fidelidade, cupons, histórico de pedidos e controle de fiado da loja.</li>
+    <li>Segurança, prevenção de fraude e cumprimento de obrigações legais.</li>
+  </ul>
+  <p>Os dados não são vendidos. A VYNTRA não usa os dados dos clientes de uma loja para nenhuma outra loja.</p>
+
+  <h2>Com quem os dados são compartilhados</h2>
+  <ul>
+    <li>Com a loja onde você fez o pedido e com o entregador que vai levar.</li>
+    <li>Com os serviços que mantêm o sistema no ar: hospedagem do site e banco de dados (que podem guardar os dados em servidores fora do Brasil), mapas e o WhatsApp, quando a loja envia mensagens.</li>
+    <li>Com autoridades, quando a lei exigir.</li>
+  </ul>
+
+  <h2>Por quanto tempo</h2>
+  <p>Os dados ficam guardados enquanto a loja usar o sistema e pelo tempo necessário para cumprir obrigações legais. Depois disso, são apagados ou deixam de identificar a pessoa.</p>
+
+  <h2>Seus direitos</h2>
+  <p>Você pode pedir para confirmar se seus dados são tratados, ver, corrigir, apagar ou levar seus dados, e saber com quem foram compartilhados. Peça diretamente à loja onde você comprou, ou fale com a VYNTRA pelo contato abaixo, que encaminhamos.</p>
+
+  <h2>Segurança</h2>
+  <p>O acesso ao painel é feito com usuário e senha, cada loja vê apenas os próprios dados e a comunicação com o sistema é criptografada (https).</p>
+
+  <h2>Contato</h2>
+  <p id="contato">Para dúvidas sobre privacidade, fale com a VYNTRA.</p>
+</main>
+<footer><div class="wrap"><span>VYNTRA · Gestão inteligente para delivery</span><nav><a href="/termos/">Termos de uso</a><a href="/vyntra/">Conheça a VYNTRA</a></nav></div></footer>
+<script>
+(function(){var V=window.VYNTRA||{},d=String(V.whatsapp||"").replace(/\D/g,""),c=[];
+  if(V.responsavel) document.getElementById("resp").textContent="A VYNTRA é operada por "+V.responsavel+(V.documento?" ("+V.documento+")":"")+(V.cidade?", "+V.cidade:"")+".";
+  if(V.email) c.push('e-mail <a href="mailto:'+V.email+'">'+V.email+'</a>');
+  if(d.length>=10) c.push('WhatsApp <a href="https://wa.me/'+(d.length<=11?"55":"")+d+'">'+V.whatsapp+'</a>');
+  if(c.length) document.getElementById("contato").innerHTML="Para dúvidas sobre privacidade: "+c.join(" ou ")+".";
+})();
+</script>
+</body>
+</html>
