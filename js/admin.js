@@ -16,6 +16,7 @@ const loginEmail=v=>String(v||"").includes("@")?String(v).trim().toLowerCase():l
 const slugify=v=>String(v||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"");
 const SEG={bebidas:"🍺 Bebidas / conveniência",pizzaria:"🍕 Pizzaria",lanchonete:"🍔 Lanchonete",restaurante:"🍽️ Restaurante",marmitaria:"🍱 Marmitaria",acai:"🍧 Açaí / sorveteria",outro:"🛍️ Outro"};
 const SITE=location.origin;
+let HAS25=false;
 const money2=v=>{let t=String(v||"").replace(/[^\d,.]/g,"");t=t.includes(",")?t.replace(/\./g,"").replace(",","."):t;const n=parseFloat(t);return isNaN(n)?null:n};
 
 async function boot(){
@@ -49,6 +50,7 @@ let L=[];
 async function list(){
   const r=await sb.rpc("admin_stores"); if(r.error){toast(r.error.message);return}
   L=r.data||[];
+  const dm=await sb.rpc("admin_store_domains"); const DOM=dm.error?{}:(dm.data||{}); L.forEach(x=>x.custom_domain=DOM[x.id]||null); HAS25=!dm.error;
   const ok=L.filter(x=>x.ok).length, bl=L.filter(x=>!x.ok).length, venc=L.filter(x=>x.paid_until&&new Date(x.paid_until+"T23:59:59")<new Date()).length;
   const tot=L.reduce((s,x)=>s+ +x.sales30,0);
   const mrr=L.filter(x=>x.ok).reduce((s,x)=>s+(+x.monthly_fee||0),0), setupDue=L.filter(x=>x.setup_paid===false).reduce((s,x)=>s+(+x.setup_fee||0),0);
@@ -58,7 +60,7 @@ async function list(){
     <p class="muted" style="margin:-4px 0 12px;font-size:12.5px">As lojas venderam ${brl(tot)} nos últimos 30 dias usando a VYNTRA.</p>
     <div class="lj">${L.map(x=>`<div class="card"><div><h3>${esc(x.name)} ${st(x)}</h3>
         <div class="muted tagS">${esc(SEG[x.segment]||x.segment||"")} · loja nº ${x.id} · desde ${dBR(x.created_at)}</div>
-        <div class="tagS" style="margin-top:4px">🔗 <a href="${SITE}/${esc(x.slug)}" target="_blank" rel="noopener">${esc(SITE.replace(/^https?:\/\//,""))}/${esc(x.slug)}</a></div>
+        <div class="tagS" style="margin-top:4px">🔗 <a href="${SITE}/${esc(x.slug)}" target="_blank" rel="noopener">${esc(SITE.replace(/^https?:\/\//,""))}/${esc(x.slug)}</a>${x.custom_domain?` · 🌐 <a href="https://${esc(x.custom_domain)}" target="_blank" rel="noopener">${esc(x.custom_domain)}</a>`:""}</div>
         <div class="muted tagS">👤 ${(x.logins||[]).filter(l=>l.role==="dono").map(l=>esc((l.name||"")+" ("+(l.username||"")+")")).join(", ")||'<span style="color:var(--red)">sem login de dono</span>'} · ${(x.logins||[]).length} login(s)${x.owner_phone?" · 📞 "+esc(x.owner_phone):""}</div></div>
       <div class="tagS"><div>📦 ${x.products} produtos · 🧾 ${x.orders30} pedidos (30 dias)</div><div>💰 ${brl(x.sales30)} (30 dias)</div><div class="muted">Último pedido: ${x.last_order?new Date(x.last_order).toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"}):"nenhum"}</div><div>📅 Pago até: <b>${dBR(x.paid_until)}</b>${x.plan?" · "+esc(x.plan):""}</div><div>💳 ${brl(x.monthly_fee)}/mês · implantação ${x.setup_paid?'<span style="color:var(--green)">paga ✓</span>':`<b style="color:#FF8A00">${brl(x.setup_fee)} a receber</b>`}</div></div>
       <div class="row" style="justify-content:flex-end"><button class="btn o sm" data-m="${x.id}">+1 mês</button><button class="btn o sm" data-e="${x.id}">Editar</button><button class="btn ${x.active?"r":"g"} sm" data-b="${x.id}">${x.active?"Bloquear":"Liberar"}</button></div></div>`).join("")||'<p class="empty">Nenhuma loja ainda.</p>'}</div></div>`;
@@ -112,6 +114,13 @@ function edit(x){
     <label class="fld"><span>Nome da loja</span><input class="in" id="nm" value="${esc(x.name)}"></label>
     <label class="fld"><span>Endereço do cardápio</span><div class="row" style="flex-wrap:nowrap"><span class="muted" style="white-space:nowrap">${esc(SITE.replace(/^https?:\/\//,""))}/</span><input class="in" id="sl" value="${esc(x.slug)}"></div></label>
     <p class="muted" style="margin:-6px 0 0;font-size:12px">⚠️ Se mudar o endereço, o link antigo para de funcionar.</p>
+    ${HAS25?`<div class="card grid" style="gap:8px"><b>🌐 Domínio próprio do cliente (opcional)</b>
+      <label class="fld"><span>Domínio (ex.: pedidos.pizzariadoze.com.br)</span><input class="in" id="cd" autocapitalize="none" placeholder="deixe vazio se não tiver" value="${esc(x.custom_domain||"")}"></label>
+      <details><summary class="muted" style="cursor:pointer;font-size:12.5px">Como ligar o domínio (passo a passo)</summary><ol class="muted" style="font-size:12.5px;margin:6px 0 0;padding-left:18px;line-height:1.55">
+        <li>Na <b>Vercel</b> → projeto → <b>Settings → Domains</b> → digite o domínio do cliente → <b>Add</b>.</li>
+        <li>A Vercel mostra o apontamento. Pra subdomínio (pedidos.loja.com.br) é um <b>CNAME</b> com valor <b>cname.vercel-dns.com</b>.</li>
+        <li>O cliente (ou você, com o acesso dele) cria esse apontamento no lugar onde o domínio foi comprado (Registro.br, Hostinger, GoDaddy…).</li>
+        <li>Escreva o domínio aqui em cima e clique em <b>Salvar</b>. Quando a Vercel mostrar ✅ "Valid", o cardápio já abre pelo domínio.</li></ol></details></div>`:`<p class="muted" style="font-size:12px">🌐 Pra usar domínio próprio do cliente, rode a parte 25 do banco.</p>`}
     <label class="fld"><span>Tipo de negócio</span>${segSel(x.segment)}</label>
     <div class="grid g2"><label class="fld"><span>Nome do dono</span><input class="in" id="on" value="${esc(x.owner_name||"")}"></label><label class="fld"><span>WhatsApp do dono</span><input class="in" id="op" value="${esc(x.owner_phone||"")}"></label></div>
     <div class="grid g2"><label class="fld"><span>Pago até</span><input class="in" id="pu" type="date" value="${x.paid_until||""}"></label><label class="fld"><span>Plano</span><input class="in" id="pl" value="${esc(x.plan||"")}"></label></div>
@@ -124,7 +133,9 @@ function edit(x){
       <button class="btn o sm" id="lg" style="justify-self:start">Salvar login</button></div><p class="err" id="e" hidden></p>`,
     `<button class="btn" id="sv">Salvar</button>`);
   $("#sv",dr).onclick=async()=>{const r=await sb.rpc("admin_update_store",{p:{id:x.id,name:$("#nm",dr).value.trim(),slug:slugify($("#sl",dr).value),segment:$("#sg",dr).value,owner_name:$("#on",dr).value.trim(),owner_phone:$("#op",dr).value.trim(),paid_until:$("#pu",dr).value,plan:$("#pl",dr).value.trim(),notes:$("#nt",dr).value.trim(),setup_fee:money2($("#sf",dr).value),monthly_fee:money2($("#mf",dr).value),setup_paid:$("#spd",dr).checked}});
-    if(r.error){$("#e",dr).hidden=false;$("#e",dr).textContent=r.error.message;return}ov.innerHTML="";toast("Salvo");list()};
+    if(r.error){$("#e",dr).hidden=false;$("#e",dr).textContent=r.error.message;return}
+    if(HAS25&&($("#cd",dr).value.trim()||"")!==(x.custom_domain||"")){const d=await sb.rpc("admin_set_domain",{p_id:x.id,p_domain:$("#cd",dr).value.trim()});if(d.error){$("#e",dr).hidden=false;$("#e",dr).textContent=d.error.message;return}}
+    ov.innerHTML="";toast("Salvo");list()};
   $("#lg",dr).onclick=async()=>{const u=$("#ou",dr).value.trim(),pw=$("#ow",dr).value;if(!u||pw.length<4){$("#e",dr).hidden=false;$("#e",dr).textContent="Usuário e senha (mín. 4) obrigatórios.";return}
     const r=await sb.rpc("admin_store_login",{p:{store_id:x.id,username:u,password:pw,name:$("#on",dr).value.trim()||"Dono"}});
     if(r.error){$("#e",dr).hidden=false;$("#e",dr).textContent=r.error.message;return}toast("🔑 Login "+r.data.login+" salvo");list()};

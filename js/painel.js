@@ -113,7 +113,7 @@ const MENU=[["Operação",[["pedidos","🧾","Pedidos"],["novo","➕","Novo pedi
 let ME={role:"dono",name:"",email:"",id:null};
 const OWNER=()=>ME.role==="dono";
 const SID=()=>ME.store_id||1;                                           // loja de quem está logado
-const STORE_URL=()=>location.origin+(SID()===1||!ME.store_slug?"/":"/"+ME.store_slug);   // link do cardápio desta loja
+const STORE_URL=()=>ME.domain?"https://"+ME.domain+"/":location.origin+(SID()===1||!ME.store_slug?"/":"/"+ME.store_slug);   // link do cardápio desta loja
 /* o que o dono pode liberar pra cada funcionário (o caixa é sempre liberado) */
 const PERMS=[["pedidos","🧾 Pedidos do cardápio (ver, aceitar e mudar status)"],["novo","➕ Fazer pedido por telefone"],["historico","📋 Ver histórico de pedidos"],
   ["entregas","🏍️ Mandar pedido pro entregador"],["cancelar","❌ Cancelar pedido"],
@@ -133,7 +133,9 @@ async function loadMe(){
   const a=await sb.rpc("my_access");
   if(!a.error&&a.data&&!a.data.ok){ME.block=a.data.reason;ME.name=a.data.name||"";ME.schedule=a.data.schedule;ME.storeName=a.data.store||"";return false}
   ME.role=r.data.role; ME.name=r.data.name||r.data.username||ME.email.split("@")[0]; ME.perms=Array.isArray(r.data.perms)?r.data.perms:PERM_OLD;
-  ME.store_id=r.data.store_id||1; ME.store_slug=(a.data&&a.data.store_slug)||""; ME.admin=!!(a.data&&a.data.admin); return true;
+  ME.store_id=r.data.store_id||1; ME.store_slug=(a.data&&a.data.store_slug)||""; ME.admin=!!(a.data&&a.data.admin);
+  try{const d=await sb.rpc("my_store_domain");if(!d.error&&d.data)ME.domain=d.data}catch{}   // domínio próprio (parte 25)
+  return true;
 }
 const DOW=["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
 function schedTxt(sc){if(!sc||!sc.start)return "Qualquer horário";const d=(sc.days||[0,1,2,3,4,5,6]).slice().sort();

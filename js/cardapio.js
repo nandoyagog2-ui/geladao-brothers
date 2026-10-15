@@ -20,8 +20,8 @@ const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&
 const norm=s=>String(s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/\(.*?\)/g,"").toLowerCase().trim();
 const digits=s=>String(s||"").replace(/\D/g,"");
 /* qual loja: site.com/endereco-da-loja (ou ?loja=). Sem nada = loja 1 */
-const LOJA=window.GB_LOJA!=null?window.GB_LOJA:(()=>{const q=new URLSearchParams(location.search).get("loja");const seg=decodeURIComponent(location.pathname.split("/")[1]||"");return String(q||(/^[a-z0-9-]+$/i.test(seg)?seg:"")).toLowerCase()})();
-const PFX="gb_"+(LOJA?LOJA+"_":"");
+const LOJA=window.GB_LOJA!=null?window.GB_LOJA:(()=>{const q=new URLSearchParams(location.search).get("loja");const seg=decodeURIComponent(location.pathname.split("/")[1]||"");return String(q||(/^[a-z0-9-]+$/i.test(seg)?seg:"")).toLowerCase()||(/(^|\.)vercel\.app$|^localhost$|^127\.|^site$/.test(location.hostname)?"":"@"+location.hostname)})();
+const PFX="gb_"+(LOJA?LOJA.replace(/^@/,"")+"_":"");
 const store={get(k,d){try{return JSON.parse(localStorage.getItem(PFX+k))??d}catch{return d}},set(k,v){try{localStorage.setItem(PFX+k,JSON.stringify(v))}catch{}}};
 
 /* ---------- dados ---------- */
@@ -580,7 +580,7 @@ mark("js");
 })();
 // app instalado no celular abre direto na loja certa, com o nome e a logo dela
 function storeManifest(){ if(!LOJA||!S) return; try{
-  const m={name:S.name,short_name:S.name,start_url:"/"+LOJA,scope:"/",display:"standalone",background_color:"#000000",theme_color:"#000000",
+  const m={name:S.name,short_name:S.name,start_url:LOJA[0]==="@"?"/":"/"+LOJA,scope:"/",display:"standalone",background_color:"#000000",theme_color:"#000000",
     icons:S.logo_url?[{src:S.logo_url,sizes:"512x512",type:"image/png",purpose:"any"}]:[{src:"/img/logo-192.png",sizes:"192x192",type:"image/png"},{src:"/img/logo-512.png",sizes:"512x512",type:"image/png"}]};
   const l=document.querySelector('link[rel="manifest"]'); if(l) l.href=URL.createObjectURL(new Blob([JSON.stringify(m)],{type:"application/manifest+json"}));
   document.title=S.name; const t=document.querySelector('meta[name="apple-mobile-web-app-title"]'); if(t) t.content=S.name;
