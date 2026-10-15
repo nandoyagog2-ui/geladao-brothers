@@ -14,7 +14,7 @@
 <meta name="apple-mobile-web-app-title" content="Geladão">
 <script>
 // começa a buscar o cardápio no mesmo instante em que a página abre
-(function(){var f=(location.pathname.split("/")[1]||"").toLowerCase();if(["painel","admin","impressora"].indexOf(f)>=0&&!/\/$/.test(location.pathname)){location.replace("/"+f+"/"+location.search)}})();
+(function(){var f=(location.pathname.split("/")[1]||"").toLowerCase();if(["painel","admin","impressora","entregador"].indexOf(f)>=0&&!/\/$/.test(location.pathname)){location.replace("/"+f+"/"+location.search)}})();
 window.GB_LOJA=(function(){var q=new URLSearchParams(location.search).get("loja"),seg=decodeURIComponent(location.pathname.split("/")[1]||"");return String(q||(/^[a-z0-9-]+$/i.test(seg)?seg:"")).toLowerCase()})();
 window.GB_PRE=fetch("https://qjhhewvwptjnswaxofkn.supabase.co/rest/v1/rpc/get_menu",{method:"POST",headers:{"apikey":"sb_publishable_npKDicouH-8XqVC_SebOSQ_3VmlF3lb","Content-Type":"application/json"},body:window.GB_LOJA?JSON.stringify({p_loja:window.GB_LOJA}):"{}"}).then(function(r){return r.ok?r.json():null}).catch(function(){return null});
 </script>

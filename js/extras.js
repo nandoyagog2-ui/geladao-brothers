@@ -39,7 +39,8 @@ function courierMsg(o,items){
     `🗺️ ${map}`,"",
     "🧾 *Itens*", ...items.map(i=>`${i.qty}x ${i.name}${(i.options||[]).length?" ("+i.options.map(x=>/^\d+\/\d+ /.test(x.name)?x.name:x.qty+"x "+x.name).join(", ")+")":""}`),"",
     `💰 *Cobrar: ${brl(o.total)}*`, pay,
-    o.notes?`📝 ${o.notes}`:null].filter(x=>x!==null).join("\n");
+    o.notes?`📝 ${o.notes}`:null,
+    window.__courierTk?`\n📲 Suas entregas e o GPS: ${location.origin}/entregador/?k=${window.__courierTk}`:null].filter(x=>x!==null).join("\n");
 }
 async function courierDrawer(o,items){
   const list=(await couriers(true)).filter(c=>c.active);
@@ -50,6 +51,7 @@ async function courierDrawer(o,items){
   $$("[data-cr]",dr).forEach(b=>b.onclick=async()=>{const c=list.find(x=>x.id==b.dataset.cr);
     let w=null, queued=false;
     if(c.phone&&digits(c.phone).length>=10){
+      window.__courierTk=c.token||null;
       if(waOnline()) queued=await waQueue(c.phone,courierMsg(o,items),"entregador",o.id);   // extensão ligada: vai sozinho
       else w=window.open(waURL(c.phone,courierMsg(o,items)),"_blank");                     // desligada: abre o WhatsApp
       if(!queued&&!w) w=window.open(waURL(c.phone,courierMsg(o,items)),"_blank")}
@@ -67,7 +69,7 @@ async function pageEntregadores(m){
   let key="hoje";
   const PAY={taxa:"Recebe a taxa de entrega",fixo:"Valor fixo por entrega",nada:"Não recebe por entrega (fixo/mensal)"};
   m.innerHTML=`<div class="top"><h1>Entregadores</h1><button class="btn" id="nc">➕ Novo entregador</button></div>
-    <div class="grid g2"><div class="card"><b>Cadastrados</b>${list.map(c=>`<div class="line"><span><b>${esc(c.name)}</b> ${c.active?"":'<span class="pill p-inativo">Inativo</span>'}<br><span class="muted" style="font-size:12.5px">${esc(c.phone||"sem telefone")} · ${PAY[c.pay_mode]}${c.pay_mode==="fixo"?" "+brl(c.pay_value):""}</span></span><button class="btn o sm" data-e="${c.id}">Editar</button></div>`).join("")||'<p class="muted">Nenhum entregador ainda.</p>'}</div>
+    <div class="grid g2"><div class="card"><b>Cadastrados</b>${list.map(c=>`<div class="line"><span><b>${esc(c.name)}</b> ${c.active?"":'<span class="pill p-inativo">Inativo</span>'}<br><span class="muted" style="font-size:12.5px">${esc(c.phone||"sem telefone")} · ${PAY[c.pay_mode]}${c.pay_mode==="fixo"?" "+brl(c.pay_value):""}</span></span><span class="row" style="flex-wrap:nowrap">${c.token?`<button class="btn o sm" data-lk="${c.id}" title="Link do celular (GPS)">🔗 Link</button>`:""}<button class="btn o sm" data-e="${c.id}">Editar</button></span></div>`).join("")||'<p class="muted">Nenhum entregador ainda.</p>'}</div>
     <div class="card grid" style="align-content:start"><b>Como mandar o pedido pro entregador</b><ol style="margin:0;padding-left:18px;line-height:1.6"><li>Em <b>Pedidos</b>, abra o pedido de entrega.</li><li>Clique em <b>🏍️ Mandar pro entregador</b> e escolha quem vai levar.</li><li>O WhatsApp abre com endereço, mapa, itens, valor e troco. É só enviar.</li></ol></div></div>
     <div class="card" style="margin-top:14px"><div class="row" style="justify-content:space-between"><b>💵 Acerto dos entregadores</b><div class="tabs" style="margin:0">${[["hoje","Hoje"],["ontem","Ontem"],["7","7 dias"],["mes","Este mês"]].map(([k,l])=>`<button data-k="${k}" aria-current="${k===key}">${l}</button>`).join("")}</div></div><div id="ac" style="margin-top:8px"></div></div>`;
   const edit=c=>{const F=[{k:"name",l:"Nome"},{k:"phone",l:"WhatsApp (com DDD)"},{k:"pay_mode",l:"Como ele recebe",t:"select",o:Object.entries(PAY)},{k:"pay_value",l:"Valor fixo por entrega (R$) — só se escolheu valor fixo",t:"money"},{k:"active",l:"Ativo",t:"check"},{k:"notes",l:"Observação (moto, placa, pix…)",t:"area"}];
@@ -75,6 +77,7 @@ async function pageEntregadores(m){
     $("#sv",dr).onclick=async()=>{const v=readForm(F,dr);if(!v.name){$("#e",dr).hidden=false;$("#e",dr).textContent="Informe o nome.";return}v.pay_value=v.pay_value??0;
       c?await q(sb.from("couriers").update(v).eq("id",c.id)):await q(sb.from("couriers").insert(v));closeDr();toast("Entregador salvo");PAGES.entregadores(m)}};
   $("#nc",m).onclick=()=>edit(null); $$("[data-e]",m).forEach(b=>b.onclick=()=>edit(list.find(c=>c.id==b.dataset.e)));
+  $$("[data-lk]",m).forEach(b=>b.onclick=()=>linkDrawer(list.find(c=>c.id==b.dataset.lk)));
   const acerto=async()=>{
     const t=new Date();t.setHours(0,0,0,0);const a=key==="ontem"?new Date(t-864e5):key==="7"?new Date(t-6*864e5):key==="mes"?new Date(t.getFullYear(),t.getMonth(),1):t, b=key==="ontem"?t:new Date(t.getTime()+864e5);
     const ords=await q(sb.from("orders").select("id,number,total,delivery_fee,courier_id,created_at,neighborhood,customer_name,status").not("courier_id","is",null).gte("created_at",a.toISOString()).lt("created_at",b.toISOString()).neq("status","cancelado").order("created_at"));

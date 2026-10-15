@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#090909">
+<meta name="robots" content="noindex">
+<title>VYNTRA · Entregador</title>
+<link rel="icon" href="/img/vyntra-32.png">
+<link rel="apple-touch-icon" href="/img/vyntra-apple.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,500..900&family=Figtree:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="/css/painel.css">
+<style>
+  .wrapE{max-width:560px;margin:0 auto;padding:16px 16px 40px;display:grid;gap:12px}
+  .gps{border-radius:14px;padding:14px;font-weight:800;font-size:15px;display:flex;gap:10px;align-items:center;justify-content:center;width:100%}
+  .gps.on{background:rgba(61,220,132,.14);color:var(--green)}
+  .gps.off{background:var(--y);color:#111}
+  .gps.err{background:rgba(255,90,78,.14);color:var(--red)}
+  .eo{display:grid;gap:8px}
+  .eo h2{margin:0;font-size:20px;font-family:var(--display)}
+  .eo .big{font-size:16px;font-weight:700}
+  .acts{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .acts .btn{justify-content:center;padding:12px 8px}
+  a.btn{text-decoration:none}
+  .pay{background:var(--card-2);border-radius:10px;padding:10px;font-weight:700}
+</style>
+</head>
+<body>
+<div class="wrapE" id="app"><div class="empty">Carregando…</div></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/dist/umd/supabase.js"></script>
+<script src="/js/config.js"></script>
+<script src="/js/entregador.js"></script>
+</body>
+</html>

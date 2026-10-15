@@ -105,7 +105,7 @@ function loginView(msg){
 
 /* ---------- estrutura ---------- */
 let S={}, page="pedidos", newCount=0;
-const MENU=[["Operação",[["pedidos","🧾","Pedidos"],["novo","➕","Novo pedido (telefone)"],["historico","📋","Histórico"],["caixa","💰","Caixa / venda balcão"],["mesas","🍽️","Mesas e comandas"],["cozinha","🍳","Cozinha (tela de preparo)"],["devolucoes","🔄","Trocas e devoluções"]]],
+const MENU=[["Operação",[["pedidos","🧾","Pedidos"],["novo","➕","Novo pedido (telefone)"],["historico","📋","Histórico"],["caixa","💰","Caixa / venda balcão"],["mesas","🍽️","Mesas e comandas"],["cozinha","🍳","Cozinha (tela de preparo)"],["aovivo","🗺️","Entregas ao vivo"],["devolucoes","🔄","Trocas e devoluções"]]],
   ["Cardápio",[["catalogo","🍺","Catálogo"],["complementos","🧊","Complementos"],["destaques","🔥","Destaques e promoções"]]],
   ["Clientes",[["clientes","👥","Clientes e fiado"],["avaliacoes","⭐","Avaliações"],["cupons","🎟️","Cupons"],["fidelidade","🏆","Fidelidade"]]],
   ["Gestão",[["desempenho","📈","Financeiro e lucro"],["estoque","📦","Estoque"],["inventario","📋","Inventário (contagem)"],["validades","📅","Validades"],["financeiro","💸","Despesas e contas"],["delivery","🛵","Delivery e bairros"],["entregadores","🏍️","Entregadores"],["chatbot","🤖","Chatbot e avisos"],["equipe","🪪","Equipe e acessos"],["config","⚙️","Configurações"]]]];
@@ -123,7 +123,7 @@ const PERMS=[["pedidos","🧾 Pedidos do cardápio (ver, aceitar e mudar status)
 const PERM_OLD=["pedidos","novo","historico","entregas","cancelar","resumo","desconto","fiado_vender","estoque","clientes"];   // quem foi criado antes desta versão
 const PERM_NEW=["resumo"];                                                                                                      // padrão de funcionário novo
 const can=k=>OWNER()||(ME.perms||[]).includes(k);
-const canSee=p=>OWNER()||p==="caixa"||(["pedidos","novo","historico","estoque","clientes","cozinha","mesas"].includes(p)&&can(p))||(p==="devolucoes"&&can("devolucao"))||(p==="inventario"&&can("inventario"))||(p==="validades"&&(can("inventario")||can("estoque")));
+const canSee=p=>OWNER()||p==="caixa"||(["pedidos","novo","historico","estoque","clientes","cozinha","mesas"].includes(p)&&can(p))||(p==="aovivo"&&(can("entregas")||can("pedidos")))||(p==="devolucoes"&&can("devolucao"))||(p==="inventario"&&can("inventario"))||(p==="validades"&&(can("inventario")||can("estoque")));
 const home=()=>canSee("pedidos")?"pedidos":!OWNER()&&can("mesas")?"mesas":!OWNER()&&can("cozinha")?"cozinha":"caixa";
 async function loadMe(){
   const {data:{user}}=await sb.auth.getUser(); ME.email=user?user.email:""; ME.id=user?user.id:null;
@@ -181,6 +181,7 @@ PAGES.entregadores=m=>pageEntregadores(m);
 PAGES.devolucoes=m=>pageDevolucoes(m);
 PAGES.cozinha=(m,soft)=>pageCozinha(m,soft);
 PAGES.mesas=m=>pageMesas(m);
+PAGES.aovivo=m=>pageAoVivo(m);
 PAGES.inventario=m=>pageInventario(m);
 PAGES.validades=m=>pageValidades(m);
 PAGES.chatbot=m=>pageChatbot(m);

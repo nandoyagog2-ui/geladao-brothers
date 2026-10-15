@@ -499,8 +499,9 @@ async function trackSheet(id,phone){
   const t0=new Date(o.created_at), mm=o.type==="delivery"?[S.delivery_time_min,S.delivery_time_max]:[S.prep_time_min||10,(S.prep_time_min||10)+10], hm=n=>new Date(t0.getTime()+n*6e4).toTimeString().slice(0,5);
   const cancel=o.status==="cancelado";
   sheet("Detalhes do pedido",`<div class="track"><small>Previsão de ${o.type==="delivery"?"entrega":"retirada"}</small><b>${hm(mm[0])} - ${hm(mm[1])}</b><div class="status"><i style="${cancel?"background:var(--red)":""}"></i>${STATUS[o.status]||o.status}</div></div>
+    ${o.status==="saiu_entrega"&&o.courier?trackBox(o):""}
     <div class="grp">Pedido Nº ${o.number}</div>
-    ${o.items.map(i=>`<div class="ci"><div class="t"><span class="q">${i.qty}x</span> ${esc(i.name)}${(i.options||[]).length?`<div class="sub">${i.options.map(x=>x.qty+"x "+esc(x.name)).join(", ")}</div>`:""}</div><b>${brl(i.total)}</b></div>`).join("")}
+    ${o.items.map(i=>`<div class="ci"><div class="t"><span class="q">${i.qty}x</span> ${esc(i.name)}${(i.options||[]).length?`<div class="sub">${i.options.map(x=>esc(/^\d+\/\d+ /.test(x.name)||!(x.qty>1)?x.name:x.qty+"x "+x.name)).join(", ")}</div>`:""}</div><b>${brl(i.total)}</b></div>`).join("")}
     <div class="sum"><div><span>Subtotal</span><span>${brl(o.subtotal)}</span></div><div><span>Taxa de entrega</span><span>${o.type==="delivery"?(+o.delivery_fee?brl(o.delivery_fee):"Grátis"):"Retirada"}</span></div>${+o.discount?`<div><span>Desconto</span><span>- ${brl(o.discount)}</span></div>`:""}<div class="tot"><span>Total</span><span>${brl(o.total)}</span></div></div>
     <div class="grp">Pagamento</div><div class="ci"><div class="t"><b>${esc(o.payment_method)}</b>${o.change_for?`<div class="sub">Troco para ${brl(o.change_for)} · levar ${brl(o.change_for-o.total)} de troco</div>`:""}</div></div>
     <div class="grp">Informações para ${o.type==="delivery"?"entrega":"retirada"}</div>
@@ -509,6 +510,30 @@ async function trackSheet(id,phone){
     <button class="link" id="rf">Atualizar status</button><div style="height:14px"></div>`,
     `${S.whatsapp?`<a class="btn c" style="text-decoration:none" target="_blank" rel="noopener" href="${storeWa()}">Falar com o estabelecimento</a>`:""}<div class="two"><button class="btn c o" data-home>Voltar ao cardápio</button><button class="btn c o" data-orders>Meus pedidos</button></div>`);
   L("#rf").onclick=()=>trackSheet(id,phone);
+  if(o.status==="saiu_entrega"&&o.courier) trackMap(o,id,phone);
+  else if(o.status==="saiu_entrega"){clearTimeout(window.__trkT);window.__trkT=setTimeout(()=>{if(document.getElementById("rf"))trackSheet(id,phone)},30000)}
+}
+/* ---------- motoboy chegando (mapa ao vivo) ---------- */
+const kmB=(a,b,c,d)=>{const R=6371,r=x=>x*Math.PI/180,x=Math.sin(r(c-a)/2)**2+Math.cos(r(a))*Math.cos(r(c))*Math.sin(r(d-b)/2)**2;return 2*R*Math.asin(Math.sqrt(x))};
+function trackInfo(o){const c=o.courier;if(!(o.lat&&o.lng&&c.lat))return `🏍️ <b>${esc(c.name)}</b> está a caminho com seu pedido`;
+  const d=kmB(c.lat,c.lng,o.lat,o.lng),min=Math.max(1,Math.round(d/22*60+1));
+  return d<0.15?`🏍️ <b>${esc(c.name)}</b> está chegando! Fique de olho 👀`:`🏍️ <b>${esc(c.name)}</b> está a <b>${d<1?Math.round(d*1000)+" m":d.toFixed(1).replace(".",",")+" km"}</b> · chega em <b>~${min} min</b>`}
+function trackBox(o){return `<div class="track" style="margin-top:10px;text-align:left;padding:12px"><div id="trki" style="font-size:15px">${trackInfo(o)}</div><div id="trkm" style="height:220px;border-radius:12px;margin-top:10px;overflow:hidden;background:#222"></div></div>`}
+function trackMap(o,id,phone){
+  const go=()=>{const el=document.getElementById("trkm");const LF=window.L;if(!el||!LF||!LF.map)return;
+    const c=[o.courier.lat,o.courier.lng];const m=LF.map(el,{zoomControl:false,attributionControl:true}).setView(c,15);
+    LF.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",{maxZoom:19,attribution:"&copy; OpenStreetMap &copy; CARTO"}).addTo(m);
+    const pin=t=>LF.divIcon({className:"",html:`<div style="transform:translate(-50%,-50%);display:inline-block;white-space:nowrap;background:#111;color:#fff;border:2px solid var(--y,#FFC400);border-radius:999px;padding:3px 9px;font:700 13px system-ui">${t}</div>`,iconSize:null});
+    const cm=LF.marker(c,{icon:pin("🏍️ "+esc(o.courier.name))}).addTo(m);
+    if(o.lat&&o.lng){LF.marker([o.lat,o.lng],{icon:pin("🏠 Você")}).addTo(m);m.fitBounds([c,[o.lat,o.lng]],{padding:[34,34],maxZoom:16})}
+    clearInterval(window.__trkI);
+    window.__trkI=setInterval(async()=>{if(!document.getElementById("trkm")){clearInterval(window.__trkI);return}
+      const {data:n}=await sb.rpc("get_order",{p_id:id,p_phone:phone});if(!n)return;
+      if(n.status!=="saiu_entrega"||!n.courier){clearInterval(window.__trkI);trackSheet(id,phone);return}
+      cm.setLatLng([n.courier.lat,n.courier.lng]);const i=document.getElementById("trki");if(i)i.innerHTML=trackInfo(n)},15000)};
+  if(window.L&&window.L.map) return go();
+  const css=document.createElement("link");css.rel="stylesheet";css.href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css";document.head.appendChild(css);
+  const js=document.createElement("script");js.src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js";js.onload=go;document.head.appendChild(js);
 }
 function feeSheet(){
   if(KM()){const ex=d=>brl(kmFee(d));return sheet("Taxa de entrega",`<p class="sub" style="color:var(--muted);margin-top:14px">A taxa depende da distância até você</p>
