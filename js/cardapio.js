@@ -522,7 +522,7 @@ function trackBox(o){return `<div class="track" style="margin-top:10px;text-alig
 function trackMap(o,id,phone){
   const go=()=>{const el=document.getElementById("trkm");const LF=window.L;if(!el||!LF||!LF.map)return;
     const c=[o.courier.lat,o.courier.lng];const m=LF.map(el,{zoomControl:false,attributionControl:true}).setView(c,15);
-    LF.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",{maxZoom:19,attribution:"&copy; OpenStreetMap &copy; CARTO"}).addTo(m);
+    LF.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"&copy; OpenStreetMap"}).addTo(m);
     const pin=t=>LF.divIcon({className:"",html:`<div style="transform:translate(-50%,-50%);display:inline-block;white-space:nowrap;background:#111;color:#fff;border:2px solid var(--y,#FFC400);border-radius:999px;padding:3px 9px;font:700 13px system-ui">${t}</div>`,iconSize:null});
     const cm=LF.marker(c,{icon:pin("🏍️ "+esc(o.courier.name))}).addTo(m);
     if(o.lat&&o.lng){LF.marker([o.lat,o.lng],{icon:pin("🏠 Você")}).addTo(m);m.fitBounds([c,[o.lat,o.lng]],{padding:[34,34],maxZoom:16})}

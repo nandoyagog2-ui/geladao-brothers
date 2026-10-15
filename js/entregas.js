@@ -37,7 +37,7 @@ async function pageAoVivo(m){
   if(window.L&&L.map){
     const c0=S.store_lat!=null?[+S.store_lat,+S.store_lng]:[-3.7319,-38.5267];
     LV.map=L.map($("#lvm"),{zoomControl:true}).setView(c0,14);
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{maxZoom:19,attribution:'&copy; OpenStreetMap &copy; CARTO'}).addTo(LV.map);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,className:"lvdark",attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'}).addTo(LV.map);
     LV.layer=L.layerGroup().addTo(LV.map); LV.fit=false;
     setTimeout(()=>LV.map&&LV.map.invalidateSize(),200);
   }
@@ -57,7 +57,8 @@ async function lvTick(m,cs){
       L.marker([c.last_lat,c.last_lng],{icon:pin("🏍️ "+esc(c.name.split(" ")[0]),fresh(c.last_seen)?"cr":"cr old"),zIndexOffset:1000}).addTo(LV.layer).bindTooltip(`${c.name} · ${seenTxt(c.last_seen)}`);
       if(fresh(c.last_seen)) pts.push([c.last_lat,c.last_lng]);
       os.filter(o=>o.courier_id===c.id&&o.lat&&o.lng).forEach(o=>L.polyline([[c.last_lat,c.last_lng],[o.lat,o.lng]],{color:"#FFC400",weight:3,opacity:.7,dashArray:"6 8"}).addTo(LV.layer))});
-    if(!LV.fit&&pts.length>1){LV.map.fitBounds(pts,{padding:[40,40],maxZoom:16});LV.fit=true}
+    // enquadra tudo na tela (de novo quando aparece alguém novo no mapa)
+    if(pts.length&&(!LV.fit||pts.length>LV.fit)){if(pts.length>1)LV.map.fitBounds(pts,{padding:[40,40],maxZoom:16});else LV.map.setView(pts[0],15);LV.fit=pts.length}
   }
   const card=c=>{const mine=os.filter(o=>o.courier_id===c.id),on=fresh(c.last_seen);
     return `<div class="card grid" style="gap:6px"><div class="row" style="justify-content:space-between"><b>🏍️ ${esc(c.name)}</b><span class="pill ${on?"p-concluido":"p-inativo"}">${on?"● online":seenTxt(c.last_seen)}</span></div>
