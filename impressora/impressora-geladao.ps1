@@ -7,7 +7,8 @@
 # =========================================================
 $ErrorActionPreference = "Stop"
 $Port = 9123
-$Allowed = @("https://geladao-brothers.vercel.app", "http://localhost", "http://127.0.0.1")
+$Allowed = @("https://geladao-brothers.vercel.app", "https://cardapiovyntra.com.br", "https://www.cardapiovyntra.com.br")
+$AllowedLocal = @("http://localhost", "http://127.0.0.1")
 
 Add-Type -TypeDefinition @"
 using System;
@@ -124,7 +125,7 @@ while ($true) {
     $req = Read-Request $stream
     if ($null -eq $req) { $client.Close(); continue }
     $origin = $req.Headers["origin"]
-    $okOrigin = (-not $origin) -or ($Allowed | Where-Object { $origin.StartsWith($_) })
+    $okOrigin = (-not $origin) -or ($Allowed -contains $origin) -or ($AllowedLocal | Where-Object { $origin -eq $_ -or $origin.StartsWith($_ + ":") })
     if (-not $okOrigin) { Send-Response $stream 403 '{"ok":false,"error":"site nao autorizado"}' $origin; $client.Close(); continue }
 
     $path = $req.Path; $query = ""
