@@ -175,7 +175,7 @@ async function shell(){
 }
 function openBtn(){const b=$("#ob");b.className="openbtn"+(S.is_open?"":" off");b.innerHTML=`<i></i>${S.is_open?"Loja aberta · clique p/ fechar":"Loja fechada · clique p/ abrir"}`}
 function menu(){
-  $("#menu").innerHTML=MENU.map(([s,items])=>[s,items.filter(([k])=>canSee(k))]).filter(([,items])=>items.length).map(([s,items])=>`<div class="sec">${s}</div>`+items.map(([k,i,l])=>`<button data-p="${k}" aria-current="${page===k}"><span>${i}</span>${l}${k==="pedidos"&&newCount?`<span class="badge">${newCount}</span>`:""}${k==="validades"&&window.__lotsSoon?`<span class="badge" title="Vencendo em até 7 dias">${window.__lotsSoon}</span>`:""}</button>`).join("")).join("");
+  $("#menu").innerHTML=MENU.map(([s,items])=>[s,items.filter(([k])=>canSee(k))]).filter(([,items])=>items.length).map(([s,items])=>`<div class="sec">${s}</div>`+items.map(([k,i,l])=>`<button data-p="${k}" aria-current="${page===k}"><span>${i}</span>${l}${k==="pedidos"&&newCount?`<span class="badge">${newCount}</span>`:""}${k==="validades"&&window.__lotsSoon?`<span class="badge" title="Vencendo em até 7 dias">${window.__lotsSoon}</span>`:""}</button>`).join("")).join("")+`<div class="sec">Ajuda</div><a href="/ajuda/" target="_blank" rel="noopener" style="display:flex;gap:10px;align-items:center;padding:9px 12px;border-radius:10px;text-decoration:none;color:inherit;font-weight:600"><span>🎓</span>Curso rápido (como usar)</a>`;
   $$("#menu [data-p]").forEach(b=>b.onclick=()=>{go(b.dataset.p);$("#side").classList.remove("open")});
 }
 const PAGES={};

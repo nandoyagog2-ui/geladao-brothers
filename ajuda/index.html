@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Curso rápido · VYNTRA</title>
+<meta name="description" content="Aprenda a usar cada função do sistema VYNTRA: cardápio, pedidos, caixa, mesas, cozinha, entregadores, estoque, financeiro e WhatsApp.">
+<meta name="theme-color" content="#FFC400">
+<link rel="icon" href="/img/vyntra-32.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,500..900&family=Figtree:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="/vyntra/vyntra.css">
+<style>
+  .c-head{background:var(--amarelo)}
+  .c-head h1{font:900 clamp(34px,5vw,60px)/1 var(--display);font-stretch:122%;margin:18px 0 12px}
+  .c-head p{max-width:40em;margin:0 0 30px;font-size:18px}
+  .c-grid{display:grid;grid-template-columns:260px minmax(0,1fr);gap:48px;padding:40px 20px 80px;max-width:1160px;margin:0 auto}
+  .toc{position:sticky;top:16px;align-self:start;max-height:calc(100vh - 32px);overflow:auto;font-size:14.5px}
+  .toc b{display:block;font:800 15px/1.2 var(--display);margin:18px 0 6px}
+  .toc b:first-child{margin-top:0}
+  .toc a{display:block;padding:5px 0;text-decoration:none;color:var(--texto2)}
+  .toc a:hover{color:var(--preto);text-decoration:underline}
+  .toc-m{display:none}
+  .mod{margin:0 0 20px}
+  .mod > h2{font:900 clamp(26px,3.4vw,38px)/1.05 var(--display);font-stretch:116%;margin:0 0 6px;padding-top:12px}
+  .mod > p{color:var(--texto2);margin:0 0 26px}
+  .aula{border-top:3px solid var(--preto);padding:22px 0 40px;scroll-margin-top:12px}
+  .aula h3{font:800 24px/1.2 var(--display);font-stretch:108%;margin:0 0 6px}
+  .aula .num{display:inline-block;min-width:44px;font:900 15px/1 var(--display);background:var(--amarelo);border:2px solid var(--preto);border-radius:8px;padding:5px 7px;margin-right:10px;vertical-align:3px;text-align:center}
+  .aula .pra{color:var(--texto2);margin:0 0 14px}
+  .aula ol,.aula ul{padding-left:22px;margin:0 0 14px}
+  .aula li{margin:6px 0}
+  .aula figure{margin:16px 0;border:2px solid var(--preto);border-radius:14px;overflow:hidden;background:#000}
+  .aula figure img{width:100%}
+  .aula figcaption{background:var(--cinza);color:var(--texto2);font-size:13.5px;padding:8px 12px}
+  .aula figure.side{max-width:380px}
+  .figs{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start}
+  .figs figure{flex:1 1 220px;max-width:300px;margin:0}
+  .dica{background:var(--cinza);border-left:5px solid var(--amarelo);border-radius:0 10px 10px 0;padding:12px 16px;margin:12px 0 0}
+  .dica > b:first-child{display:block;margin-bottom:2px}
+  kbd{font:700 13.5px/1 var(--body);background:#fff;border:1.5px solid var(--preto);border-bottom-width:3px;border-radius:6px;padding:2px 6px}
+  @media (max-width:900px){.c-grid{grid-template-columns:1fr;gap:10px}.toc{display:none}.toc-m{display:block;margin:0 0 24px}
+    .toc-m summary{cursor:pointer;font-weight:800;border:2px solid var(--preto);border-radius:12px;padding:12px 14px}
+    .toc-m .toc{display:block;position:static;max-height:none;padding:6px 14px}}
+  @media print{.toc,.toc-m,.c-head nav{display:none}.c-grid{display:block}.aula{break-inside:avoid-page}}
+</style>
+</head>
+<body>
+<header class="c-head">
+  <div class="wrap">
+    <div class="top"><a class="logo" href="/vyntra/"><img src="/img/vyntra-192.png" alt="">VYNTRA</a><nav><a href="/painel/">Entrar no painel</a></nav></div>
+    <h1>Curso rápido: como usar o sistema</h1>
+    <p>São 5 partes curtas, com uma aula para cada função do painel. Siga na ordem na primeira vez. Depois, volte direto na aula que precisar.</p>
+  </div>
+</header>
+
+<div class="c-grid">
+  <aside>
+    <details class="toc-m"><summary>Ver todas as aulas</summary><nav class="toc" data-toc></nav></details>
+    <nav class="toc" data-toc></nav>
+  </aside>
+
+  <main>
+  <!-- ===================== PARTE 1 ===================== -->
+  <section class="mod" id="parte1">
+    <h2>Parte 1 · Começando</h2>
+    <p>Entrar no painel, deixar a loja com a sua cara e ligar a impressora.</p>
+
+    <article class="aula" id="entrar">
+      <h3><span class="num">1.1</span>Entrar no painel e abrir a loja</h3>
+      <p class="pra">O painel é onde a loja recebe os pedidos e controla tudo. Funciona no computador e no celular.</p>
+      <ol>
+        <li>Abra <b>cardapiovyntra.com.br/painel</b> no Google Chrome.</li>
+        <li>Digite o <b>usuário</b> e a <b>senha</b> que você recebeu e clique em <b>Entrar</b>.</li>
+        <li>No menu da esquerda, o botão verde <b>Loja aberta · clique p/ fechar</b> abre e fecha a loja para o cliente. Quando está fechada, o cardápio mostra "Fechado" e não aceita pedido.</li>
+        <li>Clique em <b>Clique aqui p/ ativar o som</b>. O navegador só toca o aviso de pedido depois de um clique. Ali também dá para escolher o som e o volume.</li>
+      </ol>
+      <div class="dica"><b>Dica</b>No celular, abra o painel no Chrome, toque nos três pontinhos <kbd>⋮</kbd> e em <b>Adicionar à tela inicial</b>. Ele vira um ícone, como um aplicativo.</div>
+    </article>
+
+    <article class="aula" id="config">
+      <h3><span class="num">1.2</span>Configurações da loja</h3>
+      <p class="pra">Nome, logo, horário, formas de pagamento e endereço. É o que o cliente vê no topo do cardápio.</p>
+      <ol>
+        <li>No menu, entre em <b>Gestão → Configurações</b>.</li>
+        <li>Em <b>Dados da loja</b>, preencha nome, WhatsApp que recebe os pedidos, endereço, logo, capa (a faixa do topo) e a cor principal.</li>
+        <li>Em <b>Horário de funcionamento</b>, coloque o horário de cada dia. Marque <b>Fechado</b> nos dias sem atendimento. Se fechar depois da meia-noite, coloque o horário do dia seguinte (ex.: 18:00 às 02:00).</li>
+        <li>Marque as <b>formas de pagamento</b> que a loja aceita e coloque a <b>chave Pix</b>.</li>
+        <li>Estando na loja, clique em <b>📍 Usar a localização deste aparelho</b>. Ela é usada na taxa por km e no mapa do entregador.</li>
+        <li>Clique em <b>Salvar tudo</b>.</li>
+      </ol>
+      <figure><img src="/img/ajuda/config.webp" alt="Tela de configurações com dados da loja, horários e formas de pagamento" loading="lazy" width="1100" height="837"><figcaption>Configurações: dados da loja à esquerda, horário e pagamentos à direita.</figcaption></figure>
+    </article>
+
+    <article class="aula" id="impressora">
+      <h3><span class="num">1.3</span>Impressora: o cupom sai sozinho</h3>
+      <p class="pra">Funciona com impressora térmica de 58 ou 80 mm. O pedido aceito e a venda do balcão saem impressos sem precisar clicar.</p>
+      <ol>
+        <li>Em <b>Pedidos</b>, clique em <b>🖨️ Impressora</b> (também aparece no Caixa).</li>
+        <li>Recomendado: em <b>⭐ Impressão direta no computador</b>, clique em <b>⬇️ Baixar</b>. Na pasta Downloads, clique com o botão direito no arquivo → <b>Extrair tudo</b> → dois cliques em <b>INSTALAR</b>.</li>
+        <li>Volte ao painel e clique em <b>🔗 Conectar no programa</b>. Se o Chrome pedir permissão, clique em <b>Permitir</b>. Escolha a impressora em <b>Qual impressora</b>.</li>
+        <li>Em <b>Imprimir sozinho</b>, escolha o que acontece ao finalizar uma venda no balcão (imprimir, perguntar ou não imprimir) e marque <b>pedido novo do cardápio</b> para imprimir as entregas.</li>
+        <li>Escolha o tamanho do papel (58 ou 80 mm) e faça um pedido de teste.</li>
+      </ol>
+      <figure class="side"><img src="/img/ajuda/d-impressora.webp" alt="Janela de configuração da impressora" loading="lazy" width="676" height="1000"><figcaption>Janela da impressora.</figcaption></figure>
+      <div class="dica"><b>Dica</b>No caixa, as linhas do topo do cupom (nome, CNPJ, endereço, telefone) ficam na mesma janela da impressora.</div>
+    </article>
+
+    <article class="aula" id="cliente">
+      <h3><span class="num">1.4</span>Como o cliente faz o pedido</h3>
+      <p class="pra">Vale fazer um pedido de teste você mesmo, para conhecer o caminho do cliente.</p>
+      <ol>
+        <li>O cliente abre o link do seu cardápio (ex.: <b>cardapiovyntra.com.br/sualoja</b>) pelo Instagram, WhatsApp ou QR code.</li>
+        <li>Toca no produto, escolhe as opções (sabores, borda, adicionais) e toca em <b>Adicionar</b>.</li>
+        <li>Na sacola, toca em <b>Continuar pedido</b>, escolhe entrega ou retirada, coloca nome, telefone, endereço e forma de pagamento, e finaliza.</li>
+        <li>O pedido chega na hora no painel, com som. O cliente acompanha o andamento pela tela do pedido.</li>
+      </ol>
+      <div class="figs">
+        <figure><img src="/img/ajuda/cardapio-home.webp" alt="Início do cardápio no celular" loading="lazy" width="390" height="780"><figcaption>Início do cardápio</figcaption></figure>
+        <figure><img src="/img/ajuda/cardapio-pizza.webp" alt="Escolha dos sabores da pizza" loading="lazy" width="390" height="780"><figcaption>Escolhendo os sabores</figcaption></figure>
+        <figure><img src="/img/ajuda/cardapio-sacola.webp" alt="Sacola do cliente" loading="lazy" width="390" height="780"><figcaption>Sacola</figcaption></figure>
+      </div>
+    </article>
+  </section>
+
+  <!-- ===================== PARTE 2 ===================== -->
+  <section class="mod" id="parte2">
+    <h2>Parte 2 · Montando o cardápio</h2>
+    <p>Produtos, sabores, promoções, taxas de entrega, cupons e fidelidade.</p>
+
+    <article class="aula" id="catalogo">
+      <h3><span class="num">2.1</span>Categorias e produtos</h3>
+      <p class="pra">As categorias são os blocos do cardápio (Pizzas, Lanches, Bebidas). Os produtos ficam dentro delas.</p>
+      <ol>
+        <li>Entre em <b>Cardápio → Catálogo</b>.</li>
+        <li>Para criar uma categoria, clique no <b>➕</b> ao lado de <b>Categorias</b>. Coloque nome e foto. As setas <b>↑ ↓</b> mudam a ordem no cardápio e o <b>✎</b> edita.</li>
+        <li>Para criar um produto, clique em <b>➕ Novo produto</b>. Preencha nome, categoria, descrição, preço e foto. Se quiser ver o lucro, coloque também o <b>custo</b>.</li>
+        <li>Na coluna de situação, um clique alterna o produto entre <b>Ativo</b> e <b>Em falta</b>. O produto em falta aparece como esgotado no cardápio.</li>
+      </ol>
+      <figure><img src="/img/ajuda/catalogo.webp" alt="Catálogo com categorias e produtos" loading="lazy" width="1100" height="304"><figcaption>Catálogo: categorias à esquerda e produtos da categoria à direita.</figcaption></figure>
+      <div class="figs">
+        <figure><img src="/img/ajuda/d-produto.webp" alt="Formulário de produto" loading="lazy" width="676" height="1000"><figcaption>Editar produto</figcaption></figure>
+        <figure><img src="/img/ajuda/d-categoria.webp" alt="Formulário de categoria" loading="lazy" width="676" height="1000"><figcaption>Editar categoria</figcaption></figure>
+      </div>
+      <div class="dica"><b>Restaurante?</b>Na categoria dá para marcar <b>vai pra tela da cozinha</b> (desmarque em bebidas) e <b>Só vende em alguns horários</b> (ex.: marmitas das 11:00 às 15:00).</div>
+    </article>
+
+    <article class="aula" id="complementos">
+      <h3><span class="num">2.2</span>Complementos e pizza meio a meio</h3>
+      <p class="pra">Complementos são as escolhas do produto: sabores, borda, adicionais, ponto da carne, gelo e outras.</p>
+      <ol>
+        <li>Entre em <b>Cardápio → Complementos</b> e clique em <b>➕ Novo complemento</b>.</li>
+        <li>Coloque o nome (ex.: Adicionais), o <b>mínimo</b> (0 = opcional) e o <b>máximo</b> que o cliente pode escolher.</li>
+        <li>Clique em <b>➕ Opção</b> para cada opção (ex.: Bacon R$ 4,00).</li>
+        <li>Volte no <b>Catálogo</b>, edite o produto e marque o complemento na parte de complementos do produto.</li>
+      </ol>
+      <p><b>Pizza meio a meio:</b> crie o complemento "Sabores" com máximo 2 (ou 3). Em <b>Como cobrar as opções</b>, escolha <b>cobra o sabor MAIS CARO</b> ou <b>cobra a MÉDIA</b>. Em cada sabor, coloque o preço da pizza inteira daquele sabor. O produto "Pizza Grande" fica com preço R$ 0 e o cardápio mostra "a partir de".</p>
+      <figure><img src="/img/ajuda/complementos.webp" alt="Tela de complementos com sabores de pizza" loading="lazy" width="1100" height="391"><figcaption>Complemento de sabores configurado como pizza.</figcaption></figure>
+    </article>
+
+    <article class="aula" id="destaques">
+      <h3><span class="num">2.3</span>Destaques e promoções</h3>
+      <p class="pra">O que aparece primeiro no cardápio e os preços com desconto.</p>
+      <ol>
+        <li>Entre em <b>Cardápio → Destaques e promoções</b>.</li>
+        <li>Na coluna <b>Promoção</b>, coloque o preço promocional. O cardápio mostra o preço antigo riscado e a porcentagem de desconto.</li>
+        <li>Marque <b>Destaque</b> para o produto aparecer no topo, e <b>Novidade</b> para ganhar a etiqueta "Novidade".</li>
+        <li>Em <b>🔥 Leve mais, pague menos</b>, clique em <b>➕ Nova promoção por quantidade</b> (ex.: levando 12, cada uma sai R$ 6,00).</li>
+      </ol>
+      <figure><img src="/img/ajuda/destaques.webp" alt="Tela de destaques e promoções" loading="lazy" width="1100" height="736"></figure>
+      <div class="dica"><b>Balcão</b>Por padrão, as promoções valem só no cardápio. Para valer também no caixa, marque <b>Usar as promoções também no caixa / balcão</b>.</div>
+    </article>
+
+    <article class="aula" id="delivery">
+      <h3><span class="num">2.4</span>Delivery, bairros e taxa de entrega</h3>
+      <p class="pra">Onde você entrega, quanto cobra e quanto tempo leva.</p>
+      <ol>
+        <li>Entre em <b>Gestão → Delivery e bairros</b>.</li>
+        <li>Em <b>Como cobrar a entrega</b>, escolha <b>Por bairro</b> ou <b>Por km (distância)</b>.</li>
+        <li>Por bairro: clique em <b>➕ Novo bairro</b> e coloque nome, taxa e tempo. Taxa 0 = entrega grátis.</li>
+        <li>À direita, marque se faz entrega e retirada, o tempo de entrega e o pedido mínimo, e clique em <b>Salvar</b>.</li>
+      </ol>
+      <figure><img src="/img/ajuda/delivery.webp" alt="Tela de delivery e bairros" loading="lazy" width="1100" height="740"></figure>
+      <div class="dica"><b>Dica</b>Use o nome do bairro igual ao dos Correios. Assim o CEP do cliente encontra o bairro sozinho.</div>
+    </article>
+
+    <article class="aula" id="cupons">
+      <h3><span class="num">2.5</span>Cupons de desconto</h3>
+      <p class="pra">Um código que o cliente digita na sacola para ganhar desconto.</p>
+      <ol>
+        <li>Entre em <b>Clientes → Cupons</b> e clique em <b>➕ Novo cupom</b>.</li>
+        <li>Coloque o <b>código</b> (ex.: PRIMEIRA10) e o tipo: <b>% de desconto</b>, <b>R$ de desconto</b> ou <b>Entrega grátis</b>.</li>
+        <li>Se quiser, coloque pedido mínimo, limite de usos e data de validade. Clique em <b>Salvar</b>.</li>
+      </ol>
+      <figure><img src="/img/ajuda/cupons.webp" alt="Lista de cupons" loading="lazy" width="1100" height="276"></figure>
+    </article>
+
+    <article class="aula" id="fidelidade">
+      <h3><span class="num">2.6</span>Programa de fidelidade</h3>
+      <p class="pra">O cliente junta pontos a cada compra e troca por um prêmio.</p>
+      <ol>
+        <li>Entre em <b>Clientes → Fidelidade</b> e marque <b>Programa de fidelidade ligado</b>.</li>
+        <li>Coloque quantos pontos o cliente ganha a cada R$ 1,00, quantos pontos valem o prêmio e qual é o prêmio (ex.: um refri de 2 L).</li>
+        <li>Clique em <b>Salvar</b>. Os pontos entram quando o pedido é marcado como <b>Concluído</b>.</li>
+        <li>Para entregar o prêmio, abra o cliente em <b>Clientes e fiado</b> e tire os pontos usados.</li>
+      </ol>
+      <figure><img src="/img/ajuda/fidelidade.webp" alt="Configuração da fidelidade" loading="lazy" width="1100" height="499"></figure>
+    </article>
+  </section>
+
+  <!-- ===================== PARTE 3 ===================== -->
+  <section class="mod" id="parte3">
+    <h2>Parte 3 · O dia a dia</h2>
+    <p>Pedidos, caixa, mesas, cozinha e entregas.</p>
+
+    <article class="aula" id="pedidos">
+      <h3><span class="num">3.1</span>Pedidos: aceitar, preparar e entregar</h3>
+      <p class="pra">Todo pedido do cardápio aparece aqui, dividido em colunas: Novos, Em preparo, Saiu / Pronto e Concluídos hoje.</p>
+      <ol>
+        <li>Quando chega pedido, o painel toca até alguém aceitar. Clique no cartão do pedido.</li>
+        <li>Confira itens, endereço e pagamento e clique em <b>✅ Aceitar pedido</b>. O cupom imprime e o cliente recebe o aviso no WhatsApp.</li>
+        <li>Quando estiver pronto: em entrega, clique em <b>🏍️ Mandar pro entregador</b> e escolha quem leva. Em retirada, marque <b>Pronto p/ retirada</b>.</li>
+        <li>Na entrega ou na retirada, clique em <b>Concluir</b>.</li>
+      </ol>
+      <figure><img src="/img/ajuda/pedidos.webp" alt="Painel de pedidos em colunas" loading="lazy" width="1100" height="441"></figure>
+      <figure class="side"><img src="/img/ajuda/d-pedido.webp" alt="Detalhes de um pedido com botões de ação" loading="lazy" width="676" height="1000"><figcaption>Pedido aberto: aceitar, imprimir, mandar pro entregador ou cancelar.</figcaption></figure>
+      <div class="dica"><b>Cancelar</b>O botão vermelho <b>Cancelar</b> devolve os produtos ao estoque.</div>
+    </article>
+
+    <article class="aula" id="novo">
+      <h3><span class="num">3.2</span>Pedido por telefone ou WhatsApp</h3>
+      <p class="pra">Quando o cliente pede por ligação ou mensagem, lance pelo painel para entrar no caixa, no estoque e na impressão.</p>
+      <ol>
+        <li>Clique em <b>➕ Novo pedido</b> (ou no menu <b>Novo pedido (telefone)</b>).</li>
+        <li>Escolha <b>Balcão</b>, <b>Retirada</b> ou <b>Entrega</b>.</li>
+        <li>Toque no <b>+</b> dos produtos. Digite o telefone: se o cliente já comprou, nome e endereço aparecem sozinhos.</li>
+        <li>Escolha o pagamento, o troco se for em dinheiro, e clique em <b>Lançar pedido</b>.</li>
+      </ol>
+      <figure><img src="/img/ajuda/novo.webp" alt="Tela de novo pedido por telefone" loading="lazy" width="1100" height="744"></figure>
+    </article>
+
+    <article class="aula" id="caixa">
+      <h3><span class="num">3.3</span>Caixa: venda no balcão</h3>
+      <p class="pra">Abertura do turno, vendas no balcão, sangria e fechamento com conferência do dinheiro.</p>
+      <ol>
+        <li>Entre em <b>Caixa / venda balcão</b>. Coloque quem está abrindo e o <b>dinheiro na gaveta para começar</b> (troco). Clique em <b>🔓 Abrir caixa</b>.</li>
+        <li>Para vender, toque nos produtos ou passe o <b>leitor de código de barras</b>. Clique na quantidade para digitar um número.</li>
+        <li>Escolha a forma de pagamento. Em dinheiro, digite quanto o cliente deu e o troco aparece. Para dividir (ex.: parte no Pix, parte no dinheiro), clique em <b>➗ Dividir pagamento</b>.</li>
+        <li>Clique em <b>✔ FINALIZAR VENDA</b>.</li>
+        <li>Para tirar ou colocar dinheiro na gaveta, use <b>💸 Sangria / suprimento</b>. Para ver tudo do turno, use <b>📋 Movimentação</b>.</li>
+        <li>No fim do turno, clique em <b>🔒 Fechar caixa</b>, conte o dinheiro da gaveta e digite o valor. O sistema mostra se sobrou ou faltou.</li>
+      </ol>
+      <figure><img src="/img/ajuda/d-caixa.webp" alt="Tela do caixa com venda em andamento" loading="lazy" width="1100" height="837"></figure>
+      <div class="dica"><b>Troca de turno</b>O botão <b>🔄 Trocar usuário</b> passa o caixa para outra pessoa sem sair do sistema. Pizza meio a meio no balcão, por enquanto, lance como <b>comanda avulsa</b> em Mesas e comandas.</div>
+    </article>
+
+    <article class="aula" id="mesas">
+      <h3><span class="num">3.4</span>Mesas e comandas</h3>
+      <p class="pra">Para restaurante e bar: o garçom abre a mesa, lança os pedidos pelo celular e a conta fecha no caixa.</p>
+      <ol>
+        <li>Primeira vez: em <b>Mesas e comandas</b>, clique em <b>⚙️ Configurar mesas</b>, digite quantas mesas a loja tem e clique em <b>➕ Criar</b>. Ali também fica a taxa de serviço (10%).</li>
+        <li>Toque numa mesa <b>Livre</b> → <b>Abrir mesa</b>. Para cliente sem mesa, use <b>➕ Comanda avulsa</b> (pelo nome ou número da ficha).</li>
+        <li>Toque nos produtos, use o <b>✎</b> para observação e toque em <b>📤 ENVIAR PEDIDO</b>. Os itens vão para a tela da cozinha.</li>
+        <li>Na hora da conta, use <b>🖨️ Conferência</b> para imprimir a pré-conta. Depois, clique em <b>💰 Fechar conta</b>, escolha se cobra os 10%, a forma de pagamento (ou divida) e clique em <b>RECEBER E FECHAR</b>.</li>
+      </ol>
+      <figure><img src="/img/ajuda/d-mesa.webp" alt="Comanda da mesa com itens lançados" loading="lazy" width="1100" height="604"><figcaption>Mesa aberta: produtos à esquerda, pedido novo e itens já lançados à direita.</figcaption></figure>
+      <figure class="side"><img src="/img/ajuda/d-fechar-conta.webp" alt="Fechar conta da mesa" loading="lazy" width="676" height="1000"><figcaption>Fechar conta com serviço e divisão por pessoa.</figcaption></figure>
+      <div class="dica"><b>Garçom</b>Em <b>Equipe</b>, marque <b>🍽️ Atender mesas</b> no login do garçom. Ele entra direto nas mesas.</div>
+    </article>
+
+    <article class="aula" id="cozinha">
+      <h3><span class="num">3.5</span>Tela da cozinha</h3>
+      <p class="pra">Mostra os pedidos aceitos e as mesas com o que a cozinha tem que preparar. Boa para deixar numa TV ou tablet.</p>
+      <ol>
+        <li>Entre em <b>Cozinha (tela de preparo)</b> e clique em <b>⛶ Tela cheia</b>.</li>
+        <li>Cada cartão mostra o tempo: verde, amarelo com 10 minutos e vermelho com 20.</li>
+        <li>Quando terminar, toque em <b>✔ Pronto</b>. Pedido de retirada já muda para "Pronto para retirada" e o cliente é avisado.</li>
+      </ol>
+      <figure><img src="/img/ajuda/cozinha.webp" alt="Tela da cozinha com cartões de pedidos" loading="lazy" width="1100" height="399"></figure>
+    </article>
+
+    <article class="aula" id="entregas">
+      <h3><span class="num">3.6</span>Entregadores e entregas ao vivo</h3>
+      <p class="pra">O entregador recebe as entregas no celular e você vê no mapa onde ele está.</p>
+      <ol>
+        <li>Em <b>Gestão → Entregadores</b>, clique em <b>➕ Novo entregador</b> e coloque nome, WhatsApp e como ele recebe (taxa da entrega, valor fixo ou nada).</li>
+        <li>Clique em <b>🔗 Link</b> ao lado do nome → <b>Mandar pro WhatsApp dele</b>. Esse link é só dele e não tem senha.</li>
+        <li>No celular, ele abre o link, toca em <b>📍 LIGAR O GPS</b> e permite a localização. As entregas aparecem com endereço, valor a cobrar, rota no Maps ou Waze e o botão <b>✔ ENTREGUE</b>.</li>
+        <li>No painel, <b>Entregas ao vivo</b> mostra o mapa com a loja, os motoboys e os destinos. Em <b>Entregadores</b>, o <b>Acerto</b> mostra quanto pagar a cada um.</li>
+      </ol>
+      <div class="figs">
+        <figure><img src="/img/ajuda/entregador-celular.webp" alt="Tela do entregador no celular" loading="lazy" width="390" height="844"><figcaption>O que o entregador vê no celular</figcaption></figure>
+        <figure><img src="/img/ajuda/d-link-entregador.webp" alt="Link do celular do entregador" loading="lazy" width="676" height="372"><figcaption>Link do entregador</figcaption></figure>
+      </div>
+      <div class="dica"><b>Importante</b>O celular só manda a localização enquanto a página do link está aberta na tela.</div>
+    </article>
+
+    <article class="aula" id="devolucoes">
+      <h3><span class="num">3.7</span>Trocas e devoluções</h3>
+      <p class="pra">Devolve o dinheiro (ou gera crédito para troca) e volta o produto para o estoque.</p>
+      <ol>
+        <li>Entre em <b>Trocas e devoluções</b> e encontre a venda pelo número ou escolha uma dos últimos 3 dias.</li>
+        <li>Marque os itens e a quantidade que voltaram, o motivo e como devolver o valor.</li>
+        <li>Clique em <b>✔ Confirmar devolução</b>. Em troca, o desconto já vai para o caixa para passar o produto novo.</li>
+      </ol>
+      <figure><img src="/img/ajuda/devolucoes.webp" alt="Tela de trocas e devoluções" loading="lazy" width="1100" height="476"></figure>
+    </article>
+
+    <article class="aula" id="historico">
+      <h3><span class="num">3.8</span>Histórico de pedidos</h3>
+      <p class="pra">Busca qualquer pedido antigo por data, status, número, nome ou telefone.</p>
+      <ol>
+        <li>Entre em <b>Histórico</b>, escolha as datas em <b>De</b> e <b>Até</b> e, se quiser, o status.</li>
+        <li>Clique numa linha para abrir o pedido e reimprimir.</li>
+      </ol>
+      <figure><img src="/img/ajuda/historico.webp" alt="Histórico de pedidos" loading="lazy" width="1100" height="576"></figure>
+    </article>
+  </section>
+
+  <!-- ===================== PARTE 4 ===================== -->
+  <section class="mod" id="parte4">
+    <h2>Parte 4 · Gestão</h2>
+    <p>Clientes, estoque, dinheiro e equipe.</p>
+
+    <article class="aula" id="clientes">
+      <h3><span class="num">4.1</span>Clientes e fiado</h3>
+      <p class="pra">Todo cliente que pede entra aqui sozinho, com histórico, pontos e quanto deve no fiado.</p>
+      <ol>
+        <li>Entre em <b>Clientes → Clientes e fiado</b>. Busque pelo nome ou telefone, ou marque <b>Só quem está devendo</b>.</li>
+        <li>Para vender fiado: no caixa, escolha <b>Fiado</b> como pagamento e selecione o cliente (precisa ter telefone).</li>
+        <li>Para receber: abra o cliente e lance o pagamento do fiado.</li>
+      </ol>
+      <figure><img src="/img/ajuda/clientes.webp" alt="Lista de clientes com fiado" loading="lazy" width="1100" height="378"></figure>
+    </article>
+
+    <article class="aula" id="estoque">
+      <h3><span class="num">4.2</span>Estoque</h3>
+      <p class="pra">O estoque baixa sozinho a cada venda e avisa quando está acabando.</p>
+      <ol>
+        <li>No produto (Catálogo), ligue o controle de estoque e coloque a quantidade e o <b>mínimo</b>.</li>
+        <li>Em <b>Gestão → Estoque</b>, use <b>Entrada</b> quando chegar mercadoria e <b>Ajustar</b> para corrigir. O <b>Histórico</b> mostra cada movimento.</li>
+      </ol>
+      <figure><img src="/img/ajuda/estoque.webp" alt="Tela de estoque" loading="lazy" width="1100" height="303"></figure>
+      <div class="dica"><b>Fardo</b>Para o fardo "12 x Heineken" baixar 12 unidades da lata, no produto do fardo escolha <b>Usa o estoque de outro produto</b> e a lata.</div>
+    </article>
+
+    <article class="aula" id="inventario">
+      <h3><span class="num">4.3</span>Inventário (contagem)</h3>
+      <p class="pra">Conta o que tem de verdade na loja e acerta o estoque de uma vez.</p>
+      <ol>
+        <li>Entre em <b>Gestão → Inventário (contagem)</b>.</li>
+        <li>Digite a quantidade contada de cada produto, ou bipe com o leitor (cada bipe soma 1, e o fardo soma o tanto que tem dentro).</li>
+        <li>Clique em <b>✔ Conferir e salvar</b>, confira a diferença e clique em <b>💾 Salvar inventário</b>.</li>
+      </ol>
+      <figure><img src="/img/ajuda/inventario.webp" alt="Tela de inventário" loading="lazy" width="1100" height="323"></figure>
+    </article>
+
+    <article class="aula" id="validades">
+      <h3><span class="num">4.4</span>Validades</h3>
+      <p class="pra">Avisa antes de um produto vencer.</p>
+      <ol>
+        <li>Entre em <b>Gestão → Validades</b> e clique em <b>➕ Lançar validade</b> quando a mercadoria chegar.</li>
+        <li>Escolha o produto, a quantidade e a data de vencimento. O menu mostra um aviso quando algo está perto de vencer.</li>
+      </ol>
+      <figure><img src="/img/ajuda/validades.webp" alt="Tela de validades" loading="lazy" width="1100" height="572"></figure>
+    </article>
+
+    <article class="aula" id="desempenho">
+      <h3><span class="num">4.5</span>Financeiro e lucro</h3>
+      <p class="pra">Quanto vendeu, quanto custou e quanto sobrou de verdade.</p>
+      <ol>
+        <li>Entre em <b>Gestão → Financeiro e lucro</b> e escolha o período (Hoje, 7 dias, Este mês…).</li>
+        <li>Em <b>⚙️ Taxas e meta</b>, coloque as taxas da maquininha e dos apps e a meta do mês.</li>
+        <li>O <b>Demonstrativo de resultado</b> mostra faturamento, custo das mercadorias, despesas e o <b>lucro real</b>. Use <b>⬇️ Exportar vendas</b> para tirar uma planilha.</li>
+      </ol>
+      <figure><img src="/img/ajuda/desempenho.webp" alt="Financeiro com faturamento, lucro e gráfico" loading="lazy" width="1100" height="837"></figure>
+      <div class="dica"><b>Lucro certo</b>O lucro só fica certo com o <b>custo</b> dos produtos preenchido no Catálogo.</div>
+    </article>
+
+    <article class="aula" id="despesas">
+      <h3><span class="num">4.6</span>Despesas e contas</h3>
+      <p class="pra">Aluguel, luz, fornecedores: o que pagar e quando.</p>
+      <ol>
+        <li>Entre em <b>Gestão → Despesas e contas</b> e clique em <b>➕ Nova despesa</b>: descrição, valor, categoria e vencimento.</li>
+        <li>Contas que se repetem todo mês podem ser fixas. No começo do mês, clique em <b>🔁 Lançar fixas do mês</b>.</li>
+        <li>Quando pagar, edite a conta e marque como paga.</li>
+      </ol>
+      <figure><img src="/img/ajuda/financeiro.webp" alt="Despesas e contas" loading="lazy" width="1100" height="398"></figure>
+    </article>
+
+    <article class="aula" id="avaliacoes">
+      <h3><span class="num">4.7</span>Avaliações</h3>
+      <p class="pra">Depois do pedido concluído, o cliente dá de 1 a 5 estrelas e pode comentar.</p>
+      <ol>
+        <li>Entre em <b>Clientes → Avaliações</b> para ver a nota média e os comentários.</li>
+        <li>Notas 3 ou menos aparecem separadas, para você falar com o cliente.</li>
+      </ol>
+      <figure><img src="/img/ajuda/avaliacoes.webp" alt="Tela de avaliações" loading="lazy" width="1100" height="495"></figure>
+    </article>
+
+    <article class="aula" id="equipe">
+      <h3><span class="num">4.8</span>Equipe e acessos</h3>
+      <p class="pra">Cada funcionário tem o seu login e vê só o que você liberar.</p>
+      <ol>
+        <li>Entre em <b>Gestão → Equipe e acessos</b> e clique em <b>➕ Novo funcionário</b>.</li>
+        <li>Coloque o nome, o usuário (ex.: joao) e a senha.</li>
+        <li>Marque o que ele pode fazer (pedidos, desconto, fiado, estoque, mesas, cozinha…) e, se quiser, o horário em que ele pode entrar. Clique em <b>Salvar</b>.</li>
+      </ol>
+      <figure><img src="/img/ajuda/equipe.webp" alt="Tela de equipe e acessos" loading="lazy" width="1100" height="522"></figure>
+    </article>
+  </section>
+
+  <!-- ===================== PARTE 5 ===================== -->
+  <section class="mod" id="parte5">
+    <h2>Parte 5 · WhatsApp automático</h2>
+    <p>Robô de boas-vindas e avisos de pedido sem digitar nada.</p>
+
+    <article class="aula" id="extensao">
+      <h3><span class="num">5.1</span>Instalar a extensão do WhatsApp</h3>
+      <p class="pra">Precisa ser feito uma vez, no computador da loja, com o Google Chrome.</p>
+      <ol>
+        <li>No painel, entre em <b>Gestão → Chatbot e avisos</b> e abra <b>🧩 Instalar a extensão do WhatsApp</b>. Clique em <b>⬇️ Baixar a extensão VYNTRA</b>.</li>
+        <li>Em Downloads, clique com o botão direito no arquivo → <b>Extrair tudo</b>. Guarde a pasta em Documentos e não apague.</li>
+        <li>No Chrome, digite <b>chrome://extensions</b>, ligue o <b>Modo do desenvolvedor</b>, clique em <b>Carregar sem compactação</b> e escolha a pasta.</li>
+        <li>Abra o <b>web.whatsapp.com</b>, entre com o WhatsApp da loja, clique na aba <b>⚡ VYNTRA</b> do lado direito e faça login com o usuário do painel.</li>
+      </ol>
+      <figure><img src="/img/ajuda/chatbot.webp" alt="Tela do chatbot com o passo a passo da extensão" loading="lazy" width="1100" height="837"></figure>
+    </article>
+
+    <article class="aula" id="robo">
+      <h3><span class="num">5.2</span>Robô e avisos de pedido</h3>
+      <p class="pra">O robô manda o link do cardápio para quem chama, e os avisos de "aceito", "saiu" e "pronto" vão sozinhos.</p>
+      <ol>
+        <li>Em <b>Chatbot e avisos</b>, ligue <b>🤖 Robô de respostas automáticas</b>.</li>
+        <li>Em <b>Como o robô responde</b>, o recomendado é <b>Só a 1ª mensagem</b>: ele dá boas-vindas com o cardápio (ou avisa que está fechado) e depois deixa você atender.</li>
+        <li>Escreva as mensagens de loja aberta e fechada. Pode usar <b>{nome}</b>, <b>{loja}</b> e <b>{link}</b>.</li>
+        <li>Nos avisos automáticos, escolha em quais status o cliente é avisado. Clique em <b>💾 Salvar</b> e use <b>🔧 Testar envio automático</b>.</li>
+      </ol>
+      <div class="dica"><b>Para funcionar</b>O WhatsApp Web precisa ficar aberto no computador da loja, com a extensão ligada.</div>
+    </article>
+
+    <p style="margin-top:30px">Ficou alguma dúvida? Fale com o suporte da VYNTRA pelo <a data-wa href="/vyntra/">WhatsApp</a>.</p>
+  </section>
+  </main>
+</div>
+
+<footer><div class="wrap"><span>VYNTRA · Curso rápido</span><nav><a href="/painel/">Entrar no painel</a><a href="/termos/">Termos de uso</a><a href="/privacidade/">Privacidade</a></nav></div></footer>
+<script src="/vyntra/contato.js"></script>
+<script>
+(function(){
+  // índice montado a partir das aulas
+  var html="";
+  document.querySelectorAll(".mod").forEach(function(m){
+    html+="<b>"+m.querySelector("h2").textContent+"</b>";
+    m.querySelectorAll(".aula").forEach(function(a){html+='<a href="#'+a.id+'">'+a.querySelector("h3").textContent.replace(/^(\d\.\d)/,"$1 · ")+"</a>"});
+  });
+  document.querySelectorAll("[data-toc]").forEach(function(n){n.innerHTML=html});
+  document.querySelectorAll(".toc-m a").forEach(function(a){a.addEventListener("click",function(){a.closest("details").open=false})});
+  var V=window.VYNTRA||{},d=String(V.whatsapp||"").replace(/\D/g,"");
+  if(d.length>=10) document.querySelectorAll("[data-wa]").forEach(function(a){a.href="https://wa.me/"+(d.length<=11?"55":"")+d;a.target="_blank";a.rel="noopener"});
+})();
+</script>
+</body>
+</html>

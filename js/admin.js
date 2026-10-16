@@ -111,6 +111,9 @@ No painel, vá em Gestão → Chatbot e avisos → "Instalar a extensão do What
 🖨️ Impressora (cupom sai sozinho):
 No painel, clique em Impressora → "Baixar" o programinha → Extrair → INSTALAR → "Conectar no programa".
 
+🎓 Curso rápido de como usar cada função:
+${SITE}/ajuda/
+
 Qualquer dúvida, é só me chamar aqui. Boas vendas! 🚀</textarea>`,`<button class="btn" id="cp">📋 Copiar mensagem</button>`);
     $("#cp",ov).onclick=async()=>{try{await navigator.clipboard.writeText($("#msg",ov).value);toast("Mensagem copiada")}catch{$("#msg",ov).select()}};
     list()};
