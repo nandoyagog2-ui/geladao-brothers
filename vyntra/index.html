@@ -14,62 +14,81 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,500..900&family=Figtree:wght@400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="/vyntra/vyntra.css">
+<link rel="stylesheet" href="/vyntra/venda.css">
 <script src="/vyntra/contato.js"></script>
 </head>
-<body>
+<body class="v2">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-wa" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8s-.4-.1-.6.1-.7.8-.8 1-.3.2-.6.1a6.7 6.7 0 0 1-3.3-2.9c-.2-.4.2-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.9c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.8 11.9 11.9 0 0 0 4.6 4c1.7.7 2.4.8 3.2.7a2.8 2.8 0 0 0 1.8-1.3 2.3 2.3 0 0 0 .2-1.3c-.1-.1-.3-.2-.5-.3z"/></symbol>
+  </defs>
+</svg>
 
-<header class="hero">
+<header class="h2x">
   <div class="wrap">
     <div class="top">
       <a class="logo" href="/vyntra/"><img src="/img/vyntra-192.png" alt="">VYNTRA</a>
-      <nav><a class="hide-m" href="#como-funciona">Como funciona</a><a class="hide-m" href="#preco">Preço</a><a href="/painel/">Entrar no painel</a></nav>
+      <nav><a class="hide-m" href="#como-funciona">Como funciona</a><a class="hide-m" href="#preco">Preço</a><a class="hide-m" href="/ajuda/">Curso</a><a href="/painel/">Entrar</a></nav>
     </div>
-    <div class="hero-grid">
+    <div class="grid">
       <div>
-        <h1>Seu delivery com cardápio, caixa e WhatsApp num sistema só.</h1>
-        <p class="lead">O cliente pede pelo seu link, o pedido chega no painel com som, o cupom sai na impressora e o WhatsApp avisa o cliente sozinho. Sem comissão por pedido.</p>
+        <h1>Seu delivery num sistema só.</h1>
+        <p class="lead">Cardápio digital com o seu link, pedido chegando no painel com som, cupom saindo sozinho na impressora e o WhatsApp avisando o cliente. Sem comissão por pedido.</p>
         <div class="ctas">
-          <a class="btn wa" data-wa href="#preco"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8s-.4-.1-.6.1-.7.8-.8 1-.3.2-.6.1a6.7 6.7 0 0 1-3.3-2.9c-.2-.4.2-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.9c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.8 11.9 11.9 0 0 0 4.6 4c1.7.7 2.4.8 3.2.7a2.8 2.8 0 0 0 1.8-1.3 2.3 2.3 0 0 0 .2-1.3c-.1-.1-.3-.2-.5-.3z"/></svg>Falar no WhatsApp</a>
+          <a class="btn wa" data-wa href="#preco"><svg aria-hidden="true"><use href="#i-wa"/></svg>Falar no WhatsApp</a>
           <a class="btn ghost" href="/demo" target="_blank" rel="noopener">Testar o cardápio de exemplo</a>
         </div>
-        <ul class="facts"><li>Link próprio do seu cardápio</li><li>Sem taxa por pedido</li><li>A gente monta tudo pra você</li></ul>
+        <ul class="chips"><li>0% de comissão</li><li>A gente monta tudo</li><li>Funciona no celular</li></ul>
       </div>
-      <div>
-        <div class="phone" id="phone"><span class="tag"></span><img src="/img/site/cardapio-home.webp" alt="Cardápio digital de exemplo aberto no celular" width="585" height="1170"></div>
+      <div class="scene" aria-hidden="true">
+        <div class="laptop"><div class="scr"><img src="/img/site/hero-painel.webp" alt="" width="1280" height="800"></div><div class="base"></div></div>
+        <div class="phn"><img src="/img/site/cardapio-home.webp" alt="" width="585" height="1170"></div>
+        <div class="toast t1"><i>🔔</i><span>Pedido #142 chegou<small>Marina · Aldeota · R$ 83,80</small></span></div>
+        <div class="toast t2"><i>🖨️</i><span>Cupom impresso<small>sem clicar em nada</small></span></div>
+        <div class="toast t3"><i>✅</i><span>Cliente avisado<small>no WhatsApp: pedido aceito</small></span></div>
       </div>
     </div>
   </div>
 </header>
 
+<div class="band">
+  <div class="wrap">
+    <div><b>0%</b><span>de comissão por pedido</span></div>
+    <div><b>R$ 99,90</b><span>por mês, tudo incluso</span></div>
+    <div><b>Sem limite</b><span>de pedidos e produtos</span></div>
+    <div><b>1 sistema</b><span>cardápio, caixa, estoque e WhatsApp</span></div>
+  </div>
+</div>
+
 <main>
 <section id="como-funciona">
   <div class="wrap">
-    <h2>Um pedido, do clique à entrega</h2>
+    <h2>Do clique do cliente até a entrega</h2>
     <p class="sub">Tudo que acontece com um pedido fica num lugar só: no celular do cliente, no balcão, na cozinha e na moto.</p>
-    <div class="steps">
-      <div class="step">
+    <div class="flow">
+      <div class="fl">
         <div><div class="n" aria-hidden="true">1</div><h3>O cliente pede pelo seu link</h3>
-          <p>Ele abre o cardápio pelo Instagram, pelo WhatsApp ou pelo QR code da mesa, escolhe e finaliza. Não precisa baixar aplicativo.</p>
-          <ul><li>Pizza meio a meio, adicionais, bordas e observação</li><li>Taxa de entrega por bairro ou por quilômetro</li><li>Cupom de desconto e programa de fidelidade</li></ul></div>
-        <div class="shot duo"><img src="/img/site/cardapio-pizza.webp" alt="Escolha de sabores da pizza meio a meio" loading="lazy" width="585" height="1170"><img src="/img/site/cardapio-sacola.webp" alt="Sacola com o pedido e sugestões" loading="lazy" width="585" height="1170"></div>
+          <p>Pelo Instagram, pelo WhatsApp ou pelo QR code da mesa. Não precisa baixar aplicativo.</p>
+          <ul><li>Pizza meio a meio, bordas e adicionais</li><li>Taxa por bairro ou por quilômetro</li><li>Cupom de desconto e fidelidade</li></ul></div>
+        <div class="vis"><div class="duo"><div class="m"><img src="/img/site/cardapio-pizza.webp" alt="Escolha dos sabores da pizza meio a meio" loading="lazy" width="585" height="1170"></div><div class="m"><img src="/img/site/cardapio-sacola.webp" alt="Sacola do cliente com o pedido" loading="lazy" width="585" height="1170"></div></div></div>
       </div>
-      <div class="step">
+      <div class="fl">
         <div><div class="n" aria-hidden="true">2</div><h3>Chega no painel, toca e imprime</h3>
-          <p>O pedido aparece na hora, com som até alguém aceitar. O cupom sai sozinho na impressora térmica e o cliente recebe no WhatsApp que o pedido foi aceito.</p>
-          <ul><li>Avisos automáticos de "em preparo", "saiu" e "pronto"</li><li>Robô que responde quem chama no WhatsApp com o link do cardápio</li></ul></div>
-        <div class="shot"><img src="/img/site/painel-pedidos.webp" alt="Painel de pedidos com colunas novos, em preparo, saiu e concluídos" loading="lazy" width="1400" height="554"></div>
+          <p>O painel toca até alguém aceitar. O cupom sai sozinho e o cliente recebe no WhatsApp que o pedido foi aceito.</p>
+          <ul><li>Avisos de "em preparo", "saiu" e "pronto"</li><li>Robô que responde com o link do cardápio</li><li>Pedido por telefone entra no mesmo painel</li></ul></div>
+        <div class="vis"><div class="lap"><img src="/img/site/painel-pedidos.webp" alt="Painel de pedidos em colunas" loading="lazy" width="1400" height="554"></div></div>
       </div>
-      <div class="step">
+      <div class="fl">
         <div><div class="n" aria-hidden="true">3</div><h3>A cozinha prepara, a moto leva</h3>
-          <p>A tela da cozinha mostra o que fazer, com o tempo de cada pedido. O entregador abre o link dele, liga o GPS e você vê no mapa onde ele está. O cliente também acompanha.</p>
-          <ul><li>Mesas e comandas com 10% de serviço</li><li>Garçom lança o pedido pelo celular</li></ul></div>
-        <div class="shot"><img src="/img/site/painel-cozinha.webp" alt="Tela da cozinha com pedidos e cronômetro" loading="lazy" width="1400" height="501"></div>
+          <p>A tela da cozinha mostra o que fazer e há quanto tempo. O entregador liga o GPS e você vê no mapa onde ele está.</p>
+          <ul><li>Mesas e comandas com 10% de serviço</li><li>Garçom lançando pelo celular</li><li>Cliente acompanha o motoboy chegando</li></ul></div>
+        <div class="vis"><div class="lap"><img src="/img/site/painel-cozinha.webp" alt="Tela da cozinha com cronômetro" loading="lazy" width="1400" height="501"></div></div>
       </div>
-      <div class="step">
-        <div><div class="n" aria-hidden="true">4</div><h3>Fecha a mesa, o caixa e mostra o lucro</h3>
-          <p>A conta da mesa vira venda no caixa, com 10% de serviço e pagamento dividido. Abertura e fechamento de caixa com conferência, estoque que baixa sozinho e o lucro de cada produto.</p>
-          <ul><li>Cada funcionário com o seu login e o que pode ver</li><li>Fiado, trocas e devoluções, inventário e validade</li></ul></div>
-        <div class="shot"><img src="/img/site/painel-mesas.webp" alt="Mesas e comandas abertas" loading="lazy" width="1400" height="448"></div>
+      <div class="fl">
+        <div><div class="n" aria-hidden="true">4</div><h3>Fecha o caixa e mostra o lucro</h3>
+          <p>A conta vira venda no caixa. No fim do dia, você vê quanto vendeu, quanto custou e quanto sobrou.</p>
+          <ul><li>Caixa com sangria e conferência</li><li>Estoque que baixa sozinho</li><li>Lucro de cada produto</li></ul></div>
+        <div class="vis"><div class="lap"><img src="/img/site/painel-mesas.webp" alt="Mesas e comandas" loading="lazy" width="1400" height="448"></div></div>
       </div>
     </div>
   </div>
@@ -77,27 +96,24 @@
 
 <section class="alt">
   <div class="wrap">
-    <h2>O que vem no sistema</h2>
+    <h2>Tudo que vem no sistema</h2>
     <p class="sub">Feito para adegas, pizzarias, lanchonetes, restaurantes e marmitarias.</p>
-    <div class="features">
-      <div><h3>Para vender</h3><ul>
-        <li><b>Cardápio digital com seu link</b><span>Com sua logo, sua cor e o seu domínio, se você tiver</span></li>
-        <li><b>Pedido de entrega, retirada e mesa</b><span>Horário de funcionamento e categorias por horário</span></li>
-        <li><b>Promoções e destaques</b><span>Preço de atacado: leve 6 e pague menos</span></li>
-        <li><b>Cupons e fidelidade</b><span>Pontos por compra e prêmio no final</span></li>
-        <li><b>Avaliação do pedido</b><span>O cliente dá estrelas depois da entrega</span></li></ul></div>
-      <div><h3>Para operar</h3><ul>
-        <li><b>Painel de pedidos com som</b><span>Pedido por telefone também entra no painel</span></li>
-        <li><b>Caixa / PDV no balcão</b><span>Leitor de código de barras e pagamento dividido</span></li>
-        <li><b>Impressão automática do cupom</b><span>Impressora térmica de 58 ou 80 mm</span></li>
-        <li><b>WhatsApp automático</b><span>Robô de boas-vindas e avisos de status</span></li>
-        <li><b>Cozinha, mesas e entregador ao vivo</b><span>Garçom pelo celular e mapa das entregas</span></li></ul></div>
-      <div><h3>Para controlar</h3><ul>
-        <li><b>Estoque que baixa sozinho</b><span>Fardo usa o estoque da unidade</span></li>
-        <li><b>Financeiro e lucro por produto</b><span>Despesas, contas a pagar e meta do mês</span></li>
-        <li><b>Clientes e fiado</b><span>Histórico de compras e quanto cada um deve</span></li>
-        <li><b>Equipe com permissões</b><span>Troca de usuário e fechamento de caixa por turno</span></li>
-        <li><b>Inventário e validades</b><span>Aviso dos produtos que vão vencer</span></li></ul></div>
+    <div class="fx">
+      <div><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg></span><b>Cardápio com seu link</b><span>Sua logo, sua cor e seu domínio, se tiver</span></div>
+      <div><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8h12l-1 12H7z"/><path d="M9 8a3 3 0 0 1 6 0"/></svg></span><b>Entrega, retirada e mesa</b><span>Horário de funcionamento e categoria por horário</span></div>
+      <div><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.5"/></svg></span><b>Promoções e destaques</b><span>Leve mais, pague menos</span></div>
+      <div><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9a2 2 0 0 0 0 6v4h18v-4a2 2 0 0 0 0-6V5H3z"/><path d="M13 5v14" stroke-dasharray="2 3"/></svg></span><b>Cupons e fidelidade</b><span>Pontos por compra e prêmio no final</span></div>
+      <div><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10 21a2 2 0 0 0 4 0"/></svg></span><b>Painel com som</b><span>Toca até alguém aceitar o pedido</span></div>
+      <div><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M7 14h10v7H7z"/></svg></span><b>Impressão automática</b><span>Térmica de 58 ou 80 mm</span></div>
+      <div><span class="ic"><svg viewBox="0 0 24 24" fill="#000"><use href="#i-wa"/></svg></span><b>WhatsApp automático</b><span>Boas-vindas e avisos de status</span></div>
+      <div><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M7 20h10M12 16v4M7 9h4M7 12h7"/></svg></span><b>Caixa / PDV</b><span>Leitor de código de barras e pagamento dividido</span></div>
+      <div><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c4 3 6 6 6 10a6 6 0 0 1-12 0c0-2 1-4 2-5 0 2 1 3 2 3 0-3 1-6 2-8z"/></svg></span><b>Cozinha e mesas</b><span>Tela de preparo e garçom pelo celular</span></div>
+      <div><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.3-7-12a7 7 0 0 1 14 0c0 5.7-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/></svg></span><b>Entregador ao vivo</b><span>Mapa com os motoboys e as entregas</span></div>
+      <div><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8M12 13v8"/></svg></span><b>Estoque e validades</b><span>Baixa sozinho e avisa o que vai vencer</span></div>
+      <div><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span><b>Financeiro e lucro</b><span>Despesas, contas e meta do mês</span></div>
+      <div><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2 20c1-4 4-6 7-6s6 2 7 6"/><path d="M16 4a3.5 3.5 0 0 1 0 7M22 20c-.5-2.5-2-4-4-5"/></svg></span><b>Clientes e fiado</b><span>Histórico e quanto cada um deve</span></div>
+      <div><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span><b>Equipe com permissões</b><span>Cada um com seu login e seu turno</span></div>
+      <div><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.5 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/></svg></span><b>Avaliações</b><span>Estrelas e comentário depois da entrega</span></div>
     </div>
   </div>
 </section>
@@ -105,19 +121,20 @@
 <section class="dark">
   <div class="wrap">
     <h2>Quanto vai de comissão por mês?</h2>
-    <p class="sub">Os aplicativos de delivery cobram uma porcentagem de cada pedido. No seu cardápio próprio, o pedido é todo seu. Coloque os números da sua loja:</p>
-    <div class="calc">
+    <p class="sub">Os aplicativos de delivery cobram uma porcentagem de cada pedido. No seu cardápio próprio, o pedido é todo seu. Arraste com os números da sua loja:</p>
+    <div class="calc2">
       <div>
-        <label>Pedidos por mês<input id="c-ped" type="number" inputmode="numeric" min="0" value="300"></label>
-        <label>Valor médio do pedido (R$)<input id="c-tic" type="number" inputmode="decimal" min="0" step="0.5" value="50"></label>
-        <label>Comissão que você paga hoje (%)<input id="c-pct" type="number" inputmode="decimal" min="0" max="100" step="0.5" value="12"></label>
+        <label>Pedidos por mês <span class="val" id="v-ped"></span><input id="c-ped" type="range" min="50" max="3000" step="50" value="300"></label>
+        <label>Valor médio do pedido <span class="val" id="v-tic"></span><input id="c-tic" type="range" min="15" max="200" step="5" value="50"></label>
+        <label>Comissão que você paga hoje <span class="val" id="v-pct"></span><input id="c-pct" type="range" min="5" max="30" step="0.5" value="12"></label>
       </div>
-      <div class="res" aria-live="polite">
-        <div class="row"><span>Comissão por mês</span><span class="big" id="c-com">R$ 1.800</span></div>
-        <div class="row"><span>VYNTRA por mês</span><span class="big y">R$ 99,90</span></div>
-        <small>Simulação com os números acima. Ela não conta as taxas da maquininha ou do Pix, que existem nos dois casos. Muita loja usa o cardápio próprio junto com o aplicativo, trazendo os clientes fiéis para o próprio link.</small>
+      <div class="vs" aria-live="polite">
+        <div class="bad"><small>Comissão por mês</small><b id="c-com">R$ 1.800</b><span>indo para o aplicativo</span></div>
+        <div class="good"><small>Com a VYNTRA</small><b>R$ 99,90</b><span>por mês, sem comissão</span></div>
+        <p class="saving">Ficam com você <strong id="c-eco">R$ 1.700</strong> por mês</p>
       </div>
     </div>
+    <p class="note">Simulação com os números acima. Ela não conta as taxas da maquininha ou do Pix, que existem nos dois casos. Muita loja usa o cardápio próprio junto com o aplicativo, trazendo os clientes fiéis para o próprio link.</p>
   </div>
 </section>
 
@@ -125,11 +142,12 @@
   <div class="wrap">
     <h2>Preço simples, sem taxa por pedido</h2>
     <p class="sub">Você manda o seu cardápio e a gente entrega a loja montada e funcionando.</p>
-    <div class="price">
-      <div class="p1"><h3>Implantação</h3><div class="val">R$ 300 <small>uma vez</small></div>
-        <ul><li>Cadastro de todo o cardápio, com fotos e preços</li><li>Bairros e taxas de entrega</li><li>Logo, cores, horário e formas de pagamento</li><li>Ajuda pra instalar o WhatsApp automático e a impressora</li></ul></div>
+    <div class="price2">
+      <div class="a"><h3>Implantação</h3><div class="val">R$ 300 <small>uma vez</small></div>
+        <ul><li>Cadastro de todo o cardápio, com fotos e preços</li><li>Bairros e taxas de entrega</li><li>Logo, cores, horário e pagamentos</li><li>Ajuda pra instalar o WhatsApp automático e a impressora</li></ul></div>
       <div><h3>Mensalidade</h3><div class="val">R$ 99,90 <small>/mês</small></div>
-        <ul><li>Todas as funções do sistema, sem cobrança por pedido</li><li>Pedidos e produtos sem limite</li><li>Atualizações incluídas</li><li>Suporte pelo WhatsApp</li></ul></div>
+        <ul><li>Todas as funções, sem cobrança por pedido</li><li>Pedidos e produtos sem limite</li><li>Atualizações incluídas</li><li>Suporte pelo WhatsApp</li><li>Sem fidelidade: cancela quando quiser</li></ul>
+        <a class="btn wa" data-wa href="#preco"><svg aria-hidden="true"><use href="#i-wa"/></svg>Quero para a minha loja</a></div>
     </div>
   </div>
 </section>
@@ -142,7 +160,7 @@
       <details><summary>O cliente precisa baixar aplicativo?</summary><p>Não. Ele abre o link do cardápio e pede. Se quiser, pode adicionar o cardápio na tela inicial do celular, como um aplicativo.</p></details>
       <details><summary>Funciona com a minha impressora?</summary><p>Funciona com impressora térmica de cupom (58 ou 80 mm) instalada no Windows, por USB ou rede. Algumas impressoras Bluetooth também funcionam pelo Chrome do Android.</p></details>
       <details><summary>Dá para usar junto com o iFood?</summary><p>Dá. Muitas lojas mantêm o aplicativo e usam o cardápio próprio para quem já é cliente e para quem chama no WhatsApp. Assim esses pedidos não pagam comissão.</p></details>
-      <details><summary>Quem cadastra os produtos?</summary><p>Na implantação, a gente cadastra tudo para você. Depois, você mesmo muda preços, fotos, promoções e produtos em falta pelo painel, a qualquer hora.</p></details>
+      <details><summary>Quem cadastra os produtos?</summary><p>Na implantação, a gente cadastra tudo para você. Depois, você mesmo muda preços, fotos, promoções e produtos em falta pelo painel, a qualquer hora. Tem um <a href="/ajuda/">curso rápido</a> mostrando cada função.</p></details>
       <details><summary>Emite nota fiscal?</summary><p>Ainda não. O sistema imprime o cupom do pedido, que não tem valor fiscal.</p></details>
     </div>
   </div>
@@ -152,17 +170,19 @@
   <div class="wrap">
     <h2>Quer ver funcionando na sua loja?</h2>
     <div class="ctas" style="display:flex;flex-wrap:wrap;gap:12px">
-      <a class="btn wa" data-wa href="#preco">Falar no WhatsApp</a>
+      <a class="btn wa" data-wa href="#preco"><svg aria-hidden="true"><use href="#i-wa"/></svg>Falar no WhatsApp</a>
       <a class="btn ghost" href="/demo" target="_blank" rel="noopener">Testar o cardápio de exemplo</a>
     </div>
   </div>
 </section>
 </main>
 
+<a class="fab" data-wa href="#preco" aria-label="Falar no WhatsApp"><svg aria-hidden="true"><use href="#i-wa"/></svg></a>
+
 <footer>
   <div class="wrap">
     <span>VYNTRA · Gestão inteligente para delivery<span id="f-city"></span></span>
-    <nav><a href="/termos/">Termos de uso</a><a href="/privacidade/">Política de privacidade</a><a href="/painel/">Entrar no painel</a></nav>
+    <nav><a href="/ajuda/">Curso rápido</a><a href="/termos/">Termos de uso</a><a href="/privacidade/">Política de privacidade</a><a href="/painel/">Entrar no painel</a></nav>
   </div>
 </footer>
 
@@ -172,21 +192,19 @@
   var msg=encodeURIComponent("Olá! Vi o site da VYNTRA e quero saber mais sobre o cardápio digital para a minha loja.");
   document.querySelectorAll("[data-wa]").forEach(function(a){
     if(d.length>=10){a.href="https://wa.me/"+(d.length<=11?"55":"")+d+"?text="+msg;a.target="_blank";a.rel="noopener"}
-    else{a.hidden=true}   // sem número cadastrado em contato.js: esconde o botão
+    else a.hidden=true;
   });
   if(V.cidade) document.getElementById("f-city").textContent=" · "+V.cidade;
-  // no computador, o celular do topo vira o cardápio de exemplo de verdade (dá pra clicar)
-  if(matchMedia("(min-width:901px)").matches){
-    var ph=document.getElementById("phone"), f=document.createElement("iframe");
-    f.src="/demo"; f.title="Cardápio de exemplo"; f.loading="lazy";
-    f.onload=function(){var im=ph.querySelector("img"); if(im) im.remove()};
-    f.style.position="absolute"; f.style.inset="0"; ph.appendChild(f);
-    var t=document.createElement("p"); t.className="try"; t.textContent="Pode clicar: é o cardápio de exemplo funcionando"; ph.after(t);
-  }
   // calculadora
-  var p=document.getElementById("c-ped"),t2=document.getElementById("c-tic"),c=document.getElementById("c-pct"),o=document.getElementById("c-com");
-  function calc(){var v=(+p.value||0)*(+t2.value||0)*(+c.value||0)/100;o.textContent="R$ "+v.toLocaleString("pt-BR",{maximumFractionDigits:0})}
-  [p,t2,c].forEach(function(i){i.addEventListener("input",calc)}); calc();
+  var p=document.getElementById("c-ped"),t=document.getElementById("c-tic"),c=document.getElementById("c-pct");
+  var R=function(v){return "R$ "+Math.round(v).toLocaleString("pt-BR")};
+  function calc(){var com=(+p.value)*(+t.value)*(+c.value)/100;
+    document.getElementById("v-ped").textContent=(+p.value).toLocaleString("pt-BR");
+    document.getElementById("v-tic").textContent="R$ "+t.value;
+    document.getElementById("v-pct").textContent=String(c.value).replace(".",",")+"%";
+    document.getElementById("c-com").textContent=R(com);
+    document.getElementById("c-eco").textContent=com>99.9?R(com-99.9):"R$ 0"}
+  [p,t,c].forEach(function(i){i.addEventListener("input",calc)}); calc();
 })();
 </script>
 </body>
