@@ -845,6 +845,8 @@ PAGES.fidelidade=async m=>{
 /* ================= ESTOQUE ================= */
 PAGES.estoque=async m=>{
   const prods=await q(sb.from("products").select("*").order("name"));
+  const MOV=!OWNER()&&can("inventario");                       // funcionário que pode lançar entrada/saída
+  const reload=()=>PAGES.estoque(m);
   let term="", all=false;
   const draw=()=>{
     const kids=id=>prods.filter(x=>x.stock_parent_id===id);
@@ -855,14 +857,16 @@ PAGES.estoque=async m=>{
       ${sugg.length?`<div class="alert" style="margin-bottom:12px"><b>📦 Achei ${sugg.length} fardo(s) que podem usar o estoque da unidade</b> (ex.: "${esc(sugg[0].kid.name)}" → ${+sugg[0].f} un de "${esc(sugg[0].par.name)}"). <button class="btn sm" id="al" style="margin-left:6px">Ver e ligar</button></div>`:""}
       ${!prods.some(p=>p.track_stock)?'<p class="alert">Nenhum produto com estoque controlado ainda. Marque "Mostrar todos" abaixo e clique em <b>Controlar</b> nos produtos que quiser acompanhar.</p>':""}
       <div class="tw"><table><thead><tr><th>Produto</th><th class="num">Estoque</th><th class="num">Mínimo</th><th></th></tr></thead><tbody>${list.slice(0,300).map(p=>`<tr><td>${esc(p.name)} ${p.track_stock&&+p.stock_qty<=+p.stock_min?'<span class="pill p-cancelado">Repor</span>':""}${kids(p.id).map(k=>`<div class="muted" style="font-size:12px">↳ ${esc(k.name)} tira ${+k.stock_factor} un${p.track_stock?` · dá <b>${Math.max(0,Math.floor(+p.stock_qty/(+k.stock_factor||1)))}</b>`:""}</div>`).join("")}</td><td class="num"><b>${p.track_stock?+p.stock_qty:"—"}</b></td><td class="num">${p.track_stock?+p.stock_min:"—"}</td>
-        <td class="num">${!OWNER()?(p.track_stock?`<button class="btn o sm" data-hi="${p.id}">Histórico</button>`:""):p.track_stock?`<button class="btn sm" data-in="${p.id}">Entrada</button> <button class="btn o sm" data-aj="${p.id}">Ajustar</button> <button class="btn o sm" data-hi="${p.id}">Histórico</button>`:`<button class="btn o sm" data-tr="${p.id}">Controlar</button>`}</td></tr>`).join("")||'<tr><td colspan="4" class="empty">Nada aqui.</td></tr>'}</tbody></table></div>`;
+        <td class="num">${!OWNER()?(p.track_stock?`${MOV?`<button class="btn sm" data-in="${p.id}">Entrada</button> <button class="btn o sm" data-out="${p.id}">Saída</button> `:""}<button class="btn o sm" data-hi="${p.id}">Histórico</button>`:""):p.track_stock?`<button class="btn sm" data-in="${p.id}">Entrada</button> <button class="btn o sm" data-out="${p.id}">Saída</button> <button class="btn o sm" data-aj="${p.id}">Ajustar</button> <button class="btn o sm" data-hi="${p.id}">Histórico</button>`:`<button class="btn sm" data-in="${p.id}">Entrada</button> <button class="btn o sm" data-tr="${p.id}">Controlar</button>`}</td></tr>`).join("")||'<tr><td colspan="4" class="empty">Nada aqui.</td></tr>'}</tbody></table></div>`;
     if($("#al",m))$("#al",m).onclick=()=>{const dr=drawer("Ligar fardos ao estoque da unidade",`<p class="muted" style="margin:0">Cada fardo vendido vai tirar as unidades do estoque do produto da direita. Desmarque o que não estiver certo.</p>
       ${sugg.map((s,i)=>`<label class="chk" style="font-weight:500;align-items:flex-start"><input type="checkbox" data-l="${i}" checked> <span><b>${esc(s.kid.name)}</b><br><span class="muted">tira ${+s.f} un de</span> ${esc(s.par.name)}</span></label>`).join("")}`,`<button class="btn" id="lk">Ligar selecionados</button>`);
       $("#lk",dr).onclick=async()=>{const pick=$$("[data-l]",dr).filter(x=>x.checked).map(x=>sugg[+x.dataset.l]);$("#lk",dr).disabled=true;
         for(const s of pick){await q(sb.from("products").update({stock_parent_id:s.par.id,stock_factor:s.f,track_stock:false}).eq("id",s.kid.id));Object.assign(s.kid,{stock_parent_id:s.par.id,stock_factor:s.f,track_stock:false})}
         closeDr();toast(pick.length+" fardo(s) ligado(s)");draw()}};
     $$("[data-tr]",m).forEach(b=>b.onclick=async()=>{await q(sb.from("products").update({track_stock:true}).eq("id",+b.dataset.tr));prods.find(p=>p.id==b.dataset.tr).track_stock=true;draw();toast("Agora é só lançar a entrada")});
-    $$("[data-in],[data-aj]",m).forEach(b=>b.onclick=()=>{const isIn=!!b.dataset.in,p=prods.find(x=>x.id==(b.dataset.in||b.dataset.aj));
+    $$("[data-in]",m).forEach(b=>b.onclick=()=>stockEntryDrawer(prods,prods.find(x=>x.id==b.dataset.in),reload));
+    $$("[data-out]",m).forEach(b=>b.onclick=()=>stockExitDrawer(prods,prods.find(x=>x.id==b.dataset.out),reload));
+    $$("[data-aj]",m).forEach(b=>b.onclick=()=>{const isIn=false,p=prods.find(x=>x.id==b.dataset.aj);
       const dr=drawer((isIn?"Entrada de estoque · ":"Ajustar estoque · ")+esc(p.name),`<p class="muted">Estoque atual: <b>${+p.stock_qty}</b></p><label class="fld"><span>${isIn?"Quantidade que chegou":"Quantidade correta agora (contagem)"}</span><input class="in" id="qq" inputmode="decimal"></label>${isIn?`<label class="fld"><span>Preço de custo por unidade (opcional)</span><input class="in" id="cp" inputmode="decimal" value="${money(p.cost_price)}"></label><label class="fld"><span>📅 Validade deste lote (opcional · avisa antes de vencer)</span><input class="in" id="vl" type="date"></label>`:""}<label class="fld"><span>Observação</span><input class="in" id="ob" placeholder="${isIn?"Ex.: compra no atacado":"Ex.: contagem do mês"}"></label>${isIn?"":`<label class="fld"><span>Estoque mínimo</span><input class="in" id="mn" inputmode="decimal" value="${+p.stock_min}"></label>`}`,`<button class="btn" id="sv">Salvar</button>`);
       $("#sv",dr).onclick=async()=>{const v=num($("#qq",dr).value);if(v==null){toast("Informe a quantidade");return}
         const novo=isIn?+p.stock_qty+v:v, diff=novo-p.stock_qty, upd={stock_qty:novo};
@@ -871,7 +875,7 @@ PAGES.estoque=async m=>{
         if(isIn&&$("#vl",dr).value){const r=await sb.from("product_lots").insert({product_id:p.id,qty:v,expires_on:$("#vl",dr).value,note:$("#ob",dr).value.trim()||null,created_by_name:ME.name});if(r.error)toast("Rode a parte 19 do banco pra guardar a validade")}
         Object.assign(p,upd);closeDr();draw();toast("Estoque atualizado")}});
     $$("[data-hi]",m).forEach(b=>b.onclick=async()=>{const p=prods.find(x=>x.id==b.dataset.hi);const mv=await q(sb.from("stock_movements").select("*").eq("product_id",p.id).order("created_at",{ascending:false}).limit(100));
-      drawer("Histórico · "+esc(p.name),mv.map(x=>`<div class="line"><span>${dt(x.created_at)} · ${({entrada:"Entrada",saida:"Saída",ajuste:"Ajuste",venda:"Venda"})[x.kind]}${x.description?" · "+esc(x.description):""}</span><b style="color:${+x.qty<0?"var(--red)":"var(--green)"}">${+x.qty>0?"+":""}${+x.qty}</b></div>`).join("")||'<p class="muted">Sem movimentações.</p>')});
+      drawer("Histórico · "+esc(p.name),mv.map(x=>`<div class="line"><span>${dt(x.created_at)} · ${({entrada:"Entrada",saida:"Saída",ajuste:"Ajuste",venda:"Venda"})[x.kind]}${x.description?" · "+esc(x.description):""}${x.created_by_name?` <span class="muted">(${esc(x.created_by_name)})</span>`:""}</span><b style="color:${+x.qty<0?"var(--red)":"var(--green)"}">${+x.qty>0?"+":""}${+x.qty}</b></div>`).join("")||'<p class="muted">Sem movimentações.</p>')});
   };
   function autoLinks(){
     const nm=s=>String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/\s+/g," ").trim();
@@ -880,8 +884,13 @@ PAGES.estoque=async m=>{
       const par=prods.find(x=>x.id!==k.id&&!x.stock_parent_id&&nm(x.name)===nm(mm[2]));if(par&&+mm[1]>1)out.push({kid:k,par,f:+mm[1]})});
     return out;
   }
-  m.innerHTML=`<div class="top"><h1>Estoque${OWNER()?"":' <small class="muted" style="font-size:13px">· só consulta</small>'}</h1><div class="row"><input class="in" id="eq" placeholder="Buscar produto ou código de barras…" style="width:240px"><label class="chk"><input type="checkbox" id="ea"> Mostrar todos</label></div></div><div id="er"></div>`;
+  m.innerHTML=`<div class="top"><h1>Estoque${OWNER()||MOV?"":' <small class="muted" style="font-size:13px">· só consulta</small>'}</h1><div class="row"><input class="in" id="eq" placeholder="Buscar produto ou código de barras…" style="width:240px"><label class="chk"><input type="checkbox" id="ea"> Mostrar todos</label></div></div>
+    ${OWNER()||MOV?`<div class="row" style="margin-bottom:12px"><button class="btn" id="ein">📥 Entrada de mercadoria</button><button class="btn o" id="eout">📤 Saída (quebra, vencido…)</button>${OWNER()?`<button class="btn o" id="ehist">🧾 Compras</button><label class="chk" style="margin-left:auto" title="Quando o estoque zera, o produto aparece como esgotado no cardápio. Quando chega mercadoria, volta a vender sozinho."><input type="checkbox" id="eauto" ${S.auto_out_of_stock!==false?"checked":""}> Em falta automático ao zerar</label>`:""}</div>`:""}<div id="er"></div>`;
   $("#eq").oninput=e=>{term=e.target.value.toLowerCase();draw()}; $("#ea").onchange=e=>{all=e.target.checked;draw()};
+  if($("#ein"))$("#ein").onclick=()=>stockEntryDrawer(prods,null,reload);
+  if($("#eout"))$("#eout").onclick=()=>stockExitDrawer(prods,null,reload);
+  if($("#ehist"))$("#ehist").onclick=()=>stockEntriesDrawer();
+  if($("#eauto"))$("#eauto").onchange=async e=>{if(!await stockAutoOutToggle(e.target.checked))e.target.checked=!e.target.checked};
   draw();
 };
 
