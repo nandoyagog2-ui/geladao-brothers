@@ -5,7 +5,8 @@
 //  Sem dependências: recebe createClient de fora (Deno na Supabase, mock nos testes).
 // =========================================================
 
-export const SERVER_VERSION = "1.0.0";
+export const SERVER_VERSION = "1.1.0";
+const SITE = "https://www.cardapiovyntra.com.br";
 const PROTOCOLS = ["2025-06-18", "2025-03-26", "2024-11-05"];
 const OPEN_STATUSES = ["novo", "em_preparo", "saiu_entrega", "pronto"];
 const ALL_STATUSES = ["novo", "em_preparo", "saiu_entrega", "pronto", "concluido", "cancelado"];
@@ -91,13 +92,22 @@ export const TOOLS = [
     inputSchema: { type: "object", properties: { numero: { type: "integer" }, status: { type: "string", enum: ALL_STATUSES } }, required: ["numero", "status"] } },
   { name: "buscar_produtos", title: "Buscar produtos", annotations: RO,
     description: "Procura produtos do cardápio por nome, categoria ou situação. Retorna id, preço, promoção, custo, situação, destaque e estoque. Use para achar o produto_id antes de alterar algo.",
-    inputSchema: { type: "object", properties: { busca: { type: "string", description: "Parte do nome ou código de barras" }, categoria_id: { type: "integer" }, situacao: { type: "string", enum: ["ativo", "em_falta", "oculto"] }, so_com_controle_de_estoque: { type: "boolean" }, limite: { type: "integer", minimum: 1, maximum: 300, default: 50 } } } },
+    inputSchema: { type: "object", properties: { busca: { type: "string", description: "Parte do nome ou código de barras" }, categoria_id: { type: "integer" }, situacao: { type: "string", enum: ["ativo", "em_falta", "oculto"] }, so_com_controle_de_estoque: { type: "boolean" }, sem_foto: { type: "boolean", description: "true = só produtos sem foto" }, limite: { type: "integer", minimum: 1, maximum: 300, default: 50 } } } },
   { name: "listar_categorias", title: "Categorias", annotations: RO,
     description: "Lista as categorias do cardápio com id e quantos produtos ativos cada uma tem.",
     inputSchema: { type: "object", properties: {} } },
   { name: "atualizar_produto", title: "Alterar produto", annotations: WR,
     description: "Altera um produto (só o dono): preço, preço promocional (0 tira a promoção), situação (ativo = vende, em_falta = aparece esgotado, oculto = some do cardápio), destaque, nome, descrição, custo, estoque mínimo. Envie só o que muda. Confirme com o usuário antes.",
     inputSchema: { type: "object", properties: { produto_id: { type: "integer" }, preco: { type: "number" }, preco_promocional: { type: "number", description: "0 remove a promoção" }, situacao: { type: "string", enum: ["ativo", "em_falta", "oculto"] }, destaque: { type: "boolean" }, nome: { type: "string" }, descricao: { type: "string" }, custo: { type: "number" }, estoque_minimo: { type: "number" } }, required: ["produto_id"] } },
+  { name: "criar_produto", title: "Cadastrar produto", annotations: WR,
+    description: "Cadastra um produto novo no cardápio (só o dono). Informe a categoria pelo categoria_id (use listar_categorias) ou pelo nome. Antes de criar, procure com buscar_produtos se já existe um parecido. Pode mandar foto_url (link direto de uma imagem .jpg/.png/.webp da internet, ex.: foto oficial do produto) que o sistema baixa e salva. Mostre ao usuário o que vai cadastrar e confirme antes.",
+    inputSchema: { type: "object", properties: { nome: { type: "string" }, preco: { type: "number", description: "Preço de venda" }, custo: { type: "number", description: "Preço de custo (unidade)" }, categoria_id: { type: "integer" }, categoria: { type: "string", description: "Nome da categoria, se não souber o id" }, descricao: { type: "string" }, preco_promocional: { type: "number" }, codigo_barras: { type: "string" }, destaque: { type: "boolean" }, situacao: { type: "string", enum: ["ativo", "em_falta", "oculto"], default: "ativo" }, estoque_minimo: { type: "number" }, foto_url: { type: "string", description: "Link direto da imagem (opcional)" } }, required: ["nome", "preco"] } },
+  { name: "definir_foto_produto", title: "Colocar foto no produto", annotations: WR,
+    description: "Coloca ou troca a foto de um produto (só o dono) a partir de um link direto de imagem (.jpg, .png, .webp) da internet: o sistema baixa a imagem e salva no VYNTRA. Para achar a foto, busque na web a imagem oficial/do fabricante do produto exato (mesmo tamanho/volume) e prefira fundo branco. A IA NÃO consegue repassar uma foto que o usuário mandou no chat: nesse caso use link_foto_produto. Confirme antes.",
+    inputSchema: { type: "object", properties: { produto_id: { type: "integer" }, foto_url: { type: "string" }, remover: { type: "boolean", description: "true tira a foto atual" } }, required: ["produto_id"] } },
+  { name: "link_foto_produto", title: "Link para enviar foto pelo celular", annotations: RO,
+    description: "Gera um link que o usuário abre no celular ou computador para tirar/escolher a foto de um produto e enviar direto pro cardápio. Use quando o usuário quiser usar uma foto própria (a IA não consegue repassar fotos do chat).",
+    inputSchema: { type: "object", properties: { produto_id: { type: "integer" } }, required: ["produto_id"] } },
   { name: "estoque_baixo", title: "Estoque baixo e em falta", annotations: RO,
     description: "Produtos com estoque no mínimo ou abaixo (precisam repor) e produtos marcados como em falta.",
     inputSchema: { type: "object", properties: {} } },
@@ -162,6 +172,39 @@ async function fetchAll(q, max = 20000) {
   return out;
 }
 
+const norm = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+
+// baixa uma imagem da internet e salva no armazenamento "fotos" da loja (como o dono logado)
+function imgType(b) {
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return ["image/jpeg", "jpg"];
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return ["image/png", "png"];
+  if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return ["image/webp", "webp"];
+  if (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46) return ["image/gif", "gif"];
+  return null;
+}
+export async function savePhotoFromUrl(sb, productId, rawUrl, fetcher = fetch) {
+  let u; try { u = new URL(String(rawUrl).trim()); } catch { fail("Link da foto inválido."); }
+  if (u.protocol !== "https:" && u.protocol !== "http:") fail("O link da foto precisa começar com https://");
+  if (/^(localhost|127\.|10\.|192\.168\.|169\.254\.|0\.)/.test(u.hostname) || u.hostname.endsWith(".internal")) fail("Link da foto inválido.");
+  const ctl = new AbortController(); const tm = setTimeout(() => ctl.abort(), 15000);
+  let r; try { r = await fetcher(u.href, { redirect: "follow", signal: ctl.signal, headers: { "User-Agent": "Mozilla/5.0 (VYNTRA foto)", Accept: "image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8" } }); }
+  catch { fail("Não consegui baixar a imagem desse link (site fora do ar ou bloqueou). Tente outro link ou use link_foto_produto."); }
+  finally { clearTimeout(tm); }
+  if (!r.ok) fail(`O site da imagem respondeu erro ${r.status}. Tente outro link.`);
+  const buf = new Uint8Array(await r.arrayBuffer());
+  if (buf.length < 2000) fail("Esse link não tem uma imagem de verdade (arquivo pequeno demais).");
+  if (buf.length > 6 * 1024 * 1024) fail("Imagem grande demais (máx. 6 MB). Escolha outra.");
+  const t = imgType(buf);
+  if (!t) fail("Esse link não é uma imagem JPG, PNG ou WEBP (pode ser uma página). Use o link direto da imagem.");
+  const path = `ia-${productId}-${Date.now()}.${t[1]}`;
+  const up = await sb.storage.from("fotos").upload(path, buf, { contentType: t[0], cacheControl: "31536000", upsert: false });
+  if (up.error) fail("Não consegui salvar a foto: " + up.error.message);
+  const pub = sb.storage.from("fotos").getPublicUrl(path).data.publicUrl;
+  const done = dbErr(await sb.from("products").update({ image_url: pub }).eq("id", productId).select("id"));
+  if (!done.length) fail("Não consegui ligar a foto ao produto (sem permissão).");
+  return pub;
+}
+
 // ---------- execução das ferramentas ----------
 const HANDLERS = {
   async minha_loja(sb, c) {
@@ -222,13 +265,14 @@ const HANDLERS = {
     return { ok: true, numero: up[0].number, antes: STATUS_TXT[o[0].status], agora: STATUS_TXT[up[0].status] };
   },
   async buscar_produtos(sb, c, a) {
-    let q = sb.from("products").select("id,name,price,promo_price,status,featured,cost_price,track_stock,stock_qty,stock_min,stock_parent_id,stock_factor,category_id,barcode,categories(name)").order("name").limit(a.limite || 50);
+    let q = sb.from("products").select("id,name,price,promo_price,status,featured,cost_price,track_stock,stock_qty,stock_min,stock_parent_id,stock_factor,category_id,barcode,image_url,categories(name)").order("name").limit(a.limite || 50);
     if (a.busca) { const t = String(a.busca).trim(); q = /^\d{6,}$/.test(t) ? q.eq("barcode", t) : q.ilike("name", `%${t.replace(/[%_]/g, "")}%`); }
     if (a.categoria_id) q = q.eq("category_id", a.categoria_id);
     if (a.situacao) q = q.eq("status", SIT_IN[a.situacao]);
     if (a.so_com_controle_de_estoque) q = q.eq("track_stock", true);
+    if (a.sem_foto) q = q.or("image_url.is.null,image_url.eq.");
     const rows = dbErr(await q);
-    return { quantidade: rows.length, produtos: rows.map((p) => ({ produto_id: p.id, nome: p.name, categoria: p.categories && p.categories.name, preco: r2(p.price), promocao: p.promo_price != null && +p.promo_price < +p.price ? r2(p.promo_price) : null, ...(c.owner ? { custo: r2(p.cost_price) } : {}), situacao: SIT_OUT[p.status] || p.status, destaque: !!p.featured,
+    return { quantidade: rows.length, produtos: rows.map((p) => ({ produto_id: p.id, nome: p.name, categoria: p.categories && p.categories.name, preco: r2(p.price), promocao: p.promo_price != null && +p.promo_price < +p.price ? r2(p.promo_price) : null, ...(c.owner ? { custo: r2(p.cost_price) } : {}), situacao: SIT_OUT[p.status] || p.status, destaque: !!p.featured, tem_foto: !!p.image_url,
       estoque: p.stock_parent_id ? `usa o estoque do produto ${p.stock_parent_id} (${+p.stock_factor || 1} un por venda)` : p.track_stock ? { atual: +p.stock_qty, minimo: +p.stock_min } : "sem controle" })) };
   },
   async listar_categorias(sb) {
@@ -256,6 +300,47 @@ const HANDLERS = {
     if (!after.length) fail("Não consegui alterar (sem permissão).");
     const show = (x) => ({ nome: x.name, preco: r2(x.price), promocao: x.promo_price != null ? r2(x.promo_price) : null, situacao: SIT_OUT[x.status], destaque: !!x.featured, custo: r2(x.cost_price), estoque_minimo: x.stock_min });
     return { ok: true, produto_id: a.produto_id, antes: show(before), agora: show(after[0]) };
+  },
+  async criar_produto(sb, c, a) {
+    needOwner(c);
+    const name = String(a.nome || "").trim();
+    if (name.length < 2) fail("Informe o nome do produto.");
+    const price = num(a.preco); if (!(price > 0)) fail("Preço de venda inválido.");
+    let cat = null;
+    if (a.categoria_id) cat = dbErr(await sb.from("categories").select("id,name").eq("id", a.categoria_id).maybeSingle());
+    else if (a.categoria) { const cs = dbErr(await sb.from("categories").select("id,name")); const t = norm(a.categoria); cat = cs.find((k) => norm(k.name) === t) || cs.find((k) => norm(k.name).includes(t) || t.includes(norm(k.name))) || null; }
+    if (!cat) fail("Categoria não encontrada. Use listar_categorias e informe o categoria_id.");
+    const dup = dbErr(await sb.from("products").select("id,name").ilike("name", name.replace(/[%_]/g, "")).limit(1));
+    if (dup.length) fail(`Já existe um produto com esse nome: "${dup[0].name}" (produto_id ${dup[0].id}). Use atualizar_produto para alterar.`);
+    const promo = num(a.preco_promocional);
+    if (promo != null && promo > 0 && promo >= price) fail("O preço promocional precisa ser menor que o preço de venda.");
+    const last = dbErr(await sb.from("products").select("sort_order").eq("category_id", cat.id).order("sort_order", { ascending: false }).limit(1));
+    const row = { name, price: r2(price), category_id: cat.id, status: SIT_IN[a.situacao || "ativo"] || "ativo", featured: !!a.destaque, is_new: true,
+      sort_order: ((last[0] && last[0].sort_order) || 0) + 1, description: a.descricao ? String(a.descricao) : null,
+      cost_price: a.custo != null ? r2(num(a.custo)) : null, promo_price: promo > 0 ? r2(promo) : null,
+      barcode: a.codigo_barras ? String(a.codigo_barras).replace(/\D/g, "") || null : null, stock_min: a.estoque_minimo != null ? num(a.estoque_minimo) : 0 };
+    const ins = dbErr(await sb.from("products").insert(row).select("id,name,price,promo_price,cost_price,status"));
+    if (!ins.length) fail("Não consegui cadastrar (sem permissão).");
+    const p = ins[0]; let foto = "sem foto (dá pra colocar com definir_foto_produto ou link_foto_produto)";
+    if (a.foto_url) { try { await savePhotoFromUrl(sb, p.id, a.foto_url); foto = "foto salva"; } catch (e) { foto = "produto criado, mas a foto falhou: " + e.message; } }
+    return { ok: true, produto_id: p.id, nome: p.name, categoria: cat.name, preco: r2(p.price), promocao: p.promo_price != null ? r2(p.promo_price) : null, custo: r2(p.cost_price),
+      margem: p.cost_price ? `${Math.round((1 - p.cost_price / (p.promo_price || p.price)) * 100)}%` : undefined, situacao: SIT_OUT[p.status], foto,
+      link_foto_pelo_celular: `${SITE}/foto/?p=${p.id}` };
+  },
+  async definir_foto_produto(sb, c, a) {
+    needOwner(c);
+    const p = dbErr(await sb.from("products").select("id,name,image_url").eq("id", a.produto_id).maybeSingle());
+    if (!p) fail(`Produto ${a.produto_id} não encontrado.`);
+    if (a.remover) { dbErr(await sb.from("products").update({ image_url: null }).eq("id", p.id).select("id")); return { ok: true, produto: p.name, foto: "removida" }; }
+    if (!a.foto_url) fail("Informe foto_url (link direto da imagem) ou use link_foto_produto.");
+    const url = await savePhotoFromUrl(sb, p.id, a.foto_url);
+    return { ok: true, produto_id: p.id, produto: p.name, foto: url, antes: p.image_url ? "tinha outra foto (foi trocada)" : "não tinha foto" };
+  },
+  async link_foto_produto(sb, c, a) {
+    needOwner(c);
+    const p = dbErr(await sb.from("products").select("id,name,image_url").eq("id", a.produto_id).maybeSingle());
+    if (!p) fail(`Produto ${a.produto_id} não encontrado.`);
+    return { produto: p.name, tem_foto: !!p.image_url, link: `${SITE}/foto/?p=${p.id}`, como_usar: "Abra o link no celular, entre com o login de dono do VYNTRA (só na primeira vez), toque em Tirar foto ou Escolher da galeria e depois em Salvar foto." };
   },
   async estoque_baixo(sb) {
     const rows = await fetchAll(() => sb.from("products").select("id,name,status,track_stock,stock_qty,stock_min,auto_out,stock_parent_id").or("track_stock.eq.true,status.eq.em_falta"));
@@ -366,7 +451,7 @@ async function rpc(m, getCtx, sb) {
       return { protocolVersion: PROTOCOLS.includes(p.protocolVersion) ? p.protocolVersion : PROTOCOLS[0],
         capabilities: { tools: { listChanged: false } },
         serverInfo: { name: "vyntra", title: "VYNTRA", version: SERVER_VERSION },
-        instructions: `Você está conectado ao VYNTRA (cardápio digital e gestão)${store ? ` da loja "${store}"` : ""}${name ? `, como ${name}` : ""}. Fale em português do Brasil, com valores em R$. Antes de qualquer alteração (preço, estoque, status de pedido, cupom, abrir/fechar), mostre ao usuário exatamente o que vai mudar e espere a confirmação. Para achar o produto_id use buscar_produtos. Datas seguem o fuso da loja.` };
+        instructions: `Você está conectado ao VYNTRA (cardápio digital e gestão)${store ? ` da loja "${store}"` : ""}${name ? `, como ${name}` : ""}. Fale em português do Brasil, com valores em R$. Antes de qualquer alteração (cadastro, preço, foto, estoque, status de pedido, cupom, abrir/fechar), mostre ao usuário exatamente o que vai mudar e espere a confirmação. Para achar o produto_id use buscar_produtos. Datas seguem o fuso da loja.` };
     }
     case "ping": return {};
     case "tools/list": return { tools: TOOLS };

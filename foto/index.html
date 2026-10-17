@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#090909">
+<meta name="robots" content="noindex">
+<title>VYNTRA · Foto do produto</title>
+<link rel="icon" href="/img/vyntra-32.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,500..900&family=Figtree:wght@400;500;600;700;800&display=swap">
+<style>
+:root{--bg:#0E0E0E;--card:#171717;--card2:#202020;--line:#2B2B2B;--fg:#F7F4EC;--muted:#A8A396;--y:#FFC400;--ink:#111;--green:#3DDC84;--red:#FF5A4E;
+  --display:"Archivo","Arial Narrow",system-ui,sans-serif;--body:"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif;color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--fg);min-height:100%}
+body{font-family:var(--body);font-size:15px;line-height:1.45;display:flex;align-items:flex-start;justify-content:center;padding:24px 16px}
+.box{width:100%;max-width:420px;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px 18px}
+.brand{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+.brand img{width:34px;height:34px;border-radius:8px}
+.brand b{font-family:var(--display);font-weight:900;font-size:20px;letter-spacing:.04em}
+h1{font-family:var(--display);font-weight:800;font-size:21px;line-height:1.15;margin:0 0 6px}
+p{margin:0 0 12px}.muted{color:var(--muted)}
+label.f{display:grid;gap:5px;margin-top:12px}
+label.f span{font-size:12.5px;color:var(--muted);font-weight:600}
+input.in{width:100%;background:var(--card2);border:1px solid var(--line);border-radius:10px;color:var(--fg);padding:12px;font:inherit}
+input.in:focus{outline:2px solid var(--y);outline-offset:0;border-color:transparent}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;border:0;border-radius:12px;padding:14px;font:700 15px var(--body);cursor:pointer;margin-top:12px;background:var(--y);color:var(--ink);text-decoration:none}
+.btn.o{background:none;border:1px solid var(--line);color:var(--fg)}
+.btn:disabled{opacity:.6;cursor:wait}
+.pic{aspect-ratio:1;background:#fff;border-radius:14px;display:grid;place-items:center;overflow:hidden;margin:14px 0 4px;border:1px solid var(--line)}
+.pic img{width:100%;height:100%;object-fit:contain}
+.pic.none{background:var(--card2);color:var(--muted);font-size:14px}
+.err{color:var(--red);font-size:14px;margin-top:12px}
+.ok{color:var(--green)}
+input[type=file]{display:none}
+</style>
+</head>
+<body>
+<main class="box" id="app"><p class="muted">Carregando…</p></main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
+<script src="/js/config.js"></script>
+<script>
+/* Página aberta pelo link que a IA manda: /foto/?p=ID
+   O dono entra com o login do painel, tira ou escolhe a foto e salva no produto. */
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const loginUser=v=>String(v||"").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/\s+/g,".").replace(/[^a-z0-9._-]/g,"");
+const loginEmail=v=>String(v||"").includes("@")?String(v).trim().toLowerCase():loginUser(v)+"@equipe.geladao.app";
+const app=$("#app"), head='<div class="brand"><img src="/img/vyntra-192.png" alt=""><b>VYNTRA</b></div>';
+const pid=parseInt(new URLSearchParams(location.search).get("p"),10);
+let sb, prod, blob=null;
+const show=h=>app.innerHTML=head+h;
+const fatal=m=>show(`<h1>Não deu certo</h1><p class="err">${esc(m)}</p>`);
+
+async function start(){
+  if(!pid) return fatal("Link incompleto: falta o produto.");
+  if(!window.supabase) return fatal("Não consegui carregar a página. Verifique a internet e atualize.");
+  sb=supabase.createClient(GB_CONFIG.SUPABASE_URL,GB_CONFIG.SUPABASE_KEY);
+  const {data:{session}}=await sb.auth.getSession();
+  session?load():login();
+}
+function login(msg,user){
+  show(`<h1>Foto do produto</h1><p class="muted">Entre com o usuário e a senha de <b>dono</b> do painel VYNTRA.</p>
+    <form id="f"><label class="f"><span>Usuário</span><input class="in" id="u" autocomplete="username" autocapitalize="none" required value="${esc(user||"")}"></label>
+    <label class="f"><span>Senha</span><input class="in" id="pw" type="password" autocomplete="current-password" required></label>
+    ${msg?`<p class="err">${esc(msg)}</p>`:""}<button class="btn" id="go">Entrar</button></form>`);
+  user?$("#pw").focus():$("#u").focus();
+  $("#f").onsubmit=async e=>{e.preventDefault();$("#go").disabled=true;
+    const {error}=await sb.auth.signInWithPassword({email:loginEmail($("#u").value),password:$("#pw").value});
+    if(error) return login(/invalid/i.test(error.message)?"Usuário ou senha incorretos.":error.message,$("#u").value);
+    load()};
+}
+async function load(){
+  const a=(await sb.rpc("my_access")).data||{};
+  if(!a.ok||a.role!=="dono") return show(`<h1>Sem permissão</h1><p class="err">Só o dono da loja pode trocar fotos.</p><button class="btn o" id="sw">Entrar com outro usuário</button>`),$("#sw").onclick=async()=>{await sb.auth.signOut();login()};
+  const r=await sb.from("products").select("id,name,image_url,price").eq("id",pid).maybeSingle();
+  if(r.error) return fatal(r.error.message);
+  if(!r.data) return show(`<h1>Produto não encontrado</h1><p class="err">Esse produto não é da loja <b>${esc(a.store_slug)}</b> ou foi apagado.</p><button class="btn o" id="sw">Entrar com outro usuário</button>`),$("#sw").onclick=async()=>{await sb.auth.signOut();login()};
+  prod=r.data; draw();
+}
+function draw(msg){
+  const src=blob?URL.createObjectURL(blob):prod.image_url;
+  show(`<p class="muted" style="margin:0 0 2px;font-size:13px">Foto do produto</p><h1>${esc(prod.name)}</h1>
+    <div class="pic${src?"":" none"}">${src?`<img src="${esc(src)}" alt="">`:"Sem foto ainda"}</div>
+    ${blob?'<p class="muted" style="font-size:13px;text-align:center">Prévia da nova foto</p>':""}
+    <input type="file" id="cam" accept="image/*" capture="environment"><input type="file" id="gal" accept="image/*">
+    ${blob?`<button class="btn" id="save">✅ Salvar foto</button><button class="btn o" id="again">Escolher outra</button>`
+          :`<button class="btn" id="bcam">📷 Tirar foto</button><button class="btn o" id="bgal">🖼️ Escolher da galeria</button>`}
+    ${msg||""}
+    <p class="muted" style="font-size:12.5px;margin-top:14px">Dica: produto em fundo branco ou liso, com boa luz e de frente, fica mais bonito no cardápio.</p>`);
+  const pick=async e=>{const f=e.target.files&&e.target.files[0];if(!f)return;blob=await shrink(f,1400)||f;draw()};
+  $("#cam").onchange=pick; $("#gal").onchange=pick;
+  if($("#bcam")){$("#bcam").onclick=()=>$("#cam").click();$("#bgal").onclick=()=>$("#gal").click()}
+  if($("#again")) $("#again").onclick=()=>{blob=null;draw()};
+  if($("#save")) $("#save").onclick=save;
+}
+async function shrink(file,max){
+  let bmp; try{bmp=await createImageBitmap(file)}catch{return null}
+  const sc=Math.min(1,max/Math.max(bmp.width,bmp.height)), w=Math.round(bmp.width*sc), h=Math.round(bmp.height*sc);
+  const c=document.createElement("canvas"); c.width=w; c.height=h; c.getContext("2d").drawImage(bmp,0,0,w,h);
+  const tb=(t,q)=>new Promise(r=>c.toBlob(r,t,q));
+  let out=await tb("image/webp",0.9); if(!out||out.type!=="image/webp") out=await tb("image/jpeg",0.85);
+  return out&&(out.size<file.size||sc<1)?out:null;
+}
+async function save(){
+  $("#save").disabled=true; $("#save").textContent="Enviando…";
+  const ext=(blob.type.split("/")[1]||"jpg").replace("jpeg","jpg");
+  const path=`foto-${pid}-${Date.now()}.${ext}`;
+  const up=await sb.storage.from("fotos").upload(path,blob,{cacheControl:"31536000",upsert:false,contentType:blob.type||undefined});
+  if(up.error) return draw(`<p class="err">Não consegui enviar: ${esc(up.error.message)}</p>`);
+  const url=sb.storage.from("fotos").getPublicUrl(path).data.publicUrl;
+  const r=await sb.from("products").update({image_url:url}).eq("id",pid).select("id");
+  if(r.error||!r.data||!r.data.length) return draw(`<p class="err">Não consegui ligar a foto ao produto.</p>`);
+  prod.image_url=url; blob=null;
+  show(`<h1 class="ok">Foto salva! ✓</h1><p>A foto do <b>${esc(prod.name)}</b> já aparece no cardápio.</p>
+    <div class="pic"><img src="${esc(url)}" alt=""></div><p class="muted">Pode voltar pra conversa com a IA.</p>
+    <button class="btn o" id="more">Trocar de novo</button>`);
+  $("#more").onclick=()=>draw();
+}
+start().catch(e=>fatal(e.message||String(e)));
+</script>
+</body>
+</html>
