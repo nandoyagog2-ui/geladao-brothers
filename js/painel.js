@@ -522,7 +522,7 @@ PAGES.catalogo=async m=>{
   const draw=()=>{
     const list=term?prods.filter(p=>p.name.toLowerCase().includes(term)):prods.filter(p=>p.category_id===catSel);
     const cat=cats.find(c=>c.id===catSel);
-    m.innerHTML=`<div class="top"><h1>Catálogo</h1><div class="row"><input class="in" id="cq" placeholder="Buscar em todo o catálogo…" style="width:240px" value="${esc(term)}"><button class="btn" id="npd">➕ Novo produto</button></div></div>
+    m.innerHTML=`<div class="top"><h1>Catálogo</h1><div class="row"><input class="in" id="cq" placeholder="Buscar em todo o catálogo…" style="width:240px" value="${esc(term)}">${OWNER()?'<button class="btn o" id="icw">⬇️ Importar do Cardápio Web</button>':""}<button class="btn" id="npd">➕ Novo produto</button></div></div>
     <div class="cat2"><div class="clist"><div class="row" style="justify-content:space-between"><b>Categorias</b><button class="btn sm" id="nct">➕</button></div>
       ${cats.map((c,i)=>`<div class="ci ${c.id===catSel&&!term?"on":""}"><button class="nm" data-c="${c.id}" style="${c.active?"":"opacity:.45"}">${esc(c.name)} <span class="ct">${prods.filter(p=>p.category_id===c.id).length}</span></button>
         <button class="icb" data-up="${i}" aria-label="Subir">↑</button><button class="icb" data-dn="${i}" aria-label="Descer">↓</button><button class="icb" data-ec="${c.id}" aria-label="Editar">✎</button></div>`).join("")}</div>
@@ -540,6 +540,7 @@ PAGES.catalogo=async m=>{
     $$("[data-tg]",m).forEach(b=>b.onclick=async()=>{const p=prods.find(x=>x.id==b.dataset.tg);const s=p.status==="ativo"?"em_falta":"ativo";await q(sb.from("products").update({status:s}).eq("id",p.id));p.status=s;draw();toast(p.name+": "+(s==="ativo"?"ativo":"em falta"))});
     $$("[data-ep]",m).forEach(b=>b.onclick=()=>prodForm(prods.find(x=>x.id==b.dataset.ep)));
     $("#npd").onclick=()=>prodForm(null);
+    if($("#icw")) $("#icw").onclick=()=>importCWDrawer(()=>PAGES.catalogo(m));
   };
   const CF=[{k:"name",l:"Nome da categoria"},{k:"image_url",l:"Foto da categoria (aparece no bloco)",t:"img"},{k:"active",l:"Mostrar no cardápio",t:"check"}];
   const HAS22=!cats.length||"to_kitchen" in cats[0], DW=[["seg","Seg"],["ter","Ter"],["qua","Qua"],["qui","Qui"],["sex","Sex"],["sab","Sáb"],["dom","Dom"]];
