@@ -64,7 +64,19 @@ async function start(){
   sb=supabase.createClient(GB_CONFIG.SUPABASE_URL,GB_CONFIG.SUPABASE_KEY);
   if(!sb.auth.oauth) return fatal("Versão da biblioteca sem suporte a autorização. Avise o suporte do VYNTRA.");
   const {data:{session}}=await sb.auth.getSession();
-  session?consent(session):login();
+  session?choose(session):login();
+}
+
+/* Já tem alguém logado neste navegador: pergunta antes de usar essa conta.
+   (O pedido de autorização fica preso ao primeiro usuário que abrir ele,
+   então só abrimos depois que a pessoa escolhe a conta certa.) */
+async function choose(session){
+  const a=(await sb.rpc("my_access")).data||{};
+  show(`<h1>Conectar sua loja à IA</h1><p class="muted">Este navegador já está logado no VYNTRA. Qual conta você quer conectar?</p>
+    <div class="who"><div><small>Conta logada</small><b>${esc(a.name||session.user.email)}</b>${a.store_slug?`<small>Loja: ${esc(a.store_slug)} · ${a.role==="dono"?"dono":"funcionário"}</small>`:""}</div></div>
+    <button class="btn" id="cont">Continuar com essa conta</button><button class="btn o" id="other">Entrar com outro usuário</button>`);
+  $("#cont").onclick=()=>{$("#cont").disabled=true;consent(session)};
+  $("#other").onclick=async()=>{await sb.auth.signOut();login()};
 }
 
 function login(msg,user){
@@ -84,20 +96,19 @@ async function consent(session){
   const acc=await sb.rpc("my_access");
   const a=acc.data||{};
   const {data,error}=await sb.auth.oauth.getAuthorizationDetails(id);
-  if(error) return fatal(error.message||"Pedido de autorização inválido ou expirado.");
+  if(error) return fatal(/not found|expired/i.test(error.message||"")?"Esse pedido de conexão expirou ou já foi usado por outra conta. No Claude, clique em Conectar de novo.":(error.message||"Pedido de autorização inválido ou expirado."));
   const url=data&&(data.redirect_url||data.redirect_to);
   if(data&&!data.authorization_id&&url){location.href=url;return}   // já autorizado antes
   const appName=(data.client&&(data.client.name||data.client.client_name))||"Assistente de IA";
   const warn=!a.ok?{sem_cadastro:"Esse login não está ligado a nenhuma loja do VYNTRA.",loja_bloqueada:"Sua loja está bloqueada no momento.",bloqueado:"Esse login está bloqueado pelo dono da loja.",fora_horario:"Você está fora do horário de trabalho cadastrado: a IA só vai funcionar dentro do horário."}[a.reason]:"";
   show(`<h1><span class="app">${esc(appName)}</span> quer acessar sua loja</h1>
-    <div class="who"><div><small>Conectando como</small><b>${esc(a.name||session.user.email)}</b>${a.store_slug?`<small>Loja: ${esc(a.store_slug)} · ${a.role==="dono"?"dono":"funcionário"}</small>`:""}</div><button class="link" id="sw">Trocar</button></div>
+    <div class="who"><div><small>Conectando como</small><b>${esc(a.name||session.user.email)}</b>${a.store_slug?`<small>Loja: ${esc(a.store_slug)} · ${a.role==="dono"?"dono":"funcionário"}</small>`:""}</div></div>
     <p>Com essa permissão, a IA vai poder, <b>do mesmo jeito que você no painel</b>:</p>
     <ul><li>Ver vendas, pedidos, cardápio, estoque e avaliações</li><li>Mudar preço, promoção e situação dos produtos</li><li>Lançar entrada e saída de estoque</li><li>Mudar o status dos pedidos e abrir/fechar a loja</li></ul>
     <p class="muted" style="font-size:13px">Ela sempre pede sua confirmação antes de alterar algo. Funcionário só faz o que o dono liberou pra ele.</p>
     ${warn?`<p class="err">${esc(warn)}</p>`:""}
     <button class="btn" id="ok">Permitir</button><button class="btn o" id="no">Recusar</button>
     <p class="foot">Pra cancelar depois, remova o conector no app da IA.</p>`);
-  $("#sw").onclick=async()=>{await sb.auth.signOut();login()};
   const decide=async approve=>{$("#ok").disabled=$("#no").disabled=true;
     const r=approve?await sb.auth.oauth.approveAuthorization(id,{skipBrowserRedirect:true}):await sb.auth.oauth.denyAuthorization(id,{skipBrowserRedirect:true});
     if(r.error) return fatal(r.error.message);
