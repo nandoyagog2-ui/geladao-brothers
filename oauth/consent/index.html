@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#090909">
+<meta name="robots" content="noindex">
+<title>VYNTRA · Autorizar acesso</title>
+<link rel="icon" href="/img/vyntra-32.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,500..900&family=Figtree:wght@400;500;600;700;800&display=swap">
+<style>
+:root{--bg:#0E0E0E;--card:#171717;--card2:#202020;--line:#2B2B2B;--fg:#F7F4EC;--muted:#A8A396;--y:#FFC400;--ink:#111;--green:#3DDC84;--red:#FF5A4E;
+  --display:"Archivo","Arial Narrow",system-ui,sans-serif;--body:"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif;color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--fg);min-height:100%}
+body{font-family:var(--body);font-size:15px;line-height:1.45;display:flex;align-items:center;justify-content:center;padding:24px 16px}
+.box{width:100%;max-width:420px;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:26px 22px}
+.brand{display:flex;align-items:center;gap:10px;margin-bottom:18px}
+.brand img{width:34px;height:34px;border-radius:8px}
+.brand b{font-family:var(--display);font-weight:900;font-size:20px;letter-spacing:.04em}
+h1{font-family:var(--display);font-weight:800;font-size:22px;line-height:1.15;margin:0 0 6px}
+p{margin:0 0 12px}.muted{color:var(--muted)}
+label{display:grid;gap:5px;margin-top:12px}
+label span{font-size:12.5px;color:var(--muted);font-weight:600}
+input{width:100%;background:var(--card2);border:1px solid var(--line);border-radius:10px;color:var(--fg);padding:12px;font:inherit}
+input:focus{outline:2px solid var(--y);outline-offset:0;border-color:transparent}
+.btn{display:block;width:100%;border:0;border-radius:12px;padding:13px 14px;font:700 15px var(--body);cursor:pointer;margin-top:14px;background:var(--y);color:var(--ink)}
+.btn.o{background:none;border:1px solid var(--line);color:var(--fg)}
+.btn:disabled{opacity:.6;cursor:wait}
+.who{display:flex;justify-content:space-between;gap:10px;align-items:center;background:var(--card2);border-radius:12px;padding:10px 12px;margin:14px 0}
+.who small{color:var(--muted);display:block}
+.link{background:none;border:0;color:var(--y);font:600 13px var(--body);cursor:pointer;padding:0}
+ul{margin:8px 0 4px;padding-left:20px}li{margin:4px 0}
+.err{color:var(--red);font-size:14px;margin-top:12px}
+.ok{color:var(--green)}
+.app{font-weight:800;color:var(--y)}
+.foot{margin-top:16px;font-size:12px;color:var(--muted);text-align:center}
+</style>
+</head>
+<body>
+<main class="box" id="app"><p class="muted">Carregando…</p></main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
+<script src="/js/config.js"></script>
+<script>
+/* Página de autorização do conector de IA do VYNTRA.
+   O Claude (ou outro app) manda a pessoa pra cá com ?authorization_id=...
+   Ela entra com o login do VYNTRA e clica em Permitir. */
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const loginUser=v=>String(v||"").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/\s+/g,".").replace(/[^a-z0-9._-]/g,"");
+const loginEmail=v=>String(v||"").includes("@")?String(v).trim().toLowerCase():loginUser(v)+"@equipe.geladao.app";
+const app=$("#app"), head='<div class="brand"><img src="/img/vyntra-192.png" alt=""><b>VYNTRA</b></div>';
+const id=new URLSearchParams(location.search).get("authorization_id");
+let sb;
+
+function show(html){app.innerHTML=head+html}
+function fatal(msg){show(`<h1>Não deu certo</h1><p class="err">${esc(msg)}</p><p class="muted">Volte no Claude e tente conectar de novo.</p>`)}
+
+async function start(){
+  if(!id) return fatal("Link incompleto: falta o código de autorização.");
+  if(!window.supabase) return fatal("Não consegui carregar a página. Verifique a internet e atualize.");
+  sb=supabase.createClient(GB_CONFIG.SUPABASE_URL,GB_CONFIG.SUPABASE_KEY);
+  if(!sb.auth.oauth) return fatal("Versão da biblioteca sem suporte a autorização. Avise o suporte do VYNTRA.");
+  const {data:{session}}=await sb.auth.getSession();
+  session?consent(session):login();
+}
+
+function login(msg,user){
+  show(`<h1>Conectar sua loja à IA</h1><p class="muted">Entre com o mesmo usuário e senha do painel do VYNTRA.</p>
+    <form id="f"><label><span>Usuário</span><input id="u" autocomplete="username" autocapitalize="none" required value="${esc(user||"")}"></label>
+    <label><span>Senha</span><input id="p" type="password" autocomplete="current-password" required></label>
+    ${msg?`<p class="err">${esc(msg)}</p>`:""}<button class="btn" id="go">Entrar</button></form>
+    <p class="foot">Seu login não é compartilhado com a IA. Ela só recebe uma permissão que você pode cancelar quando quiser.</p>`);
+  user?$("#p").focus():$("#u").focus();
+  $("#f").onsubmit=async e=>{e.preventDefault();$("#go").disabled=true;
+    const {data,error}=await sb.auth.signInWithPassword({email:loginEmail($("#u").value),password:$("#p").value});
+    if(error) return login(/invalid/i.test(error.message)?"Usuário ou senha incorretos.":error.message,$("#u").value);
+    consent(data.session)};
+}
+
+async function consent(session){
+  const acc=await sb.rpc("my_access");
+  const a=acc.data||{};
+  const {data,error}=await sb.auth.oauth.getAuthorizationDetails(id);
+  if(error) return fatal(error.message||"Pedido de autorização inválido ou expirado.");
+  const url=data&&(data.redirect_url||data.redirect_to);
+  if(data&&!data.authorization_id&&url){location.href=url;return}   // já autorizado antes
+  const appName=(data.client&&(data.client.name||data.client.client_name))||"Assistente de IA";
+  const warn=!a.ok?{sem_cadastro:"Esse login não está ligado a nenhuma loja do VYNTRA.",loja_bloqueada:"Sua loja está bloqueada no momento.",bloqueado:"Esse login está bloqueado pelo dono da loja.",fora_horario:"Você está fora do horário de trabalho cadastrado: a IA só vai funcionar dentro do horário."}[a.reason]:"";
+  show(`<h1><span class="app">${esc(appName)}</span> quer acessar sua loja</h1>
+    <div class="who"><div><small>Conectando como</small><b>${esc(a.name||session.user.email)}</b>${a.store_slug?`<small>Loja: ${esc(a.store_slug)} · ${a.role==="dono"?"dono":"funcionário"}</small>`:""}</div><button class="link" id="sw">Trocar</button></div>
+    <p>Com essa permissão, a IA vai poder, <b>do mesmo jeito que você no painel</b>:</p>
+    <ul><li>Ver vendas, pedidos, cardápio, estoque e avaliações</li><li>Mudar preço, promoção e situação dos produtos</li><li>Lançar entrada e saída de estoque</li><li>Mudar o status dos pedidos e abrir/fechar a loja</li></ul>
+    <p class="muted" style="font-size:13px">Ela sempre pede sua confirmação antes de alterar algo. Funcionário só faz o que o dono liberou pra ele.</p>
+    ${warn?`<p class="err">${esc(warn)}</p>`:""}
+    <button class="btn" id="ok">Permitir</button><button class="btn o" id="no">Recusar</button>
+    <p class="foot">Pra cancelar depois, remova o conector no app da IA.</p>`);
+  $("#sw").onclick=async()=>{await sb.auth.signOut();login()};
+  const decide=async approve=>{$("#ok").disabled=$("#no").disabled=true;
+    const r=approve?await sb.auth.oauth.approveAuthorization(id,{skipBrowserRedirect:true}):await sb.auth.oauth.denyAuthorization(id,{skipBrowserRedirect:true});
+    if(r.error) return fatal(r.error.message);
+    const to=r.data&&(r.data.redirect_url||r.data.redirect_to);
+    show(approve?`<h1 class="ok">Pronto! ✓</h1><p>Voltando pro ${esc(appName)}…</p>`:`<h1>Acesso recusado</h1><p class="muted">Nada foi compartilhado.</p>`);
+    if(to) location.href=to};
+  $("#ok").onclick=()=>decide(true); $("#no").onclick=()=>decide(false);
+}
+
+start().catch(e=>fatal(e.message||String(e)));
+</script>
+</body>
+</html>
