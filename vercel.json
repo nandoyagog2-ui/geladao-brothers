@@ -65,6 +65,39 @@
   "rewrites": [
     {
       "source": "/:loja([a-z0-9-]+)",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(WhatsApp|facebookexternalhit|Facebot|meta-externalagent|Instagram|Twitterbot|TelegramBot|Slackbot|LinkedInBot|Discordbot|Pinterest|SkypeUriPreview|Googlebot|bingbot|Applebot).*"
+        }
+      ],
+      "destination": "/api/og?loja=:loja"
+    },
+    {
+      "source": "/:loja([a-z0-9-]+)/",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(WhatsApp|facebookexternalhit|Facebot|meta-externalagent|Instagram|Twitterbot|TelegramBot|Slackbot|LinkedInBot|Discordbot|Pinterest|SkypeUriPreview|Googlebot|bingbot|Applebot).*"
+        }
+      ],
+      "destination": "/api/og?loja=:loja"
+    },
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(WhatsApp|facebookexternalhit|Facebot|meta-externalagent|Instagram|Twitterbot|TelegramBot|Slackbot|LinkedInBot|Discordbot|Pinterest|SkypeUriPreview|Googlebot|bingbot|Applebot).*"
+        }
+      ],
+      "destination": "/api/og"
+    },
+    {
+      "source": "/:loja([a-z0-9-]+)",
       "destination": "/index.html"
     },
     {
