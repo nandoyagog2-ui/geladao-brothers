@@ -250,9 +250,18 @@ function mzConfig(m,all){
     <div class="card grid" style="gap:8px"><b>Criar mesas</b><div class="row" style="flex-wrap:nowrap;gap:8px"><input class="in" id="qn" inputmode="numeric" placeholder="Quantas? ex.: 10" style="flex:1"><button class="btn" id="qc">➕ Criar</button></div>
       <div class="muted" style="font-size:12px">Cria "Mesa 1", "Mesa 2"… continuando do número que já existe.</div>
       <div class="row" style="flex-wrap:nowrap;gap:8px"><input class="in" id="qx" placeholder="Ou um nome: Varanda 1, Balcão…" style="flex:1"><button class="btn o" id="qa">➕</button></div></div>
-    <div class="card grid" style="gap:6px"><b>Mesas da loja</b>${all.map(t=>`<div class="line"><input class="in" data-rn="${t.id}" value="${esc(t.name)}" style="flex:1;${t.active?"":"opacity:.5"}"><label class="chk" style="margin:0 0 0 8px"><input type="checkbox" data-ac="${t.id}" ${t.active?"checked":""}> <span>Ativa</span></label></div>`).join("")||'<p class="muted" style="margin:0">Nenhuma ainda.</p>'}</div>
+    <div class="card grid" style="gap:6px"><b>Mesas da loja</b>${all.map(t=>`<div class="line"><input class="in" data-rn="${t.id}" value="${esc(t.name)}" style="flex:1;${t.active?"":"opacity:.5"}"><label class="chk" style="margin:0 0 0 8px"><input type="checkbox" data-ac="${t.id}" ${t.active?"checked":""}> <span>Ativa</span></label>${t.qr_token?`<button class="icb" data-tl="${t.id}" title="Copiar link do tablet desta mesa" aria-label="Copiar link do tablet">📋</button>`:""}</div>`).join("")||'<p class="muted" style="margin:0">Nenhuma ainda.</p>'}</div>
+    ${all.some(t=>t.qr_token)?`<div class="card grid" style="gap:8px"><b>📱 Cliente pede sozinho na mesa</b>
+      <label class="chk" style="margin:0"><input type="checkbox" id="so" ${S.table_self_order===false?"":"checked"}> <span>Deixar o cliente pedir pelo QR code ou tablet</span></label>
+      <div class="muted" style="font-size:12px">Cada mesa tem um QR code. O cliente aponta a câmera, escolhe e o pedido cai na comanda da mesa e na cozinha. No tablet, use o 📋 da mesa pra copiar o link e abra ele no navegador do tablet.</div>
+      <button class="btn o" id="qp">🖨️ Imprimir QR codes das mesas</button></div>`:""}
     <label class="fld"><span>Taxa de serviço do garçom (%) · 0 = não cobra</span><input class="in" id="sp" inputmode="decimal" value="${String(mzPct()).replace(".",",")}"></label>`,`<button class="btn" id="ok">Salvar</button>`);
   const reload=async()=>{const r=await q(sb.from("dining_tables").select("*").order("sort_order").order("id"));closeDr();mzConfig(m,r)};
+  $$("[data-tl]",dr).forEach(b=>b.onclick=async()=>{const t=all.find(x=>x.id==b.dataset.tl),u=mzLink(t)+"&tablet=1";
+    try{await navigator.clipboard.writeText(u);toast("Link do tablet da "+t.name+" copiado")}catch{prompt("Copie o link do tablet:",u)}});
+  if($("#qp",dr)) $("#qp",dr).onclick=()=>mzPrintQR(all.filter(t=>t.active&&t.qr_token));
+  if($("#so",dr)) $("#so",dr).onchange=async e=>{const v=e.target.checked;const r=await sb.from("store_settings").update({table_self_order:v}).eq("id",SID());
+    if(r.error){toast(r.error.message);e.target.checked=!v;return}S.table_self_order=v;toast(v?"Pedido pela mesa ligado":"Pedido pela mesa desligado")};
   const nextN=()=>Math.max(0,...all.map(t=>+((t.name.match(/^mesa\s*(\d+)$/i)||[])[1]||0)));
   $("#qc",dr).onclick=async()=>{const n=Math.min(100,parseInt($("#qn",dr).value,10)||0);if(!n){toast("Digite quantas mesas");return}const s=nextN(),so=Math.max(0,...all.map(t=>t.sort_order||0));
     await q(sb.from("dining_tables").insert(Array.from({length:n},(_,k)=>({name:"Mesa "+(s+k+1),sort_order:so+k+1}))));toast(n+" mesa(s) criada(s)");reload()};
@@ -263,4 +272,31 @@ function mzConfig(m,all){
       if((nm&&nm!==t.name)||ac!==t.active){const r=await sb.from("dining_tables").update({name:nm||t.name,active:ac}).eq("id",t.id);if(r.error){toast(t.name+": "+(/nome/.test(r.error.message)?"nome repetido":r.error.message));return}}}
     const sp=num($("#sp",dr).value); if(sp!=null&&sp!==mzPct()){const r=await sb.from("store_settings").update({service_pct:sp}).eq("id",SID());if(r.error){toast(r.error.message);return}S.service_pct=sp}
     closeDr();toast("Mesas salvas");pageMesas(m)};
+}
+
+/* ---------- pedido na mesa (parte 29): link e QR code de cada mesa ---------- */
+const mzLink=t=>STORE_URL()+"?mesa="+encodeURIComponent(t.qr_token);
+function mzPrintQR(list){
+  if(!list.length){toast("Nenhuma mesa ativa com QR code");return}
+  const w=window.open("","_blank");
+  if(!w){toast("O navegador bloqueou a janela. Libere os pop-ups e tente de novo.");return}
+  w.document.write("<p style='font:16px system-ui;padding:20px'>Gerando os QR codes…</p>");
+  const go=()=>{
+    const card=t=>{const qr=qrcode(0,"M");qr.addData(mzLink(t));qr.make();
+      return `<div class="c"><div class="lj">${esc(S.name||"")}</div><div class="mz">${esc(t.name)}</div>${qr.createSvgTag({cellSize:6,margin:2,scalable:true})}<div class="tx">📱 Aponte a câmera do celular<br>e faça seu pedido por aqui</div></div>`};
+    w.document.open();
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>QR codes das mesas</title><style>
+      *{box-sizing:border-box}body{margin:0;font-family:system-ui,Arial,sans-serif;color:#111}
+      .g{display:grid;grid-template-columns:repeat(2,1fr);gap:10mm;padding:10mm}
+      .c{border:2px dashed #999;border-radius:6mm;padding:7mm;text-align:center;break-inside:avoid}
+      .lj{font-size:13pt;font-weight:600;color:#555}.mz{font-size:26pt;font-weight:800;margin:2mm 0 4mm}
+      .c svg{width:55mm;height:55mm}.tx{font-size:12pt;margin-top:3mm;line-height:1.35}
+      .bar{padding:10px 10mm;font-size:14px;background:#fff8d6}@media print{.bar{display:none}}
+    </style></head><body><div class="bar">Imprima e recorte. Cole cada QR code na mesa certa. <button onclick="print()">🖨️ Imprimir</button></div>
+    <div class="g">${list.map(card).join("")}</div></body></html>`);
+    w.document.close();
+  };
+  if(window.qrcode) return go();
+  const s=document.createElement("script");s.src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js";
+  s.onload=go;s.onerror=()=>{w.close();toast("Não deu pra gerar os QR codes agora. Tente de novo.")};document.head.appendChild(s);
 }

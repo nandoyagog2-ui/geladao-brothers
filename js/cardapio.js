@@ -25,6 +25,11 @@ const digits=s=>String(s||"").replace(/\D/g,"");
 /* qual loja: site.com/endereco-da-loja (ou ?loja=). Sem nada = loja 1 */
 const LOJA=window.GB_LOJA!=null?window.GB_LOJA:(()=>{const q=new URLSearchParams(location.search).get("loja");const seg=decodeURIComponent(location.pathname.split("/")[1]||"");return String(q||(/^[a-z0-9-]+$/i.test(seg)?seg:"")).toLowerCase()||(/(^|\.)vercel\.app$|^localhost$|^127\.|^site$/.test(location.hostname)?"":"@"+location.hostname)})();
 const PFX="gb_"+(LOJA?LOJA.replace(/^@/,"")+"_":"");
+/* pedido na mesa (parte 29): link do QR code com ?mesa=CÓDIGO · tablet fixo na mesa: &tablet=1 */
+const QS0=new URLSearchParams(location.search);
+const MESA=/^[a-z0-9]{4,20}$/i.test(QS0.get("mesa")||"")?QS0.get("mesa"):"";
+const TABLET=MESA&&QS0.get("tablet")==="1";
+let MZ=null; // dados da mesa (nome, conta) vindos do banco
 const store={get(k,d){try{return JSON.parse(localStorage.getItem(PFX+k))??d}catch{return d}},set(k,v){try{localStorage.setItem(PFX+k,JSON.stringify(v))}catch{}}};
 
 /* ---------- dados ---------- */
@@ -86,7 +91,9 @@ function applyMenu(D){
   const s={data:D.s},c={data:D.c},p={data:D.p},g={data:D.g},o={data:D.o},pc={data:D.pc},z={data:D.z},ps={data:D.ps};
   S=s.data; CATS=c.data;
   const catName=Object.fromEntries(CATS.map(x=>[x.id,x.name]));
-  PRODS=p.data.filter(x=>catName[x.category_id]).map(x=>({id:x.id,cid:x.category_id,c:catName[x.category_id],n:x.name,d:x.description,p:+x.price,promo:x.promo_price!=null&&+x.promo_price<+x.price?+x.promo_price:null,s:x.status==="ativo",img:x.image_url,feat:x.featured,isNew:x.is_new,tiers:(Array.isArray(x.price_tiers)?x.price_tiers:[]).map(y=>({min_qty:+y.min_qty,price:+y.price})).filter(y=>y.min_qty>1&&y.price>0).sort((a,b)=>a.min_qty-b.min_qty)}));
+  // na mesa vale o preço da comanda (igual ao garçom): sem "leve mais pague menos" e promoção só se a loja liberou no balcão
+  const noPromo=!!MESA&&!S.promos_no_balcao;
+  PRODS=p.data.filter(x=>catName[x.category_id]).map(x=>({id:x.id,cid:x.category_id,c:catName[x.category_id],n:x.name,d:x.description,p:+x.price,promo:!noPromo&&x.promo_price!=null&&+x.promo_price<+x.price?+x.promo_price:null,s:x.status==="ativo",img:x.image_url,feat:x.featured,isNew:x.is_new,tiers:MESA?[]:(Array.isArray(x.price_tiers)?x.price_tiers:[]).map(y=>({min_qty:+y.min_qty,price:+y.price})).filter(y=>y.min_qty>1&&y.price>0).sort((a,b)=>a.min_qty-b.min_qty)}));
   GROUPS=(g.data||[]).map(gr=>({...gr,options:(o.data||[]).filter(op=>op.group_id===gr.id)}));
   CATS.forEach(c=>{c.closedNow=!catOpen(c.available);c.hrs=catHours(c.available)});
   PRODS.forEach(x=>{const c=CATS.find(y=>y.id===x.cid);if(c&&c.closedNow&&x.s){x.s=false;x.hrs="⏰ "+(c.hrs||"fora do horário")}});
@@ -109,9 +116,10 @@ function openInfo(){
 }
 
 /* ---------- estado ---------- */
-let tab="home", cat=null, q="", searching=false, cart=store.get("cart",[]), ck=store.get("ck",{}), coupon=null;
+const CART_K=MESA?"cart_mesa_"+MESA:"cart";
+let tab="home", cat=null, q="", searching=false, cart=store.get(CART_K,[]), ck=store.get("ck",{}), coupon=null;
 const app=document.getElementById("app"), layer=document.getElementById("layer");
-const saveCart=()=>store.set("cart",cart.map(i=>({id:i.p.id,n:i.n,obs:i.obs,opts:i.opts})));
+const saveCart=()=>store.set(CART_K,cart.map(i=>({id:i.p.id,n:i.n,obs:i.obs,opts:i.opts})));
 function restoreCart(){cart=cart.map(i=>{const p=byId(i.id);return p&&p.s?{p,n:i.n,obs:i.obs||"",opts:i.opts||[]}:null}).filter(Boolean)}
 const lineUnit=(i,list=cart)=>tierPrice(i.p,qtyOf(i.p,list))+optsTotal(i.opts);
 const sub=()=>cart.reduce((s,i)=>s+lineUnit(i)*i.n,0);
@@ -145,9 +153,9 @@ function homeView(){
     <div class="logo">${S.logo_url?`<img src="${esc(S.logo_url)}" alt="" fetchpriority="high" decoding="async" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`:esc(initials(S.name))}</div>
     <h1>${esc(S.name)}</h1>${S.address?`<div class="loc">📍 ${esc(S.address)}</div>`:""}
     <div class="open" style="${oi.open?"":"color:var(--red)"}">${esc(oi.text)}</div>
-    <button class="fee" id="fee"><span>📍 Calcular taxa e tempo de entrega</span><b>›</b></button></div></div>
+    ${MESA?mesaBanner():`<button class="fee" id="fee"><span>📍 Calcular taxa e tempo de entrega</span><b>›</b></button>`}</div></div>
   ${barHTML()}<main class="wrap" id="m"></main>`;
-  wireBar(); app.querySelector("#fee").onclick=feeSheet;
+  wireBar(); if(MESA){const b=app.querySelector("#mzc");if(b)b.onclick=()=>{tab="orders";render();scrollTo(0,0)}} else app.querySelector("#fee").onclick=feeSheet;
   const m=app.querySelector("#m");
   if(term){ m.innerHTML=`<div class="h2">Resultados</div><div class="rows"></div>`; list(m.querySelector(".rows"),PRODS.filter(p=>norm(p.n).includes(term))); return; }
   const feats=PRODS.filter(p=>p.feat);
@@ -182,6 +190,7 @@ function promoView(){
   list(app.querySelector("#rows"),PRODS.filter(p=>p.promo));
 }
 function ordersView(){
+  if(MESA) return mesaContaView();
   const mine=store.get("orders",[]);
   app.innerHTML=`<main class="wrap"><div class="h2" style="margin-top:22px">Seus pedidos</div><div id="o"></div></main>`;
   const o=app.querySelector("#o");
@@ -203,7 +212,7 @@ function meView(){
 }
 function navR(){
   const w=document.querySelector("#nav .wrap"); w.innerHTML="";
-  [["home","Início"],["promo","Promoções"],["orders","Pedidos"],["me","Perfil"]].forEach(([k,l])=>{
+  (MESA?[["home","Cardápio"],["promo","Promoções"],["orders","Conta da mesa"]]:[["home","Início"],["promo","Promoções"],["orders","Pedidos"],["me","Perfil"]]).forEach(([k,l])=>{
     const b=document.createElement("button"); b.setAttribute("aria-current",tab===k);
     b.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${NAVI[k]}</svg>${l}`;
     b.onclick=()=>{tab=k;if(k==="home"){cat=null;q="";searching=false}render();scrollTo(0,0)}; w.append(b);
@@ -280,16 +289,18 @@ function cartSheet(){
     ${cart.map((i,k)=>`<div class="ci"><div class="ph mini-ph">${pic(i.p)}</div><div class="t"><div><span class="q">${i.n}x</span> ${esc(i.p.n)}</div>${tierPrice(i.p,qtyOf(i.p))<price(i.p)?`<div class="sub" style="color:var(--green)">🔥 Atacado: ${brl(tierPrice(i.p,qtyOf(i.p)))} cada</div>`:""}${i.opts.length?`<div class="sub">${optNames(i.opts).map(esc).join(", ")}</div>`:""}${i.obs?`<div class="sub">Obs.: ${esc(i.obs)}</div>`:""}<div class="acts"><button data-ed="${k}">Editar</button><button data-rm="${k}">Remover</button></div></div><b>${brl(lineUnit(i)*i.n)}</b></div>`).join("")}
     <button class="link" data-close>Adicionar mais itens</button>
     ${sugs.length?`<div class="grp">Peça também</div><div class="rail" style="margin-top:8px">${sugs.map(p=>`<button class="sug" data-sg="${p.id}"><div class="ph">${pic(p)}</div><div class="b">${esc(p.n)}<div class="price">${brl(price(p))}</div></div></button>`).join("")}</div>`:""}
+    ${MESA?`<div class="sum"><div class="tot"><span>Total deste pedido</span><span>${brl(sub())}</span></div></div><p class="sub" style="color:var(--muted);font-size:12.5px;margin:6px 0 0">🍽️ Vai pra comanda da <b>${esc(MZ&&MZ.mesa||"mesa")}</b>. Você paga no fim, no caixa.</p><p class="err" id="e" hidden></p><div style="height:12px"></div>`:`
     <div class="sum"><div><span>Subtotal</span><span>${brl(sub())}</span></div><div><span>Taxa de entrega</span><span>A definir</span></div>${coupon?`<div><span>Cupom ${esc(coupon.code)}</span><span>${coupon.kind==="free_delivery"?"Entrega grátis":"- "+brl(discount())}</span></div>`:""}<div class="tot"><span>Total</span><span>${brl(sub()-discount())}</span></div></div>
     <button class="coupon" id="cup"><span>🎟️</span><span class="t"><b>Tem um cupom?</b><small>${coupon?"Cupom "+esc(coupon.code)+" aplicado":"Clique e insira o código"}</small></span>›</button>
-    ${+S.min_order>0?`<p class="sub" style="color:var(--muted)">Pedido mínimo: ${brl(S.min_order)}</p>`:""}<p class="err" id="e" hidden></p><div style="height:12px"></div>`,
-    `<button class="btn c" id="go">Continuar pedido</button>`);
+    ${+S.min_order>0?`<p class="sub" style="color:var(--muted)">Pedido mínimo: ${brl(S.min_order)}</p>`:""}<p class="err" id="e" hidden></p><div style="height:12px"></div>`}`,
+    `<button class="btn c" id="go">${MESA?"Enviar pedido pra cozinha":"Continuar pedido"}</button>`);
   layer.querySelectorAll("[data-rm]").forEach(b=>b.onclick=()=>{cart.splice(+b.dataset.rm,1);saveCart();render();cartSheet()});
   layer.querySelectorAll("[data-ed]").forEach(b=>b.onclick=()=>productSheet(cart[+b.dataset.ed].p,+b.dataset.ed));
   layer.querySelectorAll("[data-sg]").forEach(b=>b.onclick=()=>{const p=byId(+b.dataset.sg);const needs=PC.some(x=>x.product_id===p.id);if(needs)return productSheet(p);cart.push({p,n:1,obs:"",opts:[]});saveCart();render();cartSheet()});
-  L("#cup").onclick=couponPop;
+  if(L("#cup")) L("#cup").onclick=couponPop;
   L("#go").onclick=()=>{
     const oi=openInfo(); if(!oi.open){L("#e").hidden=false;L("#e").textContent="A loja está fechada agora. "+oi.text+".";return}
+    if(MESA) return mesaNome();
     if(sub()<+S.min_order){L("#e").hidden=false;L("#e").textContent="O pedido mínimo é "+brl(S.min_order)+".";return}
     phonePop();
   };
@@ -552,6 +563,49 @@ function promoPop(){
   list(L("#pp"),ps);
 }
 
+/* ---------- pedido na mesa (QR code / tablet) ---------- */
+function mesaBanner(){
+  if(MZ&&MZ.erro) return `<div class="fee" style="border-color:var(--red);color:var(--red);cursor:default"><span>⚠️ ${MZ.erro==="mesa_desligada"?"O pedido pela mesa está desligado. Chame o garçom.":"Este QR code não vale mais. Chame o garçom."}</span></div>`;
+  return `<button class="fee" id="mzc" style="border-color:var(--y)"><span>🍽️ Você está na <b>${esc(MZ?MZ.mesa:"mesa")}</b> · peça por aqui, vai direto pra cozinha</span><b>🧾</b></button>`;
+}
+async function mesaLoad(){
+  const {data,error}=await sb.rpc("mesa_info",{p_loja:LOJA||null,p_token:MESA});
+  MZ=error?{erro:"mesa_nao_encontrada"}:data; return MZ;
+}
+async function mesaContaView(){
+  app.innerHTML=`<main class="wrap"><div class="h2" style="margin-top:22px">🧾 Conta da ${esc(MZ&&MZ.mesa||"mesa")}</div><div id="o"><div class="loading" style="min-height:30vh">Carregando…</div></div></main>`;
+  await mesaLoad(); const o=app.querySelector("#o"); if(!o||tab!=="orders") return;
+  if(MZ.erro){o.innerHTML='<div class="empty">Não deu pra abrir a conta desta mesa. Chame o garçom.</div>';return}
+  const its=MZ.itens||[], c=+MZ.consumo||0, pctS=+MZ.servico_pct||0, svc=Math.round(c*pctS)/100;
+  o.innerHTML=!its.length?'<div class="empty">Nada pedido ainda nesta mesa.<br><br>Escolha no cardápio e toque em <b>Enviar pedido pra cozinha</b>.</div>':`
+    ${its.map(i=>`<div class="ci"><div class="t"><span class="q">${i.qty}x</span> ${esc(i.name)}${(i.options||[]).length?`<div class="sub">${i.options.map(esc).join(", ")}</div>`:""}<div class="sub" style="color:${i.pronto?"var(--green)":"var(--muted)"}">${i.pronto?"✔ Pronto":"🍳 Preparando"}</div></div><b>${brl(i.total)}</b></div>`).join("")}
+    <div class="sum"><div><span>Consumo</span><span>${brl(c)}</span></div>${pctS?`<div><span>Serviço (${String(pctS).replace(".",",")}%, opcional)</span><span>${brl(svc)}</span></div>`:""}<div class="tot"><span>Total</span><span>${brl(c+svc)}</span></div></div>
+    <p class="sub" style="color:var(--muted);font-size:12.5px">Pra pagar, chame o garçom ou vá ao caixa.</p>`;
+  const b=document.createElement("button");b.className="link";b.textContent="Atualizar";b.onclick=()=>{if(tab==="orders")mesaContaView()};o.append(b);
+}
+function mesaNome(){
+  if(MZ&&MZ.erro){L("#e").hidden=false;L("#e").textContent="Este QR code não vale mais. Chame o garçom.";return}
+  sheet("",`<div class="modal"><h3>Quase lá!</h3><p>Seu nome, pra gente saber de quem é o pedido</p>
+    <input id="nm" class="in" placeholder="Seu nome" maxlength="40" value="${TABLET?"":esc(ck.nm||"")}" autocomplete="${TABLET?"off":"name"}">
+    <p class="err" id="e" hidden></p><button class="btn c" id="ok" style="margin-top:14px">Enviar pra cozinha · ${brl(sub())}</button><button class="link" id="cb">Voltar</button></div>`,"",true);
+  setTimeout(()=>{const n=L("#nm");if(n&&!n.value)n.focus()},80);
+  L("#cb").onclick=cartSheet;
+  L("#ok").onclick=async()=>{
+    const nm=L("#nm").value.trim(); if(!nm){L("#e").hidden=false;L("#e").textContent="Coloque seu nome.";return}
+    if(!TABLET){ck.nm=nm;store.set("ck",ck)}
+    const btn=L("#ok"); btn.disabled=true; btn.textContent="Enviando…";
+    const {data,error}=await sb.rpc("mesa_pedido",{p:{loja:LOJA||null,mesa:MESA,nome:nm,
+      itens:cart.map(i=>({product_id:i.p.id,qty:i.n,notes:i.obs,options:i.opts.map(o=>({option_id:o.id,qty:o.qty}))}))}});
+    if(error){btn.disabled=false;btn.textContent="Tentar de novo";L("#e").hidden=false;L("#e").textContent="Não foi possível enviar: "+(error.message||"tente de novo");return}
+    cart=[]; saveCart(); render();
+    sheet("Pedido enviado",`<div class="track"><small>${esc(data.mesa)}</small><b>Pedido na cozinha! 🍳</b><div class="status"><i></i>${data.itens} ${data.itens>1?"itens":"item"} · ${brl(data.valor)}</div></div>
+      <p style="text-align:center;margin-top:16px">É só aguardar que já levamos na mesa.${TABLET?"":" Quer mais alguma coisa? Pode pedir de novo por aqui."}</p>`,
+      `<button class="btn c" id="mzv">🧾 Ver conta da mesa</button><button class="btn c o" data-home>Pedir mais</button>`);
+    L("#mzv").onclick=()=>{close();tab="orders";render();scrollTo(0,0)};
+    if(TABLET) setTimeout(()=>{if(L("#mzv")){close();tab="home";cat=null;render();scrollTo(0,0)}},8000);
+  };
+}
+
 /* ---------- início ---------- */
 // medidor de velocidade: abra o cardápio com ?teste=1 no fim do link
 const T0=performance.now(), TM={};
@@ -568,6 +622,7 @@ function speedReport(){
 }
 mark("js");
 (async()=>{
+  if(MESA) mesaLoad().then(()=>{if(S&&S.name&&tab==="home"&&!cat&&!layer.innerHTML)render()}).catch(()=>{});
   let cached=null; try{cached=JSON.parse(localStorage.getItem(CACHE_KEY)||"null")}catch{}
   let shown=false;
   if(cached&&cached.s){ try{ applyMenu(cached); restoreCart(); render(); shown=true; mark("cache"); afterBoot(); }catch(e){ console.error(e) } }
@@ -594,5 +649,6 @@ function afterBoot(){ storeManifest();
   const qs=new URLSearchParams(location.search);
   if(qs.get("avaliar")&&qs.get("tel")){ history.replaceState(null,"",location.pathname); reviewSheet(+qs.get("avaliar"),qs.get("tel")); return; }
   if(qs.get("pedido")&&qs.get("tel")){ history.replaceState(null,"",location.pathname); trackSheet(+qs.get("pedido"),qs.get("tel")); return; }
+  if(TABLET) return;
   if(!sessionStorage.getItem("gb_promo")){ try{sessionStorage.setItem("gb_promo","1")}catch{} promoPop(); }
 }
