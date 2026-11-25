@@ -47,7 +47,10 @@
     const ex = M.exists();
     if (ex) {
       try {
-        const r = await ex.queryWidExists(wid);
+        let r = await ex.queryWidExists(wid);
+        // celular do Brasil: tenta também sem / com o 9º dígito (contas antigas do Nordeste ficam sem o 9)
+        if ((!r || !r.wid) && /^55\d{2}9\d{8}$/.test(d)) r = await ex.queryWidExists(wf.createWid(d.slice(0, 4) + d.slice(5) + "@c.us"));
+        else if ((!r || !r.wid) && /^55\d{2}[6-9]\d{7}$/.test(d)) r = await ex.queryWidExists(wf.createWid(d.slice(0, 4) + "9" + d.slice(4) + "@c.us"));
         if (!r || !r.wid) throw new Error("sem_whatsapp");
         wid = r.wid;                       // já corrige o 9º dígito
       } catch (e) { if (e.message === "sem_whatsapp") throw e; }
