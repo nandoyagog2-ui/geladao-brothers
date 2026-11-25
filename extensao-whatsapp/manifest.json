@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "VYNTRA no WhatsApp",
-  "version": "3.4.0",
+  "version": "3.4.2",
   "description": "Painel da sua loja VYNTRA dentro do WhatsApp Web: pedidos, robô de respostas automáticas e avisos de status.",
   "icons": {
     "16": "icon-16.png",

@@ -165,9 +165,10 @@ let CFG = null, BOT_ON = false, STATE = {};
 async function loadCfg(force) {
   try { const c = await chrome.runtime.sendMessage({ gb: "cfg", force: !!force }); if (c) CFG = c; } catch {}
 }
-let STORE = { id: 1, slug: "" };
-chrome.storage.local.get(["gb_store", "gb_slug"], v => { STORE = { id: +v.gb_store || 1, slug: v.gb_slug || "" }; });
-chrome.storage.onChanged.addListener(ch => { if (ch.gb_store || ch.gb_slug) chrome.storage.local.get(["gb_store", "gb_slug"], v => { STORE = { id: +v.gb_store || 1, slug: v.gb_slug || "" }; }); });
+let STORE = { id: 1, slug: "", link: "" };
+const loadStore = () => chrome.storage.local.get(["gb_store", "gb_slug", "gb_link"], v => { STORE = { id: +v.gb_store || 1, slug: v.gb_slug || "", link: v.gb_link || "" }; });
+loadStore();
+chrome.storage.onChanged.addListener(ch => { if (ch.gb_store || ch.gb_slug || ch.gb_link) loadStore(); });
 chrome.storage.local.get(["gb_bot_on", "gb_bot_state"], v => { BOT_ON = !!v.gb_bot_on; STATE = v.gb_bot_state || {}; });
 chrome.storage.onChanged.addListener(ch => {
   if (ch.gb_bot_on) { BOT_ON = !!ch.gb_bot_on.newValue; paint(); }
@@ -232,7 +233,7 @@ function fill(tpl, name) {
   return s
     .replace(/\{nome\}/g, first)
     .replace(/\{loja\}/g, S.name || "nossa loja")
-    .replace(/\{link\}/g, (STORE.slug ? "https://cardapiovyntra.com.br/" + STORE.slug : "https://geladao-brothers.vercel.app/"))
+    .replace(/\{link\}/g, STORE.link || (STORE.slug ? "https://cardapiovyntra.com.br/" + STORE.slug : "https://geladao-brothers.vercel.app/"))
     .replace(/\{endereco\}/g, S.address || "")
     .replace(/\{horario\}/g, [oi.text, hoursText()].filter(Boolean).join("\n"))
     .replace(/Olá, !/g, "Olá!").replace(/ +\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();

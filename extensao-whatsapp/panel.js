@@ -1,5 +1,5 @@
 // Ponte entre a tela do Geladão (iframe) e o WhatsApp Web
-const SITE = "https://cardapiovyntra.com.br";
+const SITE = "https://geladao-brothers.vercel.app";
 const app = document.getElementById("app");
 const msg = document.getElementById("msg");
 const show = t => { msg.textContent = t; msg.style.display = "block"; clearTimeout(show.t); show.t = setTimeout(() => msg.style.display = "none", 4000); };
@@ -51,7 +51,7 @@ window.addEventListener("message", async e => {
     const r = await toWhats({ gb: "sendto", id: d.id, phone: d.phone, text: d.text }, true);
     if (!r) toApp({ gb: "sent-to", id: d.id, ok: false, reason: "nowa" });
   }
-  if (d.gb === "store" && d.id) { const v = await chrome.storage.local.get("gb_store"); if (v.gb_store !== d.id || true) { await chrome.storage.local.set({ gb_store: d.id, gb_slug: d.slug || "" }); toWhats({ gb: "bot-reload" }, true); } }
+  if (d.gb === "store" && d.id) { const v = await chrome.storage.local.get("gb_store"); if (v.gb_store !== d.id || true) { await chrome.storage.local.set({ gb_store: d.id, gb_slug: d.slug || "", gb_link: d.link || "" }); toWhats({ gb: "bot-reload" }, true); } }
   if (d.gb === "bot-set") { await chrome.storage.local.set({ gb_bot_on: !!d.on }); pushBot(); }
   if (d.gb === "bot-reload") toWhats({ gb: "bot-reload" }, true);
 });

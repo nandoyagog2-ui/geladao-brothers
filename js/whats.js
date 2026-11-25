@@ -3,7 +3,8 @@ const sb = supabase.createClient(GB_CONFIG.SUPABASE_URL, GB_CONFIG.SUPABASE_KEY)
 const app = document.getElementById("app"), ov = document.getElementById("ov");
 const SITE = location.origin;
 let SID=1, SLUG="";                                   // loja de quem está logado
-const STORE_URL=()=>SITE+(!SLUG?(SID===1&&!/cardapiovyntra/.test(SITE)?"/":"/loja1"):"/"+SLUG);
+let DOMAIN="";   // domínio próprio da loja (ex.: hangbebidas.com.br)
+const STORE_URL=()=>{if(DOMAIN)return "https://"+DOMAIN+"/";const base=SID!==1?"https://cardapiovyntra.com.br":SITE;return base+(!SLUG?(SID===1&&!/cardapiovyntra/.test(base)?"/":"/loja1"):"/"+SLUG)};
 
 /* ---------- utilidades ---------- */
 const brl=v=>"R$ "+Number(v||0).toFixed(2).replace(".",",").replace(/\B(?=(\d{3})+(?!\d))/g,".");
@@ -216,7 +217,7 @@ async function home(){
       ${AUTOLOG.length?`<div class="hint"><b>Últimos avisos:</b>${AUTOLOG.map(x=>`<div>${x.ok?"✅":"⚠️"} #${x.n} ${esc(STATUS[x.st]||x.st)} · ${String(x.at.getHours()).padStart(2,"0")}:${String(x.at.getMinutes()).padStart(2,"0")}${x.ok?"":` · <span style="color:#FF8A00">${esc(x.why)}</span>`}</div>`).join("")}</div>`:""}
       <button class="btn o sm" id="tst" style="justify-self:start">🔧 Testar envio automático</button></div>`:"";
   frame("Olá! 👋",`${st}${robo}
-    <div class="box"><div class="sec" style="margin:0"><div><b>Link do cardápio</b><small>${esc(link.replace("https://",""))}</small></div>
+    <div class="box"><div class="sec" style="margin:0"><div><b>Link do cardápio</b><small>${esc(link.replace("https://","").replace(/\/$/,""))}</small></div>
       <div class="iconrow"><button id="sl" title="Enviar no chat">➤</button><button id="cl" title="Copiar">⧉</button></div></div></div>
     ${chat.title||chat.phone?`<div class="box who"><div class="av">👤</div><div class="t"><b>${esc(name||"Contato")}</b><small>${phone?esc(phone):"Telefone não identificado"}</small>${cust?"":'<small style="display:block;color:var(--y)">Cliente novo</small>'}</div><button class="btn o sm" id="ed">${cust?"Editar":"Cadastrar"}</button></div>
     <div class="sec"><div><b>Pedidos do cliente</b><small>${cust?`Total de ${count} pedido${count===1?"":"s"}`:"Nenhum pedido ainda"}</small></div><button class="btn sm" id="np">➕ Novo pedido</button></div>
@@ -482,7 +483,7 @@ function printOrder(o,items){
 
 /* ---------- início ---------- */
 async function start(){
-  try{const a=await sb.rpc("my_access");if(!a.error&&a.data){SID=a.data.store_id||1;SLUG=a.data.store_slug||"";post({gb:"store",id:SID,slug:SLUG})}}catch{}
+  try{const a=await sb.rpc("my_access");if(!a.error&&a.data){SID=a.data.store_id||1;SLUG=a.data.store_slug||"";try{const d=await sb.rpc("my_store_domain");if(!d.error&&d.data)DOMAIN=String(d.data)}catch{}post({gb:"store",id:SID,slug:SLUG,link:STORE_URL()})}}catch{}
   try{await loadBase()}catch{app.innerHTML='<div class="empty">Não foi possível carregar. Verifique a internet.</div>';return}
   started=true; if(chat.title||chat.phone) cust=await findCust();
   await home();
